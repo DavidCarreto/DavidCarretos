@@ -175,3 +175,47 @@ Dá também um texto de gancho para o ecrã, um texto de capa e uma legenda.
 Transcrição:
 {json.dumps(segments, ensure_ascii=False)}"""
     return _ask(prompt, schema)
+
+
+SCENE_SCHEMA = _obj({
+    "type": {"type": "string", "enum": ["hook", "text", "list", "stat", "quote", "media", "cta"]},
+    "voiceover": STR,
+    "title": STR,
+    "body": STR,
+    "kicker": STR,
+    "items": STRS,
+    "value": STR,
+    "highlight": STRS,
+    "visual": STR,
+})
+
+STORYBOARD_SCHEMA = _obj({
+    "title": STR, "cover_text": STR, "caption": STR, "hashtags": STRS,
+    "scenes": {"type": "array", "items": SCENE_SCHEMA},
+})
+
+
+def storyboard(acc: Account, topic: str, seconds: int = 35, pillar: str = "", post: dict | None = None,
+               library: list[str] | None = None) -> dict:
+    """Guião em cenas para um vídeo criado do zero (narração + grafismo + imagens)."""
+    prompt = f"""{_account_line(acc)}
+Cria o storyboard de um vídeo vertical de ~{seconds} segundos, feito SEM filmagem: narração em voz \
+sintetizada (português de Portugal), grafismo animado e imagens de fundo.
+
+Tema: {topic}
+Pilar: {pillar or '(escolhe o mais adequado)'}
+{('Publicação planeada (usa o gancho, a ideia e a legenda): ' + json.dumps(post, ensure_ascii=False)) if post else ''}
+
+Regras:
+- 5 a 8 cenas. Cena 1 = "hook" (máx. 10 palavras, provoca curiosidade). Última = "cta".
+- Usa variedade: "list" para passos/sinais, "stat" para um número (só números reais ou genéricos e \
+verdadeiros; nunca inventes estatísticas da empresa — a empresa tem 5 oficinas), "text" para ideias, \
+"quote" para lições de liderança, "media" quando a imagem fala por si.
+- voiceover: frases curtas e naturais para ser lido em voz alta; ~2,6 palavras por segundo no total.
+- title: texto no ecrã (máx. 8 palavras; no "hook" pode repetir a frase). body/kicker opcionais (vazio se não usar).
+- items: só em "list" (2–4 itens, máx. 5 palavras cada). value: só em "stat" (ex.: "5", "90%").
+- highlight: 1–2 palavras do title a destacar a azul.
+- visual: palavras-chave EM INGLÊS para procurar o fundo (ex.: "mercedes engine close up", \
+"mechanic workshop"); dá prioridade a estes ficheiros reais do David se fizerem sentido: {library or []}
+- caption, hashtags e cover_text (máx. 5 palavras) prontos a publicar."""
+    return _ask(prompt, STORYBOARD_SCHEMA, effort="high")

@@ -8,3 +8,6 @@ assets/music/*
 !assets/music/.gitkeep
 *.mp4
 *.mov
+models/
+assets/library/*
+!assets/library/LEIA-ME.md

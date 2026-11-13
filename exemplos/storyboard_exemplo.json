@@ -1,0 +1,19 @@
+{
+  "title": "3 sinais de que o teu Mercedes precisa de oficina",
+  "cover_text": "Não ignores isto",
+  "caption": "3 sinais que nunca deves ignorar no teu Mercedes 👇 Qual destes já te aconteceu?",
+  "hashtags": ["#Mercedes", "#CarretosGroup", "#Oficina", "#MecanicaAutomovel"],
+  "scenes": [
+    {"type": "hook", "title": "3 sinais que o teu Mercedes te está a pedir ajuda", "highlight": ["Mercedes"],
+     "voiceover": "Três sinais de que o teu Mercedes te está a pedir ajuda.", "visual": "mercedes car"},
+    {"type": "list", "title": "Fica atento a:", "items": ["Trancos nas mudanças", "Fumo branco no arranque", "Luz do motor acesa"],
+     "voiceover": "Trancos nas mudanças. Fumo branco no arranque. E a luz do motor acesa, mesmo que o carro pareça andar bem.",
+     "visual": "car engine"},
+    {"type": "stat", "value": "5", "title": "oficinas especializadas em Mercedes",
+     "voiceover": "Na Carretos Group temos cinco oficinas especializadas em Mercedes."},
+    {"type": "text", "kicker": "Dica", "title": "Não esperes pela avaria grave", "body": "Um diagnóstico cedo sai sempre mais barato.",
+     "voiceover": "Não esperes pela avaria grave. Um diagnóstico feito cedo sai sempre mais barato.", "visual": "mechanic workshop"},
+    {"type": "cta", "title": "Guarda este vídeo", "body": "Comenta qual destes já te aconteceu",
+     "voiceover": "Guarda este vídeo e segue para mais dicas."}
+  ]
+}

@@ -40,6 +40,7 @@ analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legenda
 5. **Gravas** nas oficinas, seguindo o guião.
 6. **`carretos edit-video`** ou **`carretos repurpose`**: edição automática (ver abaixo).
 7. **`carretos approve`**: aprovas (ou ligas `auto_approve: true` nas contas onde confias).
+   *Sem tempo para gravar?* `carretos produce` cria sozinho os vídeos e as imagens de toda a semana (ver "Criar vídeos do zero").
 8. **`carretos run`**: o agendador publica à hora certa, recolhe métricas e lembra-te do que falta aprovar.
 
 ## Edição automática de vídeo
@@ -55,6 +56,24 @@ analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legenda
 - **Capa automática**: escolhe o frame mais nítido e bem exposto e aplica o texto da capa com o design da marca.
 
 `carretos repurpose video.mp4` faz o mesmo para **todas as contas de vídeo** de uma vez: renderiza cada formato uma só vez, adapta a legenda ao tom de cada conta e coloca cada versão no próximo slot livre.
+
+## Criar vídeos do zero (sem gravar nada)
+
+```bash
+carretos create-video --account ig_carretoclips --topic "3 sinais de que a caixa 7G-Tronic vai avariar"
+carretos create-video --account li_carretosgroup --post 31          # usa o guião já planeado
+carretos produce --days 7                                          # piloto automático: cria TUDO o que falta na agenda
+```
+
+1. **A IA escreve o storyboard**: 5 a 8 cenas com gancho, listas, números, frases de liderança e uma chamada à ação final, mais a narração, os textos no ecrã, a legenda, os hashtags e o texto da capa.
+2. **Narração em português de Portugal**, gerada localmente com o [Piper](https://github.com/rhasspy/piper) (gratuito; a voz descarrega-se sozinha na primeira utilização).
+3. **Fundos de cada cena**, por esta ordem: os teus ficheiros reais em `assets/library/` (ver o LEIA-ME dessa pasta), depois vídeos de stock gratuitos do Pexels (com `PEXELS_API_KEY`) e, se não houver nenhum, o fundo animado da marca.
+4. **Grafismo animado**: palavras que aparecem uma a uma no gancho, listas que entram ponto a ponto, números que contam, *zoom* lento nas fotos e um CTA com o teu @.
+5. **Acabamento** igual ao dos vídeos editados: legendas sincronizadas com a narração, logótipo, música, áudio normalizado, intro/outro e **capa automática**.
+
+Também podes escrever o storyboard à mão, sem IA: `carretos create-video --account tt_carretoclips --storyboard exemplos/storyboard_exemplo.json`.
+
+O `carretos produce` cria também as **imagens** que faltam: carrosséis a partir dos slides da IA, cartões de frase para liderança e dificuldades, e fotos com título para o resto.
 
 ## Imagens e capas
 
@@ -76,7 +95,7 @@ e música livre de direitos em `assets/music/`.
 Requisitos: Python 3.10+ e [ffmpeg](https://ffmpeg.org/download.html).
 
 ```bash
-pip install -e ".[legendas]"       # + ".[s3]" se usares S3/R2 para alojar imagens
+pip install -e .                   # + ".[s3]" se usares S3/R2 para alojar imagens
 carretos init                      # cria a base de dados e o .env
 # preenche o .env (ver abaixo)
 carretos status                    # confirma as credenciais de cada conta
@@ -128,6 +147,8 @@ Também podes usar o cron: `* * * * * cd /caminho && carretos publish-due`
 carretos status | sync | import-csv | report [--ai]
 carretos plan [--start AAAA-MM-DD --days 7] | generate [--context ...] | show <id> | calendar
 carretos edit-video <ficheiro> --account <conta> [--post id | --schedule data] [--seconds 45]
+carretos create-video --account <conta> --topic "..." | --post <id> | --storyboard f.json
+carretos produce [--days 7]
 carretos repurpose <ficheiro> | cover | image quote|photo|carousel | attach <id> <ficheiros>
 carretos edit <id> | schedule <id> <data> | approve <ids> | reject <ids> [--regenerate]
 carretos publish <id> [--dry-run] | publish-due | run | dashboard

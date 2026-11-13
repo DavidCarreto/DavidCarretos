@@ -77,19 +77,35 @@ def probe(path: str | Path) -> VideoInfo:
 
 
 # ------------------------------------------------------------------ transcrição
-def transcribe(path: str | Path, language: str = "pt", model_size: str = "small") -> list[dict]:
-    """Transcrição com tempos por palavra. Requer `pip install faster-whisper`."""
+VOCAB = ("Mercedes-Benz, Carretos Group, Carreto Clips, David Carreto, oficina, AMG, OM651, OM654, "
+         "M274, 7G-Tronic, 9G-Tronic, AIRMATIC, AdBlue, injetores, embraiagem, diagnóstico")
+
+
+def load_audio(path: str | Path, sr: int = 16000):
+    """Descodifica o áudio com ffmpeg para um array numpy mono (sem depender do PyAV)."""
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le", "-ac", "1", "-ar", str(sr), "-"],
+                         capture_output=True, check=True).stdout
+    return np.frombuffer(raw, np.int16).astype(np.float32) / 32768.0
+
+
+def transcribe(path: str | Path, language: str = "pt", model_size: str | None = None) -> list[dict]:
+    """Transcrição com tempos por palavra (faster-whisper, gratuito e local)."""
+    import os
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     try:
         from faster_whisper import WhisperModel  # type: ignore
     except ImportError as exc:
         raise VideoError("Para legendas automáticas instala: pip install faster-whisper") from exc
-    model = WhisperModel(model_size, device="auto", compute_type="int8")
-    segments, _ = model.transcribe(str(path), language=language, word_timestamps=True, vad_filter=True)
+    model = WhisperModel(model_size or os.environ.get("WHISPER_MODEL", "small"), device="auto", compute_type="int8")
+    segments, _ = model.transcribe(load_audio(path), language=language, word_timestamps=True, vad_filter=True,
+                                   initial_prompt=VOCAB)
     out = []
     for s in segments:
         out.append({
-            "start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip(),
-            "words": [{"start": w.start, "end": w.end, "word": w.word.strip()} for w in (s.words or [])],
+            "start": round(float(s.start), 2), "end": round(float(s.end), 2), "text": s.text.strip(),
+            "words": [{"start": float(w.start), "end": float(w.end), "word": w.word.strip()}
+                      for w in (s.words or [])],
         })
     return out
 

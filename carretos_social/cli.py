@@ -400,6 +400,124 @@ def cmd_dashboard(a):
     print(f"Painel: {p}")
 
 
+
+def _library_names(limit: int = 60) -> list[str]:
+    from .media.stock import LIBRARY
+    if not LIBRARY.exists():
+        return []
+    return sorted(p.name for p in LIBRARY.rglob("*") if p.is_file() and not p.name.startswith("."))[:limit]
+
+
+def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, storyboard_file: str | None = None,
+                seconds: int = 35, narration: bool = True, music: bool = True, schedule: str | None = None,
+                use_ai: bool = True) -> dict:
+    from .media import image_gen
+    from .media.creator import create_video, storyboard_from_post
+    post = extra = None
+    if post_id:
+        row, extra = _post_meta(conn, post_id)
+        post = dict(row)
+    if storyboard_file:
+        sb = json.loads(Path(storyboard_file).read_text(encoding="utf-8"))
+    elif use_ai:
+        from .content.ai import storyboard
+        brief = None
+        if post:
+            brief = {k: post[k] for k in ("title", "hook", "caption", "pillar")} | {
+                "guiao": extra.get("script"), "textos_ecra": extra.get("on_screen_texts")}
+        sb = storyboard(acc, topic or (post or {}).get("title") or "", seconds, (post or {}).get("pillar") or "",
+                        brief, _library_names())
+    elif post:
+        sb = storyboard_from_post(post, extra)
+    else:
+        raise SystemExit("Sem IA: indica --storyboard ficheiro.json ou --post <id> com guião gerado.")
+    w, h = _render_size(acc)
+    out_dir = _out_dir(acc.id, "criados")
+    (out_dir / "storyboards").mkdir(exist_ok=True)
+    res = create_video(sb, out_dir, size=(w, h), handle=acc.handle, narration=narration,
+                       music="auto" if music else None,
+                       max_seconds=strategy()["render"].get(acc.platform, {}).get("max_seconds"))
+    stem = Path(res["video"]).stem
+    (out_dir / "storyboards" / f"{stem}.json").write_text(json.dumps(sb, ensure_ascii=False, indent=1),
+                                                          encoding="utf-8")
+    cover = image_gen.cover(res["cover_frame"], res.get("cover_text") or sb.get("title") or acc.name,
+                            out_dir / f"{stem}_capa.jpg", size=(w, h))
+    vid_id = add_media(conn, "video", res["video"], None, {"account": acc.id, "created_from_zero": True})
+    cov_id = add_media(conn, "cover", cover, vid_id)
+    res["cover"] = str(cover)
+    if post_id:
+        fields = {"media_ids": [vid_id], "cover_id": cov_id}
+        if not post.get("caption") and res.get("caption"):
+            fields.update(caption=res["caption"], hashtags=res.get("hashtags") or [])
+        if post["status"] == "idea":
+            fields["status"] = "draft"
+        update_post(conn, post_id, **fields)
+        res["post_id"] = post_id
+    else:
+        res["post_id"] = add_post(conn, account_id=acc.id, format="reel" if acc.platform == "instagram" else "video",
+                                  title=res.get("title") or stem, hook=sb["scenes"][0].get("title", ""),
+                                  caption=res.get("caption") or "", hashtags=res.get("hashtags") or [],
+                                  media_ids=[vid_id], cover_id=cov_id,
+                                  scheduled_at=_aware(schedule) if schedule else None, status="draft")
+    return res
+
+
+def cmd_create_video(a):
+    acc = account(a.account)
+    if not (a.topic or a.post or a.storyboard):
+        raise SystemExit("Indica --topic \"tema\", --post <id> ou --storyboard ficheiro.json")
+    with connect() as conn:
+        res = _create_for(conn, acc, topic=a.topic or "", post_id=a.post, storyboard_file=a.storyboard,
+                          seconds=a.seconds, narration=not a.no_voice, music=not a.no_music, schedule=a.schedule,
+                          use_ai=not a.no_ai)
+    for s in res["steps"]:
+        print(" •", s)
+    print(f"Vídeo: {res['video']} ({res['duration']} s)\nCapa:  {res['cover']}\nPublicação #{res['post_id']}")
+
+
+def cmd_produce(a):
+    """Piloto automático: cria o vídeo/imagem de todas as publicações planeadas que ainda não têm media."""
+    from .media import image_gen
+    start = datetime.now().isoformat()
+    end = (datetime.now() + timedelta(days=a.days)).isoformat()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM posts WHERE status IN ('idea','draft') AND media_ids='[]' AND scheduled_at BETWEEN ? AND ? "
+            "ORDER BY scheduled_at", (start, end)).fetchall()
+        if a.accounts:
+            rows = [r for r in rows if r["account_id"] in a.accounts]
+        print(f"{len(rows)} publicações sem media nos próximos {a.days} dias.")
+        for r in rows:
+            acc = account(r["account_id"])
+            label = f"#{r['id']} {r['scheduled_at'][:16]} {acc.id} {r['format']}"
+            try:
+                if r["format"] in ("reel", "video"):
+                    if a.only_images:
+                        continue
+                    res = _create_for(conn, acc, post_id=r["id"], seconds=a.seconds, use_ai=not a.no_ai)
+                    print(f"{label} → 🎬 {Path(res['video']).name} ({res['duration']} s)")
+                else:
+                    _, extra = _post_meta(conn, r["id"])
+                    size = _render_size(acc, "image")
+                    out = _out_dir(acc.id, "criados")
+                    title = extra.get("cover_text") or r["hook"] or r["title"] or r["pillar"]
+                    if r["format"] == "carousel" and extra.get("slides"):
+                        paths = image_gen.carousel(extra["slides"], out / f"carrossel_{r['id']}", size=size,
+                                                   handle=acc.handle)
+                    elif r["pillar"] in ("lideranca", "dificuldades") and r["hook"]:
+                        paths = [image_gen.quote_card(r["hook"], out / f"frase_{r['id']}.jpg", size=size)]
+                    else:
+                        from .media.stock import find_visual
+                        photo = find_visual(r["title"] or r["pillar"] or "mercedes workshop", "image")
+                        paths = [image_gen.photo_post(photo, title, out / f"imagem_{r['id']}.jpg", size=size,
+                                                      tag=(r["pillar"] or "").replace("_", " "))]
+                    ids = [add_media(conn, "image", p) for p in paths]
+                    update_post(conn, r["id"], media_ids=ids, status="draft" if r["status"] == "idea" else r["status"])
+                    print(f"{label} → 🖼  {len(paths)} imagem(ns)")
+            except Exception as exc:  # noqa: BLE001
+                print(f"{label} → ⚠️ {exc}")
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="carretos", description="Gestão automática das redes sociais Carretos")
@@ -470,6 +588,16 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--interval", type=int, default=60)
     s = add("dashboard", cmd_dashboard, "gera o painel HTML (agenda + métricas)")
     s.add_argument("--days", type=int, default=30)
+    s = add("create-video", cmd_create_video, "cria um vídeo do zero (guião IA + voz + grafismo + imagens)")
+    s.add_argument("--account", required=True); s.add_argument("--topic"); s.add_argument("--post", type=int)
+    s.add_argument("--storyboard", help="JSON de cenas escrito à mão (ver exemplos/)")
+    s.add_argument("--seconds", type=int, default=35); s.add_argument("--schedule")
+    s.add_argument("--no-voice", action="store_true"); s.add_argument("--no-music", action="store_true")
+    s.add_argument("--no-ai", action="store_true")
+    s = add("produce", cmd_produce, "piloto automático: cria vídeos/imagens para as publicações planeadas")
+    s.add_argument("--days", type=int, default=7); s.add_argument("--accounts", nargs="*")
+    s.add_argument("--seconds", type=int, default=35); s.add_argument("--no-ai", action="store_true")
+    s.add_argument("--only-images", action="store_true")
     return p
 
 

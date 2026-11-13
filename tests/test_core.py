@@ -91,3 +91,29 @@ def test_video_pipeline(tmp_path):
     info = probe(res["video"])
     assert (info.width, info.height) == (540, 960)
     assert info.duration < 7.5
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg em falta")
+def test_create_video_from_zero_without_voice(tmp_path):
+    from carretos_social.media.creator import create_video
+    from carretos_social.media.video_editor import probe
+    sb = {"title": "Teste", "scenes": [
+        {"type": "hook", "title": "O erro que destrói caixas", "seconds": 2},
+        {"type": "list", "title": "Sinais", "items": ["Trancos", "Fumo"], "seconds": 2},
+        {"type": "stat", "value": "5", "title": "oficinas", "seconds": 2},
+        {"type": "cta", "title": "Segue", "seconds": 2}]}
+    res = create_video(sb, tmp_path, size=(360, 640), narration=False, music=None, handle="carretoclips",
+                       stock_footage=False)
+    info = probe(res["video"])
+    assert (info.width, info.height) == (360, 640)
+    assert 7.5 < info.duration < 9
+
+
+def test_library_match(tmp_path, monkeypatch):
+    from carretos_social.media import stock
+    monkeypatch.setattr(stock, "LIBRARY", tmp_path)
+    (tmp_path / "oficina_elevador_mecanico.jpg").write_bytes(b"x")
+    (tmp_path / "equipa_reuniao.mp4").write_bytes(b"x")
+    assert stock.library_match("mechanic workshop").name == "oficina_elevador_mecanico.jpg"
+    assert stock.library_match("team meeting", "video").name == "equipa_reuniao.mp4"
+    assert stock.library_match("praia") is None
