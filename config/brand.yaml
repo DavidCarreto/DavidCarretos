@@ -1,0 +1,58 @@
+# Identidade, temas e tom de voz. A IA usa este ficheiro em TODAS as gerações.
+
+owner: "David Carreto"
+company: "Carretos Group"
+workshops_count: 5
+language: "pt-PT"
+specialty: "Reparação e manutenção automóvel especializada em Mercedes-Benz"
+
+# Pilares de conteúdo (o plano distribui as publicações por estes temas)
+pillars:
+  - id: mercedes_tecnico
+    name: "Reparação Mercedes"
+    description: "Diagnósticos, avarias típicas por modelo/motor (OM651, OM654, M274, 7G/9G-Tronic, AIRMATIC...), antes/depois, dicas de manutenção, curiosidades técnicas."
+  - id: carretos_group
+    name: "Carretos Group e as 5 oficinas"
+    description: "Bastidores das oficinas, equipamentos, processos, novidades, abertura/crescimento, clientes satisfeitos."
+  - id: pessoas
+    name: "Pessoas"
+    description: "A equipa, mecânicos, histórias de colaboradores, recrutamento, formação, clientes."
+  - id: lideranca
+    name: "Liderança"
+    description: "Lições de gestão, decisões difíceis, cultura de empresa, como liderar 5 oficinas, rotinas do David."
+  - id: conquistas
+    name: "Conquistas"
+    description: "Marcos atingidos, prémios, números, carros difíceis resolvidos, momentos de orgulho."
+  - id: dificuldades
+    name: "Dificuldades"
+    description: "Falhas, erros, momentos duros, o que correu mal e o que se aprendeu. Vulnerabilidade autêntica."
+
+# Tom por tipo de conta
+voices:
+  pessoal: "Primeira pessoa (eu), autêntico, próximo, direto, com emoção e histórias reais. Partilha bastidores e reflexões."
+  marca: "Carreto Clips: energia alta, ganchos fortes nos primeiros 2 segundos, curto, visual, técnico mas acessível, humor leve."
+  empresa: "Carretos Group: profissional, credível, nós (equipa), foco em qualidade, confiança e especialização Mercedes."
+
+rules:
+  - "Nunca inventar números, prémios, nomes de clientes ou factos. Se faltar informação, deixar [PREENCHER]."
+  - "Não usar o logótipo Mercedes-Benz como se fôssemos representantes oficiais; dizer 'especialistas em Mercedes'."
+  - "Português de Portugal (não brasileiro)."
+  - "Cada publicação tem um gancho, valor e uma chamada à ação."
+
+hashtags:
+  base: ["#CarretosGroup", "#Mercedes", "#MercedesBenz", "#Oficina", "#MecanicaAutomovel", "#Portugal"]
+  tecnico: ["#Diagnostico", "#AMG", "#Mecanico", "#CarRepair"]
+  lideranca: ["#Lideranca", "#Empreendedorismo", "#Gestao", "#Equipa"]
+
+visual:
+  colors:
+    primary: "#0B0B0D"      # preto
+    secondary: "#C0C4C8"    # prata
+    accent: "#00A3E0"       # azul elétrico
+    text: "#FFFFFF"
+  font_bold: "/usr/share/fonts/opentype/inter/Inter-ExtraBold.otf"
+  font_regular: "/usr/share/fonts/opentype/inter/Inter-Medium.otf"
+  logo: "assets/brand/logo.png"              # coloca aqui o logótipo (PNG transparente)
+  intro_video: "assets/brand/intro.mp4"      # opcional
+  outro_video: "assets/brand/outro.mp4"      # opcional
+  music_dir: "assets/music"                  # músicas livres de direitos (opcional)

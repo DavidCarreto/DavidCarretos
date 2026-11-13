@@ -1,0 +1,83 @@
+# Contas geridas pelo sistema.
+# As credenciais NUNCA ficam aqui: cada conta indica o nome das variáveis de ambiente
+# (ficheiro .env) de onde o token é lido.
+#
+# publish_mode:
+#   auto    -> publica sozinho na hora agendada (depois de aprovado, ou logo, se auto_approve)
+#   assist  -> a plataforma não permite publicação por API; o sistema prepara tudo
+#              (vídeo, capa, legenda) e envia-te um lembrete para publicares em 1 toque.
+
+accounts:
+  - id: ig_davidcarreto
+    platform: instagram
+    name: "David Carreto (Instagram pessoal)"
+    handle: "davidcarreto"
+    voice: pessoal          # pessoal | marca | empresa
+    publish_mode: auto
+    auto_approve: false     # true = publica sem pedir a tua aprovação
+    credentials:
+      access_token_env: IG_DAVIDCARRETO_TOKEN
+      user_id_env: IG_DAVIDCARRETO_USER_ID
+
+  - id: ig_carretoclips
+    platform: instagram
+    name: "Carreto Clips (Instagram)"
+    handle: "carretoclips"
+    voice: marca
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: IG_CARRETOCLIPS_TOKEN
+      user_id_env: IG_CARRETOCLIPS_USER_ID
+
+  - id: fb_davidcarreto
+    platform: facebook_profile
+    name: "David Carreto (Facebook pessoal)"
+    handle: "davidcarreto"
+    voice: pessoal
+    # A Meta não permite publicar em perfis pessoais por API desde 2018.
+    publish_mode: assist
+    auto_approve: false
+    credentials: {}
+
+  - id: tt_davidcarreto
+    platform: tiktok
+    name: "David Carreto (TikTok pessoal)"
+    handle: "davidcarreto"
+    voice: pessoal
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: TT_DAVIDCARRETO_TOKEN
+
+  - id: tt_carretoclips
+    platform: tiktok
+    name: "Carreto Clips (TikTok)"
+    handle: "carretoclips"
+    voice: marca
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: TT_CARRETOCLIPS_TOKEN
+
+  - id: li_davidcarreto
+    platform: linkedin_member
+    name: "David Carreto (LinkedIn pessoal)"
+    handle: "davidcarreto"
+    voice: pessoal
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: LI_DAVIDCARRETO_TOKEN
+      author_urn_env: LI_DAVIDCARRETO_URN        # urn:li:person:XXXX
+
+  - id: li_carretosgroup
+    platform: linkedin_org
+    name: "Carretos Group (LinkedIn empresa)"
+    handle: "carretos-group"
+    voice: empresa
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: LI_CARRETOSGROUP_TOKEN
+      author_urn_env: LI_CARRETOSGROUP_URN       # urn:li:organization:XXXX

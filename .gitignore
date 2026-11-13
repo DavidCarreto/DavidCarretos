@@ -1,0 +1,10 @@
+.env
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+assets/music/*
+!assets/music/.gitkeep
+*.mp4
+*.mov

@@ -1,0 +1,76 @@
+# Estrutura acordada: frequência, formatos, mistura de temas e horários por conta.
+# Os horários são o ponto de partida; quando houver métricas, o sistema ajusta-os
+# automaticamente às horas em que cada conta tem mais envolvimento (best_times: auto).
+
+timezone: "Europe/Lisbon"
+
+accounts:
+  ig_davidcarreto:
+    posts_per_week: 5
+    formats: {reel: 3, carousel: 1, image: 1}
+    pillar_mix: {lideranca: 25, conquistas: 15, dificuldades: 15, pessoas: 20, carretos_group: 15, mercedes_tecnico: 10}
+    days: [mon, tue, wed, thu, sat]
+    default_times: ["12:30", "19:30"]
+    best_times: auto
+
+  ig_carretoclips:
+    posts_per_week: 7
+    formats: {reel: 6, carousel: 1}
+    pillar_mix: {mercedes_tecnico: 60, carretos_group: 20, conquistas: 10, pessoas: 10}
+    days: [mon, tue, wed, thu, fri, sat, sun]
+    default_times: ["13:00", "20:30"]
+    best_times: auto
+
+  fb_davidcarreto:
+    posts_per_week: 3
+    formats: {video: 2, image: 1}
+    pillar_mix: {conquistas: 30, pessoas: 30, lideranca: 20, carretos_group: 20}
+    days: [tue, thu, sun]
+    default_times: ["21:00"]
+    best_times: auto
+
+  tt_davidcarreto:
+    posts_per_week: 5
+    formats: {video: 5}
+    pillar_mix: {lideranca: 30, dificuldades: 20, conquistas: 20, pessoas: 20, carretos_group: 10}
+    days: [mon, tue, wed, thu, fri]
+    default_times: ["18:30", "21:30"]
+    best_times: auto
+
+  tt_carretoclips:
+    posts_per_week: 7
+    formats: {video: 7}
+    pillar_mix: {mercedes_tecnico: 70, carretos_group: 15, conquistas: 15}
+    days: [mon, tue, wed, thu, fri, sat, sun]
+    default_times: ["12:00", "19:00", "22:00"]
+    best_times: auto
+
+  li_davidcarreto:
+    posts_per_week: 3
+    formats: {text_image: 2, video: 1}
+    pillar_mix: {lideranca: 40, dificuldades: 20, conquistas: 20, pessoas: 20}
+    days: [tue, wed, thu]
+    default_times: ["08:30", "12:15"]
+    best_times: auto
+
+  li_carretosgroup:
+    posts_per_week: 2
+    formats: {image: 1, video: 1}
+    pillar_mix: {carretos_group: 40, pessoas: 30, conquistas: 20, mercedes_tecnico: 10}
+    days: [tue, thu]
+    default_times: ["09:00"]
+    best_times: auto
+
+# Reaproveitamento: um vídeo teu pode gerar várias versões (corte, formato, legenda)
+# para várias contas, espaçadas no tempo para não parecer repetido.
+repurpose:
+  enabled: true
+  min_hours_between_same_asset: 24
+
+# Formatos de saída de vídeo/imagem por plataforma
+render:
+  instagram: {video: [1080, 1920], image: [1080, 1350], max_seconds: 90}
+  tiktok: {video: [1080, 1920], max_seconds: 180}
+  facebook_profile: {video: [1080, 1920], image: [1080, 1350], max_seconds: 180}
+  linkedin_member: {video: [1080, 1350], image: [1200, 1500], max_seconds: 600}
+  linkedin_org: {video: [1080, 1350], image: [1200, 1500], max_seconds: 600}
