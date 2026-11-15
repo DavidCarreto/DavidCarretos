@@ -9,6 +9,10 @@ on:
         description: "Publicar as respostas no Google? (não = modo teste)"
         type: boolean
         default: false
+      testar_ia:
+        description: "Só testar a IA com avaliações de exemplo (não usa o Google)"
+        type: boolean
+        default: false
 
 concurrency:
   group: responder-avaliacoes
@@ -40,8 +44,11 @@ jobs:
           # Execução manual: segue a opção escolhida.
           # Execução agendada: só publica se a variável PUBLICAR_AUTOMATICO = true.
           PUBLICAR: ${{ github.event_name == 'workflow_dispatch' && inputs.publicar || github.event_name == 'schedule' && vars.PUBLICAR_AUTOMATICO == 'true' }}
+          TESTAR_IA: ${{ github.event_name == 'workflow_dispatch' && inputs.testar_ia }}
         run: |
-          if [ "$PUBLICAR" = "true" ]; then
+          if [ "$TESTAR_IA" = "true" ]; then
+            python -m avaliacoes.main --testar-ia
+          elif [ "$PUBLICAR" = "true" ]; then
             python -m avaliacoes.main --publicar
           else
             python -m avaliacoes.main

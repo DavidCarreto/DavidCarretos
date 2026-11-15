@@ -124,12 +124,54 @@ def relatorio(res: Resultado, publicar: bool) -> str:
     return "\n".join(linhas)
 
 
+EXEMPLOS = [
+    ("Carretos Cacém", {"reviewId": "ex1", "starRating": "FIVE", "reviewer": {"displayName": "Joana Martins"},
+                        "comment": "Levei o meu Classe C para revisão e trocaram também as pastilhas. "
+                                   "Explicaram tudo, preço justo e ficou pronto no próprio dia."}),
+    ("Carretos Lisboa", {"reviewId": "ex2", "starRating": "FOUR", "reviewer": {"displayName": "Pedro"},
+                         "comment": "Bom serviço, só demorou um pouco mais do que o previsto."}),
+    ("Carretos Almada", {"reviewId": "ex3", "starRating": "FIVE", "reviewer": {"displayName": "A Google User"}}),
+]
+
+
+def testar_ia() -> int:
+    """Gera respostas a avaliações de exemplo para confirmar que a IA está configurada."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("❌ O secret ANTHROPIC_API_KEY não está configurado no GitHub.")
+        return 1
+    from .respostas import GeradorIA
+    _, config = carregar_config()
+    ia = GeradorIA(config)
+    linhas = ["# Teste da IA – respostas a avaliações de EXEMPLO (nada foi publicado)", ""]
+    ok = True
+    for oficina, review in EXEMPLOS:
+        try:
+            texto = ia.gerar(review, oficina)
+        except Exception as e:  # noqa: BLE001
+            ok = False
+            texto = f"❌ ERRO: {e}"
+        linhas += [f"### {oficina} – {'★' * estrelas(review)} – {review['reviewer']['displayName']}",
+                   f"> {comentario_original(review) or '(sem comentário)'}", "", texto.replace("\n", "  \n"), ""]
+    linhas.insert(1, "✅ A chave da Anthropic funciona." if ok else "❌ A chave da Anthropic deu erro (ver abaixo).")
+    texto = "\n".join(linhas)
+    print(texto)
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+            f.write(texto + "\n")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--publicar", action="store_true", help="publica mesmo as respostas no Google")
     p.add_argument("--listar-locais", action="store_true", help="só lista as fichas acessíveis")
+    p.add_argument("--testar-ia", action="store_true",
+                   help="verifica a chave da Anthropic com avaliações de exemplo (não usa o Google)")
     args = p.parse_args(argv)
+
+    if args.testar_ia:
+        return testar_ia()
 
     em_falta = [s for s in SECRETS_GOOGLE if not os.environ.get(s)]
     if em_falta:
