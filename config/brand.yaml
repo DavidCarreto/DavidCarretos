@@ -3,6 +3,7 @@
 owner: "David Carreto"
 company: "Carretos Group"
 workshops_count: 5
+workshops: ["Almada", "Cacém", "Lisboa", "Mafra", "Santarém"]
 language: "pt-PT"
 specialty: "Reparação e manutenção automóvel especializada em Mercedes-Benz"
 
