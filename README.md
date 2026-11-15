@@ -71,6 +71,18 @@ carretos produce --days 7                                          # piloto auto
 4. **Grafismo animado**: palavras que aparecem uma a uma no gancho, listas que entram ponto a ponto, números que contam, *zoom* lento nas fotos e um CTA com o teu @.
 5. **Acabamento** igual ao dos vídeos editados: legendas sincronizadas com a narração, logótipo, música, áudio normalizado, intro/outro e **capa automática**.
 
+### Narração com a tua voz (gratuito)
+
+O clone de voz usa o [Chatterbox](https://github.com/resemble-ai/chatterbox) (código aberto, licença MIT, uso comercial permitido) e corre no teu computador.
+
+1. Grava 1 a 2 minutos com o telemóvel, num sítio silencioso, a falar naturalmente como nos teus vídeos.
+2. Corre `carretos voice-setup gravacao.m4a`: limpa o ruído, normaliza o volume e guarda a parte com fala em `assets/voz/david_referencia.wav`. Esta pasta nunca vai para o GitHub.
+3. Testa com `carretos voice-test "Olá, sou o David Carreto e hoje vou mostrar-te um Mercedes difícil."`.
+
+Cada conta escolhe a voz em `config/accounts.yaml` (`narrator: david` ou `narrator: generica`). Por omissão, as contas pessoais e a da Carretos Group usam a tua voz e o Carreto Clips usa a voz genérica. Podes ajustar o tom em `config/brand.yaml`: `exaggeration` torna a voz mais calma ou mais enérgica. Se a gravação ainda não existir, o sistema usa a voz genérica e avisa.
+
+Num computador sem placa gráfica, o clone demora cerca de 1 a 3 minutos por cada 30 segundos de narração. As narrações ficam em cache, por isso não se repetem.
+
 Também podes escrever o storyboard à mão, sem IA: `carretos create-video --account tt_carretoclips --storyboard exemplos/storyboard_exemplo.json`.
 
 O `carretos produce` cria também as **imagens** que faltam: carrosséis a partir dos slides da IA, cartões de frase para liderança e dificuldades, e fotos com título para o resto.
@@ -149,6 +161,7 @@ carretos plan [--start AAAA-MM-DD --days 7] | generate [--context ...] | show <i
 carretos edit-video <ficheiro> --account <conta> [--post id | --schedule data] [--seconds 45]
 carretos create-video --account <conta> --topic "..." | --post <id> | --storyboard f.json
 carretos produce [--days 7]
+carretos voice-setup <gravação> | voice-test "texto" [--narrator david|generica]
 carretos repurpose <ficheiro> | cover | image quote|photo|carousel | attach <id> <ficheiros>
 carretos edit <id> | schedule <id> <data> | approve <ids> | reject <ids> [--regenerate]
 carretos publish <id> [--dry-run] | publish-due | run | dashboard

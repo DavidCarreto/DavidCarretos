@@ -56,3 +56,16 @@ visual:
   intro_video: "assets/brand/intro.mp4"      # opcional
   outro_video: "assets/brand/outro.mp4"      # opcional
   music_dir: "assets/music"                  # músicas livres de direitos (opcional)
+
+# Vozes da narração dos vídeos criados do zero. Cada conta escolhe a sua em accounts.yaml (narrator).
+narrators:
+  david:
+    engine: chatterbox                       # clone da tua voz (gratuito, local)
+    sample: assets/voz/david_referencia.wav  # criado por: carretos voice-setup <gravação>
+    language: pt
+    exaggeration: 0.5    # 0.3 calmo … 0.8 enérgico
+    cfg_weight: 0.5      # mais baixo = mais pausado e fiel ao ritmo da gravação
+    temperature: 0.8
+  generica:
+    engine: piper
+    voice: pt_PT-tugão-medium

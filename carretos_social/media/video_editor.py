@@ -51,7 +51,7 @@ class VideoInfo:
     fps: float = 30.0
 
 
-def probe(path: str | Path) -> VideoInfo:
+def probe(path: str | Path, allow_audio_only: bool = False) -> VideoInfo:
     out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams",
                           "-show_format", str(path)], capture_output=True, text=True)
     if out.returncode != 0:
@@ -59,6 +59,8 @@ def probe(path: str | Path) -> VideoInfo:
     data = json.loads(out.stdout)
     video = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
     if not video:
+        if allow_audio_only and any(s["codec_type"] == "audio" for s in data["streams"]):
+            return VideoInfo(duration=float(data["format"].get("duration", 0)), width=0, height=0, has_audio=True)
         raise VideoError(f"{path} não tem faixa de vídeo")
     w, h = int(video["width"]), int(video["height"])
     rotation = 0
@@ -114,7 +116,7 @@ def transcribe(path: str | Path, language: str = "pt", model_size: str | None = 
 def detect_speech(path: str | Path, noise_db: int = -32, min_silence: float = 0.45,
                   pad: float = 0.12) -> list[tuple[float, float]]:
     """Intervalos com som (remove pausas maiores que min_silence)."""
-    info = probe(path)
+    info = probe(path, allow_audio_only=True)
     if not info.has_audio:
         return [(0.0, info.duration)]
     log = _run(["ffmpeg", "-hide_banner", "-i", str(path), "-af",

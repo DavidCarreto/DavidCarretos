@@ -117,3 +117,21 @@ def test_library_match(tmp_path, monkeypatch):
     assert stock.library_match("mechanic workshop").name == "oficina_elevador_mecanico.jpg"
     assert stock.library_match("team meeting", "video").name == "equipa_reuniao.mp4"
     assert stock.library_match("praia") is None
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg em falta")
+def test_prepare_voice_sample_from_audio_only(tmp_path):
+    from carretos_social.media.voice import prepare_sample
+    src = tmp_path / "rec.m4a"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=6",
+                    "-af", "volume='if(between(t,2,3),0,1)':eval=frame", str(src)], check=True)
+    info = prepare_sample(src, tmp_path / "ref.wav", max_seconds=4)
+    assert 3 <= info["speech_seconds"] <= 4.5
+
+
+def test_narrator_falls_back_to_generic_without_sample(monkeypatch):
+    from carretos_social.media import voice
+    monkeypatch.setattr(voice, "brand", lambda: {"narrators": {
+        "david": {"engine": "chatterbox", "sample": "nao/existe.wav"},
+        "generica": {"engine": "piper", "voice": "pt_PT-tugão-medium"}}})
+    assert voice.narrator("david")["engine"] == "piper"

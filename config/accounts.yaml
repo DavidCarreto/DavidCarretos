@@ -13,6 +13,7 @@ accounts:
     name: "David Carreto (Instagram pessoal)"
     handle: "davidcarreto"
     voice: pessoal          # pessoal | marca | empresa
+    narrator: david           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false     # true = publica sem pedir a tua aprovação
     credentials:
@@ -24,6 +25,7 @@ accounts:
     name: "Carreto Clips (Instagram)"
     handle: "carretoclips"
     voice: marca
+    narrator: generica           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false
     credentials:
@@ -35,6 +37,7 @@ accounts:
     name: "David Carreto (Facebook pessoal)"
     handle: "davidcarreto"
     voice: pessoal
+    narrator: david           # voz da narração: david | generica
     # A Meta não permite publicar em perfis pessoais por API desde 2018.
     publish_mode: assist
     auto_approve: false
@@ -45,6 +48,7 @@ accounts:
     name: "David Carreto (TikTok pessoal)"
     handle: "davidcarreto"
     voice: pessoal
+    narrator: david           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false
     credentials:
@@ -55,6 +59,7 @@ accounts:
     name: "Carreto Clips (TikTok)"
     handle: "carretoclips"
     voice: marca
+    narrator: generica           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false
     credentials:
@@ -65,6 +70,7 @@ accounts:
     name: "David Carreto (LinkedIn pessoal)"
     handle: "davidcarreto"
     voice: pessoal
+    narrator: david           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false
     credentials:
@@ -76,6 +82,7 @@ accounts:
     name: "Carretos Group (LinkedIn empresa)"
     handle: "carretos-group"
     voice: empresa
+    narrator: david           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false
     credentials:

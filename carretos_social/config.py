@@ -39,6 +39,7 @@ class Account:
     voice: str
     publish_mode: str = "auto"
     auto_approve: bool = False
+    narrator: str = "generica"
     credentials: dict = field(default_factory=dict)
 
     def secret(self, key: str) -> str | None:

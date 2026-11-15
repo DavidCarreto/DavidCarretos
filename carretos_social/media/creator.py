@@ -308,7 +308,8 @@ def _subtitle_segments(scene: dict, offset: float, speech: float) -> list[dict]:
 
 def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int] = (1080, 1920), handle: str = "",
                  narration: bool = True, voice_speed: float = 1.08, subtitles: bool = True,
-                 music: str | None = "auto", stock_footage: bool = True, max_seconds: float | None = None) -> dict:
+                 music: str | None = "auto", stock_footage: bool = True, max_seconds: float | None = None,
+                 narrator: str | None = None) -> dict:
     """Constrói o vídeo final a partir de um storyboard. Devolve caminhos e metadados."""
     W, H = size
     out_dir = Path(out_dir)
@@ -321,7 +322,7 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
         scene.setdefault("type", "text")
         wav = tmp / f"s{i:02d}.wav"
         text = scene.get("voiceover", "").strip()
-        speech = voice.speak(text, wav, voice_speed) if (narration and text) else 0.0
+        speech = voice.speak(text, wav, voice_speed, narrator) if (narration and text) else 0.0
         if not speech:
             voice.silence(float(scene.get("seconds", 2.5)), wav)
         duration = max(speech + 0.35, float(scene.get("seconds", 0) or 0), 1.6)

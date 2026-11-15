@@ -434,7 +434,7 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
     w, h = _render_size(acc)
     out_dir = _out_dir(acc.id, "criados")
     (out_dir / "storyboards").mkdir(exist_ok=True)
-    res = create_video(sb, out_dir, size=(w, h), handle=acc.handle, narration=narration,
+    res = create_video(sb, out_dir, size=(w, h), handle=acc.handle, narration=narration, narrator=acc.narrator,
                        music="auto" if music else None,
                        max_seconds=strategy()["render"].get(acc.platform, {}).get("max_seconds"))
     stem = Path(res["video"]).stem
@@ -518,6 +518,28 @@ def cmd_produce(a):
                 print(f"{label} → ⚠️ {exc}")
 
 
+
+def cmd_voice_setup(a):
+    from .config import ROOT, brand
+    from .media.voice import prepare_sample
+    cfg = brand().get("narrators", {}).get(a.narrator)
+    if not cfg or cfg.get("engine") != "chatterbox":
+        raise SystemExit(f"O narrador '{a.narrator}' não é um clone (ver narrators em config/brand.yaml)")
+    out = ROOT / cfg["sample"]
+    info = prepare_sample(a.file, out, a.seconds)
+    print(f"Referência pronta: {info['sample']} ({info['speech_seconds']} s de fala limpa)")
+    if info["speech_seconds"] < 8:
+        print("⚠️  Pouca fala aproveitável; grava 1–2 minutos num sítio silencioso.")
+    print('Testa com: carretos voice-test "Olá, sou o David Carreto."')
+
+
+def cmd_voice_test(a):
+    from .media.voice import speak
+    out = Path(a.out or DATA_DIR / f"teste_voz_{a.narrator}.wav")
+    secs = speak(a.text, out, a.speed, a.narrator)
+    print(f"{out} ({secs:.1f} s)")
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="carretos", description="Gestão automática das redes sociais Carretos")
@@ -598,6 +620,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--days", type=int, default=7); s.add_argument("--accounts", nargs="*")
     s.add_argument("--seconds", type=int, default=35); s.add_argument("--no-ai", action="store_true")
     s.add_argument("--only-images", action="store_true")
+    s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
+    s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=25)
+    s = add("voice-test", cmd_voice_test, "gera uma frase de teste com um narrador")
+    s.add_argument("text"); s.add_argument("--narrator", default="david"); s.add_argument("--speed", type=float, default=1.0)
+    s.add_argument("--out")
     return p
 
 
