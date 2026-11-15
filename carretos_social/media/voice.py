@@ -109,7 +109,7 @@ def _chatterbox():
     device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
     torch.set_num_threads(max(1, os.cpu_count() or 1))
     print(f"A carregar o clone de voz (Chatterbox, {device})...")
-    return ChatterboxMultilingualTTS.from_pretrained(device=torch.device(device))
+    return ChatterboxMultilingualTTS.from_pretrained(device=device)  # texto: "cpu" | "mps" | "cuda"
 
 
 def _sentences(text: str, max_chars: int = 220) -> list[str]:
