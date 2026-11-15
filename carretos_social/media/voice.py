@@ -25,6 +25,9 @@ import requests
 
 from ..config import DATA_DIR, ROOT, brand
 
+# descarrega modelos por HTTP normal (mais compatível com proxies/firewalls)
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
 PIPER_VOICE = os.environ.get("PIPER_VOICE", "pt_PT-tugão-medium")
 MODELS = ROOT / "models" / "piper"
 HF = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
