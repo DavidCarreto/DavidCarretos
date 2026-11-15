@@ -1,7 +1,12 @@
 # Regras gerais
 estrelas_minimas: 4              # responde a 4 e 5 estrelas
-dias_maximos: 30                 # só responde a avaliações dos últimos N dias (null = todas)
-max_respostas_por_execucao: 25   # travão de segurança
+dias_maximos: null               # null = responde a TODAS as avaliações por responder, incluindo as antigas
+max_respostas_por_execucao: 25   # travão de segurança: as antigas vão sendo respondidas ao longo das execuções
+
+# Alertas para avaliações de 1-3 estrelas por responder: abre um "issue" no GitHub para cada
+# uma, atribuído ao dono do repositório (o GitHub envia email). O alerta fecha-se sozinho
+# quando a avaliação for respondida no Google.
+alertas: true
 
 # "modelos" = textos fixos abaixo (gratuito)
 # "ia"      = resposta personalizada escrita pelo Claude (precisa de ANTHROPIC_API_KEY);

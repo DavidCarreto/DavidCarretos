@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+from .alertas import AlertasGitHub
 from .google_api import GoogleBusinessClient, Location
 from .respostas import Gerador, comentario_original, estrelas, normalizar
 
@@ -77,6 +78,7 @@ def processar(client, oficinas: list[dict], config: dict, publicar: bool,
                     continue
                 n = estrelas(review)
                 info = {
+                    "id": review.get("reviewId") or review["name"].rsplit("/", 1)[-1],
                     "oficina": nome,
                     "estrelas": n,
                     "autor": (review.get("reviewer") or {}).get("displayName", "?"),
@@ -138,6 +140,14 @@ def main(argv: list[str] | None = None) -> int:
     oficinas, config = carregar_config()
     res = processar(client, oficinas, config, publicar=args.publicar)
     texto = relatorio(res, args.publicar)
+    if config.get("alertas", True) and AlertasGitHub.disponivel():
+        try:
+            criados, fechados = AlertasGitHub.from_env().sincronizar(
+                res.baixas, pode_fechar=not (res.erros or res.oficinas_em_falta))
+            texto += f"\n\n**Alertas:** {criados} novo(s), {fechados} fechado(s) (já respondidas)."
+        except Exception as e:  # noqa: BLE001
+            log.exception("Falha ao criar alertas")
+            res.erros.append(f"Alertas: {e}")
     print(texto)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:

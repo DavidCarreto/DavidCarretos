@@ -1,8 +1,11 @@
 # Respostas automáticas às avaliações Google – Carretos Group
 
 Responde automaticamente às avaliações de **4 e 5 estrelas** no Google das 5 oficinas
-(Almada, Cacém, Lisboa, Mafra e Santarém). As avaliações de 1 a 3 estrelas **não** são
-respondidas automaticamente; aparecem no relatório de cada execução para resposta manual.
+(Almada, Cacém, Lisboa, Mafra e Santarém), **incluindo as antigas que ainda não têm resposta**.
+
+As avaliações de **1 a 3 estrelas não são respondidas automaticamente**. Cada uma gera um
+**alerta**: um *issue* no GitHub atribuído ao dono do repositório, que recebe email. O alerta
+fecha-se sozinho quando a avaliação for respondida no Google.
 
 ## Como funciona
 
@@ -10,7 +13,11 @@ respondidas automaticamente; aparecem no relatório de cada execução para resp
 - Usa **uma única conta Google**, a que gere as 5 oficinas, através da Google Business Profile API.
 - Encontra as fichas pelo nome; não é preciso configurar IDs.
 - Ignora avaliações já respondidas, por isso nunca responde duas vezes.
-- Por segurança, só trata avaliações dos últimos 30 dias e no máximo 25 respostas por execução.
+- Por segurança, publica no máximo 25 respostas por execução. As avaliações antigas vão sendo
+  respondidas ao longo das execuções seguintes (até cerca de 400 por dia).
+- Os alertas são enviados mesmo em modo teste e nunca se repetem para a mesma avaliação.
+  Para receber os emails, confirma em *github.com/settings/notifications* que tens o email ativo
+  para "Issues" / "Assigned".
 - **Modo teste por omissão:** gera as respostas e mostra-as no relatório sem publicar nada.
 
 | Ficheiro | Para quê |

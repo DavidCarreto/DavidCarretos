@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from avaliacoes.alertas import AlertasGitHub  # noqa: E402
 from avaliacoes.google_api import Location  # noqa: E402
 from avaliacoes.main import associar_oficinas, carregar_config, processar, relatorio  # noqa: E402
 from avaliacoes.respostas import (  # noqa: E402
@@ -90,14 +91,15 @@ class Testes(unittest.TestCase):
             ],
             TITULOS[4]: [review("r6", "FIVE", nome="Ana")],
         })
-        teste = processar(client, self.oficinas, self.config, publicar=False, agora=AGORA)
+        cfg = {**self.config, "dias_maximos": 30}  # valida também o filtro de data opcional
+        teste = processar(client, self.oficinas, cfg, publicar=False, agora=AGORA)
         self.assertEqual([r["oficina"] for r in teste.respondidas],
                          ["Carretos Almada", "Carretos Almada", "Carretos Santarém"])
         self.assertEqual(client.publicadas, [])  # modo teste não publica
         self.assertEqual(len(teste.baixas), 1)
         self.assertIn("MODO TESTE", relatorio(teste, False))
 
-        real = processar(client, self.oficinas, self.config, publicar=True, agora=AGORA)
+        real = processar(client, self.oficinas, cfg, publicar=True, agora=AGORA)
         self.assertEqual(len(client.publicadas), 3)
         self.assertFalse(real.erros)
 
@@ -113,6 +115,48 @@ class Testes(unittest.TestCase):
         client = FakeClient({TITULOS[3]: [review("m1", "FIVE")]})
         res = processar(client, oficinas, self.config, publicar=True, agora=AGORA)
         self.assertEqual(res.respondidas, [])
+
+
+    def test_sem_limite_de_data_responde_antigas(self):
+        client = FakeClient({TITULOS[0]: [review("velha", "FIVE", data="2019-03-01T00:00:00Z")]})
+        res = processar(client, self.oficinas, self.config, publicar=False, agora=AGORA)
+        self.assertIsNone(self.config["dias_maximos"])
+        self.assertEqual(len(res.respondidas), 1)
+
+
+class FakeGitHub(AlertasGitHub):
+    def __init__(self, issues):
+        self.dono = "dono"
+        self.issues = issues
+        self.chamadas = []
+
+    def _req(self, method, path, **kw):
+        self.chamadas.append((method, path, kw.get("json")))
+        if method == "GET":
+            return self.issues if kw["params"]["page"] == 1 else []
+        return {}
+
+
+class TestesAlertas(unittest.TestCase):
+    BAIXA = {"id": "r3", "oficina": "Carretos Almada", "estrelas": 2, "autor": "Rui",
+             "comentario": "Demorou muito", "data": "2026-11-10"}
+
+    def test_cria_alerta_uma_vez(self):
+        gh = FakeGitHub([])
+        self.assertEqual(gh.sincronizar([self.BAIXA]), (1, 0))
+        method, path, body = gh.chamadas[-1]
+        self.assertEqual((method, path), ("POST", "/issues"))
+        self.assertIn("<!-- review:r3 -->", body["body"])
+        self.assertEqual(body["assignees"], ["dono"])
+
+        gh2 = FakeGitHub([{"number": 7, "state": "open", "body": body["body"]}])
+        self.assertEqual(gh2.sincronizar([self.BAIXA]), (0, 0))
+
+    def test_fecha_quando_respondida(self):
+        issue = {"number": 7, "state": "open", "body": "x <!-- review:r3 -->"}
+        self.assertEqual(FakeGitHub([issue]).sincronizar([]), (0, 1))
+        # com erros de leitura não fecha nada
+        self.assertEqual(FakeGitHub([issue]).sincronizar([], pode_fechar=False), (0, 0))
 
 
 if __name__ == "__main__":
