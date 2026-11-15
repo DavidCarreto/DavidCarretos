@@ -13,6 +13,10 @@ NOMES_GENERICOS = {"a google user", "um utilizador do google", "utilizador do go
 MAX_CHARS = 1500  # bem abaixo do limite da Google (4096 bytes)
 
 
+class ErroConfiguracaoIA(RuntimeError):
+    """A IA não pode ser usada (chave em falta/inválida, sem saldo...). Não é para mascarar."""
+
+
 def normalizar(texto: str) -> str:
     texto = texto.replace("∣", "|")
     texto = unicodedata.normalize("NFKD", texto)
@@ -122,16 +126,40 @@ def validar_texto_ia(texto: str) -> None:
         raise ValueError("Resposta IA contém link, email ou telefone")
 
 
+def _erro_de_configuracao(e: Exception) -> bool:
+    import anthropic
+
+    if isinstance(e, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+        return True
+    return isinstance(e, anthropic.BadRequestError) and "credit" in str(e).lower()
+
+
 class Gerador:
+    """No modo "ia", só usa um modelo fixo quando a IA falha numa avaliação concreta
+    (ex.: resposta rejeitada pela validação). Se a IA estiver mal configurada (chave
+    inválida, sem saldo), lança ErroConfiguracaoIA: a execução falha, o GitHub avisa por
+    email e as avaliações ficam por responder até a chave ser corrigida."""
+
     def __init__(self, config: dict):
         self.config = config
-        self.ia = GeradorIA(config) if config.get("modo") == "ia" else None
+        self.ia = None
+        self.erro_config: str | None = None
+        if config.get("modo") == "ia":
+            try:
+                self.ia = GeradorIA(config)
+            except Exception as e:  # noqa: BLE001
+                self.erro_config = f"IA não configurada: {e}"
 
     def gerar(self, review: dict, oficina: str, recentes: list[str] | None = None) -> tuple[str, str]:
         """Devolve (texto, origem) com origem "ia" ou "modelo"."""
+        if self.erro_config:
+            raise ErroConfiguracaoIA(self.erro_config)
         if self.ia:
             try:
                 return self.ia.gerar(review, oficina, recentes), "ia"
-            except Exception as e:  # noqa: BLE001 - qualquer falha cai nos modelos
-                log.warning("IA falhou (%s); a usar modelo fixo.", e)
+            except Exception as e:  # noqa: BLE001
+                if _erro_de_configuracao(e):
+                    self.erro_config = f"Chave da Anthropic inválida ou sem saldo: {e}"
+                    raise ErroConfiguracaoIA(self.erro_config) from e
+                log.warning("IA falhou nesta avaliação (%s); a usar modelo fixo.", e)
         return resposta_modelo(review, oficina, self.config), "modelo"

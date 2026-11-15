@@ -1,5 +1,7 @@
 import sys
 import unittest
+
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -136,6 +138,17 @@ class Testes(unittest.TestCase):
         processar(client, self.oficinas, self.config, publicar=False, gerador=GeradorFalso(), agora=AGORA)
         self.assertEqual(vistos, [[], ["resposta a", "Obrigado, até breve!"]])
 
+    def test_chave_ia_invalida_nao_publica_modelos(self):
+        from avaliacoes.respostas import Gerador
+
+        gerador = Gerador(self.config)
+        gerador.erro_config = "IA não configurada: chave em falta"
+        client = FakeClient({TITULOS[0]: [review("a", "FIVE")], TITULOS[1]: [review("b", "FIVE")]})
+        res = processar(client, self.oficinas, self.config, publicar=True, gerador=gerador, agora=AGORA)
+        self.assertEqual(client.publicadas, [])
+        self.assertEqual(len(res.erros), 1)
+        self.assertIn("chave em falta", res.erros[0])
+
 
 class FakeGitHub(AlertasGitHub):
     def __init__(self, issues):
@@ -147,7 +160,16 @@ class FakeGitHub(AlertasGitHub):
         self.chamadas.append((method, path, kw.get("json")))
         if method == "GET":
             return self.issues if kw["params"]["page"] == 1 else []
+        if method == "POST" and path == "/issues" and "assignees" in kw["json"] and self.recusar_atribuicao:
+            resp = requests.Response()
+            resp.status_code = 422
+            raise requests.HTTPError(response=resp)
         return {}
+
+    recusar_atribuicao = False
+
+    def _garantir_etiqueta(self):
+        self.chamadas.append(("POST", "/labels", None))
 
 
 class TestesAlertas(unittest.TestCase):
@@ -164,6 +186,12 @@ class TestesAlertas(unittest.TestCase):
 
         gh2 = FakeGitHub([{"number": 7, "state": "open", "body": body["body"]}])
         self.assertEqual(gh2.sincronizar([self.BAIXA]), (0, 0))
+
+    def test_atribuicao_recusada_cria_sem_atribuir(self):
+        gh = FakeGitHub([])
+        gh.recusar_atribuicao = True
+        self.assertEqual(gh.sincronizar([self.BAIXA]), (1, 0))
+        self.assertNotIn("assignees", gh.chamadas[-1][2])
 
     def test_fecha_quando_respondida(self):
         issue = {"number": 7, "state": "open", "body": "x <!-- review:r3 -->"}

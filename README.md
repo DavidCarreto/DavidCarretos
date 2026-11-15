@@ -15,6 +15,10 @@ fecha-se sozinho quando a avaliação for respondida no Google.
 - Ignora avaliações já respondidas, por isso nunca responde duas vezes.
 - Por segurança, publica no máximo 25 respostas por execução. As avaliações antigas vão sendo
   respondidas ao longo das execuções seguintes (até cerca de 400 por dia).
+- No modo `ia`, se a chave da Anthropic deixar de funcionar (expirada, sem saldo), **não** são
+  publicados modelos fixos: a execução falha, o GitHub envia email e as avaliações ficam para
+  quando a chave for corrigida.
+- O agendamento só funciona na branch principal (*default branch*) do repositório.
 - Os alertas são enviados mesmo em modo teste e nunca se repetem para a mesma avaliação.
   Para receber os emails, confirma em *github.com/settings/notifications* que tens o email ativo
   para "Issues" / "Assigned".
@@ -32,8 +36,9 @@ fecha-se sozinho quando a avaliação for respondida no Google.
 
 ### 1. Google Cloud e acesso à API
 1. Com a **conta gestora**, cria um projeto em https://console.cloud.google.com, por exemplo `carretos-reviews`.
-2. Pede acesso à API: https://support.google.com/business/contact/api_default
-   ("Application for Basic API Access", com o número do projeto). Aguarda o email de aprovação.
+2. Pede acesso à API: https://support.google.com/business/workflow/16726127
+   (escolher a oficina principal, indicar o número do projeto e responder "Não" a já ter um
+   projeto autorizado). ✅ Já feito: pedido n.º 7-8350000042338, resposta em 7–10 dias úteis.
 3. Depois de aprovado, em *APIs e serviços → Biblioteca*, ativa:
    - My Business Account Management API
    - My Business Business Information API

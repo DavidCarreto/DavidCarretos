@@ -54,8 +54,25 @@ class AlertasGitHub:
                 return out
             pagina += 1
 
+    def _garantir_etiqueta(self) -> None:
+        r = self.session.post(f"{self.base}/labels", timeout=30, json={
+            "name": ETIQUETA, "color": "d93f0b", "description": "Avaliação Google de 1 a 3 estrelas"})
+        if r.status_code not in (201, 422):  # 422 = já existe
+            r.raise_for_status()
+
+    def _criar_issue(self, dados: dict) -> None:
+        try:
+            self._req("POST", "/issues", json=dados)
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 422 and "assignees" in dados:
+                self._req("POST", "/issues", json={k: v for k, v in dados.items() if k != "assignees"})
+            else:
+                raise
+
     def sincronizar(self, baixas: list[dict], pode_fechar: bool = True) -> tuple[int, int]:
         existentes = self._issues_existentes()
+        if any(b["id"] not in existentes for b in baixas):
+            self._garantir_etiqueta()
         criados = 0
         for b in baixas:
             if b["id"] in existentes:
@@ -75,7 +92,7 @@ class AlertasGitHub:
                      "body": corpo, "labels": [ETIQUETA]}
             if self.dono:
                 dados["assignees"] = [self.dono]
-            self._req("POST", "/issues", json=dados)
+            self._criar_issue(dados)
             criados += 1
 
         fechados = 0

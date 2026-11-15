@@ -16,7 +16,7 @@ import yaml
 
 from .alertas import AlertasGitHub
 from .google_api import GoogleBusinessClient, Location
-from .respostas import Gerador, comentario_original, estrelas, normalizar
+from .respostas import ErroConfiguracaoIA, Gerador, comentario_original, estrelas, normalizar
 
 log = logging.getLogger("avaliacoes")
 RAIZ = Path(__file__).resolve().parents[2]
@@ -100,10 +100,19 @@ def processar(client, oficinas: list[dict], config: dict, publicar: bool,
                 res.respondidas.append({**info, "resposta": texto, "origem": origem})
                 recentes.append(texto)
                 restantes -= 1
+        except ErroConfiguracaoIA as e:
+            log.error("%s", e)
+            res.erros.append(f"{e} – nenhuma resposta foi publicada com modelos fixos; "
+                             "as avaliações ficam para a próxima execução.")
+            break  # inútil continuar nas outras oficinas
         except Exception as e:  # noqa: BLE001 - uma oficina com erro não pára as outras
             log.exception("Erro na oficina %s", nome)
             res.erros.append(f"{nome}: {e}")
     return res
+
+
+def _citar(texto: str) -> str:
+    return (texto or "(sem comentário)").replace("\n", "\n> ")
 
 
 def relatorio(res: Resultado, publicar: bool) -> str:
@@ -112,11 +121,12 @@ def relatorio(res: Resultado, publicar: bool) -> str:
     linhas.append(f"**Respostas {'publicadas' if publicar else 'propostas'}:** {len(res.respondidas)}")
     for r in res.respondidas:
         linhas += ["", f"### {r['oficina']} – {'★' * r['estrelas']} – {r['autor']} ({r['data']}) [{r['origem']}]",
-                   f"> {r['comentario'] or '(sem comentário)'}", "", r["resposta"].replace("\n", "  \n")]
+                   f"> {_citar(r['comentario'])}", "", r["resposta"].replace("\n", "  \n")]
     if res.baixas:
         linhas += ["", f"## ⚠️ Avaliações de 1–3 estrelas por responder: {len(res.baixas)}"]
         for b in res.baixas:
-            linhas.append(f"- **{b['oficina']}** – {'★' * b['estrelas']} – {b['autor']} ({b['data']}): {b['comentario'] or '(sem comentário)'}")
+            comentario = (b["comentario"] or "(sem comentário)").replace("\n", " ")
+            linhas.append(f"- **{b['oficina']}** – {'★' * b['estrelas']} – {b['autor']} ({b['data']}): {comentario}")
     if res.oficinas_em_falta:
         linhas += ["", f"## ❌ Oficinas não encontradas no Google: {', '.join(res.oficinas_em_falta)}"]
     if res.erros:
@@ -189,12 +199,14 @@ def main(argv: list[str] | None = None) -> int:
     texto = relatorio(res, args.publicar)
     if config.get("alertas", True) and AlertasGitHub.disponivel():
         try:
-            criados, fechados = AlertasGitHub.from_env().sincronizar(
-                res.baixas, pode_fechar=not (res.erros or res.oficinas_em_falta))
+            # Só fecha alertas se todas as avaliações foram lidas (sem erros e sem limite de data)
+            leitura_completa = not (res.erros or res.oficinas_em_falta or config.get("dias_maximos"))
+            criados, fechados = AlertasGitHub.from_env().sincronizar(res.baixas, pode_fechar=leitura_completa)
             texto += f"\n\n**Alertas:** {criados} novo(s), {fechados} fechado(s) (já respondidas)."
         except Exception as e:  # noqa: BLE001
             log.exception("Falha ao criar alertas")
             res.erros.append(f"Alertas: {e}")
+            texto += f"\n\n## ❌ Falha ao criar alertas: {e}"
     print(texto)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
