@@ -60,12 +60,17 @@ visual:
 # Vozes da narração dos vídeos criados do zero. Cada conta escolhe a sua em accounts.yaml (narrator).
 narrators:
   david:
-    engine: chatterbox                       # clone da tua voz (gratuito, local)
+    engine: conversion                       # a tua voz com sotaque PT-PT (gratuito, local)
+    base_voice: pt_PT-tugão-medium           # voz que dá a pronúncia de Portugal
     sample: assets/voz/david_referencia.wav  # criado por: carretos voice-setup <gravação>
     language: pt
     exaggeration: 0.5    # 0.3 calmo … 0.8 enérgico
     cfg_weight: 0.5      # mais baixo = mais pausado e fiel ao ritmo da gravação
     temperature: 0.8
+  david_clone:                               # clone direto (sotaque tende para o Brasil)
+    engine: chatterbox
+    sample: assets/voz/david_referencia.wav
+    language: pt
   generica:
     engine: piper
     voice: pt_PT-tugão-medium

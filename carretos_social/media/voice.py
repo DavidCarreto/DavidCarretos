@@ -2,8 +2,11 @@
 
 Dois motores:
   piper       voz genérica portuguesa de Portugal (rápida; ~60 MB, descarregada na 1.ª utilização)
-  chatterbox  a TUA voz, clonada a partir de uma gravação de referência (Chatterbox Multilingual,
-              código aberto MIT, uso comercial permitido). Mais lento em CPU.
+  conversion  a TUA voz com sotaque de Portugal: o Piper diz o texto com pronúncia PT-PT e o
+              conversor Chatterbox VC aplica o teu timbre (gravação de referência). Recomendado.
+  chatterbox  clone direto (Chatterbox Multilingual). Mais natural, mas o sotaque tende para o
+              português do Brasil. Mais lento em CPU.
+  (Chatterbox: código aberto MIT, uso comercial permitido.)
 
 Os narradores estão definidos em config/brand.yaml (secção `narrators`) e cada conta escolhe o seu
 em config/accounts.yaml (`narrator`). Se o clone não estiver disponível (sem gravação ou sem o pacote
@@ -38,7 +41,7 @@ DEFAULT_NARRATOR = {"engine": "piper", "voice": PIPER_VOICE}
 def narrator(name: str | None) -> dict:
     narrators = brand().get("narrators", {})
     cfg = dict(narrators.get(name or "", {}) or DEFAULT_NARRATOR)
-    if cfg.get("engine") == "chatterbox":
+    if cfg.get("engine") in ("chatterbox", "conversion"):
         problem = clone_problem(cfg)
         if problem:
             print(f"⚠️  Narrador '{name}' indisponível ({problem}); a usar a voz genérica.")
@@ -150,6 +153,30 @@ def _speak_chatterbox(text: str, out: Path, speed: float, cfg: dict) -> None:
     raw.unlink(missing_ok=True)
 
 
+# ------------------------------------------------------------------ conversão (sotaque PT-PT + o teu timbre)
+@lru_cache
+def _vc():
+    from chatterbox.vc import ChatterboxVC  # type: ignore
+    print("A carregar o conversor de voz (Chatterbox VC)...")
+    return ChatterboxVC.from_pretrained(_device())
+
+
+def _device() -> str:
+    import torch  # type: ignore
+    return "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+
+
+def _speak_conversion(text: str, out: Path, speed: float, cfg: dict) -> None:
+    """A voz portuguesa de Portugal (Piper) diz o texto com a pronúncia certa e o conversor
+    transforma o timbre na voz da gravação de referência."""
+    import torchaudio as ta  # type: ignore
+    base = out.with_suffix(".base.wav")
+    _speak_piper(text, base, speed, cfg.get("base_voice", PIPER_VOICE))
+    wav = _vc().generate(str(base), target_voice_path=str(_path(cfg["sample"])))
+    ta.save(str(out), wav.cpu(), _vc().sr)
+    base.unlink(missing_ok=True)
+
+
 # ------------------------------------------------------------------ API
 def duration(path: str | Path) -> float:
     with wave.open(str(path), "rb") as w:
@@ -166,6 +193,8 @@ def speak(text: str, out: str | Path, speed: float = 1.0, narrator_name: str | N
         cache.parent.mkdir(parents=True, exist_ok=True)
         if cfg.get("engine") == "chatterbox":
             _speak_chatterbox(text, cache, speed, cfg)
+        elif cfg.get("engine") == "conversion":
+            _speak_conversion(text, cache, speed, cfg)
         else:
             _speak_piper(text, cache, speed, cfg.get("voice", PIPER_VOICE))
     shutil.copy(cache, out)
