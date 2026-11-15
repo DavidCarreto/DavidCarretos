@@ -207,27 +207,64 @@ def silence(seconds: float, out: str | Path) -> float:
     return seconds
 
 
-def prepare_sample(src: str | Path, out: str | Path, max_seconds: float = 25.0) -> dict:
-    """Prepara a gravação de referência: mono 24 kHz, sem ruído de fundo, volume normalizado e
-    só a parte com fala (até max_seconds — o Chatterbox precisa de ~10–25 s limpos)."""
-    from .video_editor import detect_speech, probe
+def _load_mono(path, sr: int):
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", str(sr),
+                          "-af", "highpass=f=60", "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    return np.frombuffer(raw, np.float32).copy()
+
+
+def _speaker_encoder():
+    """Codificador de voz do Chatterbox (para medir semelhança de timbre). None se indisponível."""
+    try:
+        import torch  # type: ignore
+        from chatterbox.models.voice_encoder import VoiceEncoder  # type: ignore
+        from huggingface_hub import hf_hub_download  # type: ignore
+    except ImportError:
+        return None
+    ve = VoiceEncoder()
+    ve.load_state_dict(torch.load(hf_hub_download("ResembleAI/chatterbox", "ve.pt"), map_location="cpu"))
+    return ve.eval()
+
+
+def prepare_sample(src: str | Path, out: str | Path, max_seconds: float = 10.0) -> dict:
+    """Prepara a gravação de referência para o clone.
+
+    - SEM redução de ruído nem filtros fortes (medido: os filtros reduziam a semelhança do timbre
+      de 0,92 para 0,83); só remove graves muito baixos e normaliza o pico.
+    - Junta só os trechos com fala e escolhe a janela de `max_seconds` (o conversor usa 10 s)
+      cuja voz é mais representativa de toda a gravação.
+    """
+    import numpy as np
+    import soundfile as sf  # type: ignore
+    from .video_editor import detect_speech
+    sr = 24000
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    audio = _load_mono(src, sr)
     tmp = out.with_suffix(".tmp.wav")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vn", "-ac", "1", "-ar", "24000",
-                    "-af", "highpass=f=80,lowpass=f=12000,afftdn=nf=-25,loudnorm=I=-18:TP=-2",
-                    str(tmp)], check=True)
+    sf.write(tmp, audio, sr)
     ranges = detect_speech(tmp, noise_db=-38, min_silence=0.6, pad=0.15)
-    keep, total = [], 0.0
-    for s, e in ranges:  # junta blocos de fala até max_seconds
-        if total >= max_seconds:
-            break
-        e = min(e, s + (max_seconds - total))
-        keep.append((s, e))
-        total += e - s
-    select = "+".join(f"between(t,{s:.2f},{e:.2f})" for s, e in keep)
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(tmp), "-af",
-                    f"aselect='{select}',asetpts=N/SR/TB", str(out)], check=True)
     tmp.unlink(missing_ok=True)
-    original = probe(src).duration if Path(src).suffix.lower() in (".mp4", ".mov", ".m4v") else None
-    return {"sample": str(out), "speech_seconds": round(duration(out), 1), "original_seconds": original}
+    speech = np.concatenate([audio[int(s * sr):int(e * sr)] for s, e in ranges]) if ranges else audio
+    win = int(max_seconds * sr)
+    best, score = speech[:win], None
+    ve = _speaker_encoder() if len(speech) > win * 1.5 else None
+    if ve is not None:
+        import librosa  # type: ignore
+
+        def emb(w):
+            e = ve.embeds_from_wavs([librosa.resample(w, orig_sr=sr, target_sr=16000)], sample_rate=16000)[0]
+            return e / np.linalg.norm(e)
+        whole = emb(speech)
+        step = int(2 * sr)
+        for start in range(0, len(speech) - win + 1, step):
+            cand = speech[start:start + win]
+            sim = float(emb(cand) @ whole)
+            if score is None or sim > score:
+                best, score = cand, sim
+    best = best / max(1e-6, float(np.abs(best).max())) * 0.89  # pico a -1 dB
+    sf.write(out, best, sr)
+    return {"sample": str(out), "speech_seconds": round(len(best) / sr, 1),
+            "total_speech_seconds": round(len(speech) / sr, 1),
+            "representativeness": round(score, 3) if score is not None else None}

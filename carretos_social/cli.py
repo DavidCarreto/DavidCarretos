@@ -523,11 +523,14 @@ def cmd_voice_setup(a):
     from .config import ROOT, brand
     from .media.voice import prepare_sample
     cfg = brand().get("narrators", {}).get(a.narrator)
-    if not cfg or cfg.get("engine") != "chatterbox":
+    if not cfg or cfg.get("engine") not in ("chatterbox", "conversion"):
         raise SystemExit(f"O narrador '{a.narrator}' não é um clone (ver narrators em config/brand.yaml)")
     out = ROOT / cfg["sample"]
     info = prepare_sample(a.file, out, a.seconds)
     print(f"Referência pronta: {info['sample']} ({info['speech_seconds']} s de fala limpa)")
+    if info.get("representativeness"):
+        print(f"Escolhido o trecho mais representativo de {info['total_speech_seconds']} s de fala "
+              f"(semelhança {info['representativeness']})")
     if info["speech_seconds"] < 8:
         print("⚠️  Pouca fala aproveitável; grava 1–2 minutos num sítio silencioso.")
     print('Testa com: carretos voice-test "Olá, sou o David Carreto."')
@@ -621,7 +624,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seconds", type=int, default=35); s.add_argument("--no-ai", action="store_true")
     s.add_argument("--only-images", action="store_true")
     s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
-    s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=25)
+    s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=10)
     s = add("voice-test", cmd_voice_test, "gera uma frase de teste com um narrador")
     s.add_argument("text"); s.add_argument("--narrator", default="david"); s.add_argument("--speed", type=float, default=1.0)
     s.add_argument("--out")
