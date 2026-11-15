@@ -1,0 +1,19 @@
+# As 5 oficinas Carretos Group.
+# "procurar" é comparado com o nome da ficha no Google (sem acentos, maiúsculas/minúsculas
+# e diferenças entre "|" e "∣" ignoradas). Não é preciso saber os IDs: o sistema encontra-os.
+oficinas:
+  - nome: Carretos Almada
+    procurar: "Carretos Almada"
+    ativa: true
+  - nome: Carretos Cacém
+    procurar: "Carretos Cacem"
+    ativa: true
+  - nome: Carretos Lisboa
+    procurar: "Carretos Lisboa"
+    ativa: true
+  - nome: Carretos Mafra
+    procurar: "Carretos Mafra"
+    ativa: true   # Encerrada temporariamente no Google; mudar para false para não responder.
+  - nome: Carretos Santarém
+    procurar: "Carretos Santarem"
+    ativa: true

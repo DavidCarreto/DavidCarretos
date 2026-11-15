@@ -1,0 +1,41 @@
+# Regras gerais
+estrelas_minimas: 4              # responde a 4 e 5 estrelas
+dias_maximos: 30                 # só responde a avaliações dos últimos N dias (null = todas)
+max_respostas_por_execucao: 25   # travão de segurança
+
+# "modelos" = textos fixos abaixo (gratuito)
+# "ia"      = resposta personalizada escrita pelo Claude (precisa de ANTHROPIC_API_KEY);
+#             se a IA falhar, usa os modelos como reserva.
+modo: modelos
+
+# Instruções de estilo para o modo "ia"
+estilo_ia: |
+  Escreves em português de Portugal, em nome da equipa da oficina.
+  Tom simpático, profissional e próximo, tratando o cliente por "você" (ou sem pronome).
+  Usa linguagem neutra quanto ao género do cliente (ex.: "obrigado pela visita" e não "ficou satisfeito").
+  Respostas curtas: 2 a 4 frases. Agradece, refere de forma natural algo concreto que o
+  cliente mencionou (se mencionou), e convida a voltar.
+  Somos oficinas especialistas Mercedes-Benz.
+  Nunca inventes factos, promoções, preços, nomes de funcionários ou serviços que o cliente
+  não referiu. Não incluas links, emails nem números de telefone. Não uses emojis.
+  Se a avaliação estiver noutra língua, responde nessa língua.
+assinatura: "Equipa {oficina}"
+
+# Modelos de resposta. Variáveis: {saudacao} ("Olá João," ou "Olá,") e {oficina}.
+# É escolhida uma variante diferente para cada avaliação.
+modelos:
+  5:
+    com_comentario:
+      - "{saudacao} muito obrigado pela sua avaliação de 5 estrelas e pelas palavras simpáticas! Ficamos muito contentes por saber que gostou do nosso serviço. Estaremos sempre ao dispor para cuidar do seu Mercedes."
+      - "{saudacao} agradecemos imenso o seu comentário! É para nós um orgulho saber que a experiência na {oficina} correu bem. Contamos consigo numa próxima visita."
+      - "{saudacao} obrigado pela confiança e pela excelente avaliação! O seu feedback motiva toda a equipa a continuar a dar o melhor. Até breve!"
+    sem_comentario:
+      - "{saudacao} muito obrigado pela avaliação de 5 estrelas! Ficamos muito felizes por saber que gostou. Até à próxima!"
+      - "{saudacao} agradecemos a sua confiança e as 5 estrelas! Estaremos sempre ao dispor na {oficina}."
+  4:
+    com_comentario:
+      - "{saudacao} muito obrigado pela sua avaliação e pelo comentário! Ficamos contentes por ter gostado do nosso serviço e trabalhamos todos os dias para que a próxima experiência seja ainda melhor."
+      - "{saudacao} agradecemos o seu feedback! É muito importante para nós. Esperamos voltar a contar com a sua visita na {oficina}."
+    sem_comentario:
+      - "{saudacao} obrigado pela sua avaliação! Ficamos contentes por saber que gostou e esperamos voltar a contar com a sua visita."
+      - "{saudacao} agradecemos as 4 estrelas e a sua confiança na {oficina}. Até breve!"
