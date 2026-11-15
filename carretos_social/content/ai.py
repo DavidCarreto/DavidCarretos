@@ -1,6 +1,7 @@
 """Geração de conteúdo com Claude: ideias, guiões, legendas, recomendações e escolha de cortes.
 
-Requer ANTHROPIC_API_KEY no .env. Todas as respostas são JSON validado por esquema.
+Requer SOCIAL_ANTHROPIC_API_KEY no .env (chave própria das redes sociais, separada da do
+sistema de avaliações). Todas as respostas são JSON validado por esquema.
 """
 from __future__ import annotations
 
@@ -19,7 +20,10 @@ _client: anthropic.Anthropic | None = None
 def client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()
+        key = os.environ.get("SOCIAL_ANTHROPIC_API_KEY")
+        if not key:
+            raise RuntimeError("Falta SOCIAL_ANTHROPIC_API_KEY no .env (chave 'carretos-redes-sociais').")
+        _client = anthropic.Anthropic(api_key=key)
     return _client
 
 
@@ -28,6 +32,7 @@ def _system() -> str:
     pillars = "\n".join(f"- {p['id']}: {p['name']} — {p['description']}" for p in b["pillars"])
     voices = "\n".join(f"- {k}: {v}" for k, v in b["voices"].items())
     rules = "\n".join(f"- {r}" for r in b["rules"])
+    facts = "\n".join(f"- {f}" for f in verified_facts()) or "- (nenhum ainda)"
     return f"""És o diretor de conteúdo e social media de {b['owner']}, dono da {b['company']} \
 ({b['workshops_count']} oficinas: {', '.join(b.get('workshops', []))}). Especialidade: {b['specialty']}.
 Escreves sempre em {b['language']} (português de Portugal).
@@ -38,6 +43,12 @@ Pilares de conteúdo:
 Tom de voz por tipo de conta:
 {voices}
 
+FACTOS CONFIRMADOS (os únicos factos concretos que podes afirmar sobre o David, a empresa,
+as oficinas, clientes, números, prémios ou datas):
+{facts}
+Qualquer outro facto concreto que precisares → escreve [PREENCHER: o que falta]. Conhecimento técnico
+geral sobre Mercedes é permitido; factos sobre a Carretos Group só da lista acima.
+
 Regras obrigatórias:
 {rules}
 - Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
@@ -46,6 +57,15 @@ Conheces a fundo o que funciona em cada rede: Reels/TikTok (gancho visual e verb
 segundos, legendas no ecrã, 15–45 s, ritmo rápido, loop no fim), carrosséis (slide 1 = promessa forte, \
 1 ideia por slide, último slide = CTA), LinkedIn (primeira linha que obriga a "ver mais", frases curtas, \
 história → lição → pergunta), Facebook (comunidade, emoção, histórias mais longas)."""
+
+
+def verified_facts() -> list[str]:
+    from ..config import CONFIG_DIR
+    import yaml
+    path = CONFIG_DIR / "factos.yaml"
+    if not path.exists():
+        return []
+    return [str(f) for f in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("factos", [])]
 
 
 def _ask(prompt: str, schema: dict, max_tokens: int = 16000, effort: str = "medium") -> dict:

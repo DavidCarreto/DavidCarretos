@@ -33,7 +33,7 @@ def ready_problems(row) -> list[str]:
     problems = []
     if not row["caption"]:
         problems.append("sem legenda")
-    if "[PREENCHER]" in (row["caption"] or ""):
+    if "[PREENCHER" in (row["caption"] or ""):
         problems.append("legenda tem [PREENCHER]")
     if row["format"] not in ("text",) and not json.loads(row["media_ids"] or "[]"):
         problems.append("sem vídeo/imagem associado")

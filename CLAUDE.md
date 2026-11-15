@@ -27,3 +27,16 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
 **Emails**
 - Os emails com assunto "[Carretos] …" e "📬 Resumo diário Carretos" são do sistema de avaliações.
   Este sistema notifica por Telegram e não usa esses assuntos.
+
+## Separação entre os dois sistemas (convenções deste projeto)
+
+| | Redes sociais (este) | Avaliações Google (outro) |
+|---|---|---|
+| Repositório / branch | `DavidCarretos` · `claude/social-media-management-system-goj30w` | `carretos-avaliacoes` |
+| Chave da IA | `SOCIAL_ANTHROPIC_API_KEY` ("carretos-redes-sociais") | `ANTHROPIC_API_KEY` ("carretos-github") |
+| Notificações | Telegram, prefixo "📣 Redes Sociais · " | Email "[Carretos] …" |
+| Google | não usa nenhuma API Google | Business Profile, projeto "carretos-reviews" |
+
+## Não inventar factos
+A IA só afirma factos concretos que estejam em `config/factos.yaml`; o resto sai como
+`[PREENCHER: ...]` e a publicação fica bloqueada até ser completada.

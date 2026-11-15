@@ -54,7 +54,7 @@ def cmd_status(a):
             v for k, v in creds.items() if not acc.secret(k)))
         print(f"{acc.id:22} {acc.platform:17} {acc.publish_mode:7} {state}")
     import os
-    print("\nIA (ANTHROPIC_API_KEY):", "✔" if os.environ.get("ANTHROPIC_API_KEY") else "✘ em falta")
+    print("\nIA (SOCIAL_ANTHROPIC_API_KEY):", "✔" if os.environ.get("SOCIAL_ANTHROPIC_API_KEY") else "✘ em falta")
     from . import notify
     print("Telegram:", "✔" if notify.enabled() else "— (opcional)")
 

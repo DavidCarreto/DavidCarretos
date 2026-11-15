@@ -117,7 +117,7 @@ carretos status                    # confirma as credenciais de cada conta
 
 | O quê | Onde obter |
 |---|---|
-| `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
+| `SOCIAL_ANTHROPIC_API_KEY` | console.anthropic.com → API Keys → cria uma chave nova chamada **carretos-redes-sociais** (não uses as chaves do sistema de avaliações) |
 | Instagram (as 2 contas) | Converte as contas em **Profissional/Criador** e liga cada uma a uma Página do Facebook. Cria uma app em developers.facebook.com, adiciona o produto *Instagram Graph API* e gera um token de longa duração com `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights` e `pages_show_list`. O `USER_ID` é o *Instagram Business Account ID*. |
 | TikTok (as 2 contas) | developers.tiktok.com → app com **Content Posting API** (Direct Post) e **Display API**; permissões `video.publish`, `video.list` e `user.info.stats`; autoriza cada conta (OAuth) e copia o access token. Pede a auditoria para publicar como público. |
 | LinkedIn pessoal | linkedin.com/developers → app com *Share on LinkedIn* (`w_member_social`) e *Sign In with OpenID* (para obter o teu `urn:li:person:…`). |

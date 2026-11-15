@@ -12,6 +12,10 @@ from pathlib import Path
 from .http import request
 
 
+# todas as mensagens deste sistema começam assim (distingue do sistema de avaliações)
+PREFIX = "📣 Redes Sociais · "
+
+
 def enabled() -> bool:
     return bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"))
 
@@ -25,7 +29,7 @@ def send(text: str) -> None:
         print(f"[notificação] {text}")
         return
     request("POST", _api("sendMessage"), data={"chat_id": os.environ["TELEGRAM_CHAT_ID"],
-                                                "text": text[:4000]})
+                                                "text": (PREFIX + text)[:4000]})
 
 
 def send_file(path: str | Path, caption: str = "") -> None:
@@ -36,4 +40,4 @@ def send_file(path: str | Path, caption: str = "") -> None:
     method, field = ("sendVideo", "video") if path.suffix == ".mp4" else ("sendDocument", "document")
     with open(path, "rb") as fh:
         request("POST", _api(method), data={"chat_id": os.environ["TELEGRAM_CHAT_ID"],
-                                            "caption": caption[:1024]}, files={field: fh}, timeout=600)
+                                            "caption": (PREFIX + caption)[:1024]}, files={field: fh}, timeout=600)
