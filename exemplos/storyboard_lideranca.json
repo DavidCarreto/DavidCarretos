@@ -1,0 +1,18 @@
+{
+  "title": "A confiança da equipa",
+  "cover_text": "Liderar é isto",
+  "caption": "Liderar cinco oficinas ensinou-me uma coisa: a confiança constrói-se devagar e perde-se num segundo. 👇 Concordas?",
+  "hashtags": ["#Lideranca", "#CarretosGroup", "#Equipa", "#Empreendedorismo", "#Mercedes"],
+  "scenes": [
+    {"type": "hook", "title": "A lição mais cara que aprendi a liderar", "highlight": ["liderar"],
+     "voiceover": "A lição mais cara que aprendi a liderar.", "visual": "team workshop"},
+    {"type": "stat", "value": "5", "title": "oficinas Carretos Group",
+     "voiceover": "Hoje temos cinco oficinas. E todos os dias aprendo com a minha equipa."},
+    {"type": "quote", "title": "A confiança constrói-se devagar e perde-se num segundo.", "body": "David Carreto",
+     "voiceover": "A confiança constrói-se devagar, e perde-se num segundo."},
+    {"type": "list", "title": "O que faço todos os dias:", "items": ["Ouvir antes de decidir", "Cumprir o que prometo", "Dar o exemplo"],
+     "voiceover": "Por isso, todos os dias, ouço antes de decidir, cumpro o que prometo, e dou o exemplo."},
+    {"type": "cta", "title": "Concordas?", "body": "Diz-me nos comentários",
+     "voiceover": "E tu, concordas? Diz-me nos comentários."}
+  ]
+}

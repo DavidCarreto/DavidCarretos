@@ -314,7 +314,9 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
     W, H = size
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    slug = re.sub(r"[^a-z0-9]+", "_", (storyboard.get("title") or "video").lower())[:40].strip("_") or "video"
+    import unicodedata
+    plain = unicodedata.normalize("NFKD", storyboard.get("title") or "video").encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "_", plain.lower())[:40].strip("_") or "video"
     tmp = Path(tempfile.mkdtemp(prefix="create_"))
     used: set[str] = set()
     parts, subs, offset, log = [], [], 0.0, []
