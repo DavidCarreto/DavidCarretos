@@ -55,7 +55,7 @@ No repositório: *Settings → Secrets and variables → Actions → New reposit
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_REFRESH_TOKEN`
-- `ANTHROPIC_API_KEY` (só para o modo `ia`)
+- `ANTHROPIC_API_KEY` (respostas com IA; criar em https://console.anthropic.com → API Keys)
 
 ### 4. Testar e ligar
 1. *Actions → Responder avaliações Google → Run workflow* (sem marcar "Publicar") e vê o relatório.
@@ -65,10 +65,12 @@ No repositório: *Settings → Secrets and variables → Actions → New reposit
 
 ## Respostas: modelos fixos ou IA
 Em `config/respostas.yaml`:
-- `modo: modelos` usa textos fixos com várias variantes (gratuito).
-- `modo: ia` usa o Claude para escrever uma resposta personalizada a cada comentário,
-  seguindo as regras de `estilo_ia`. Se a IA falhar, usa os modelos. As respostas com links,
-  emails ou telefones são rejeitadas automaticamente.
+- `modo: ia` (ativo) usa o Claude para escrever uma resposta personalizada a cada avaliação,
+  seguindo as regras de `estilo_ia`. Para não se repetir ao longo do tempo, a IA vê as 10
+  respostas mais recentes da oficina e evita reutilizar frases e aberturas. Respostas com links,
+  emails ou telefones são rejeitadas, e nesse caso, ou se a IA falhar, usa-se um modelo fixo.
+  Custo estimado: cerca de 1 cêntimo por resposta.
+- `modo: modelos` usa apenas textos fixos com várias variantes (gratuito).
 
 ## Correr localmente
 ```bash

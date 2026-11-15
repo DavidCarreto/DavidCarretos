@@ -123,6 +123,19 @@ class Testes(unittest.TestCase):
         self.assertIsNone(self.config["dias_maximos"])
         self.assertEqual(len(res.respondidas), 1)
 
+    def test_ia_recebe_respostas_recentes(self):
+        vistos = []
+
+        class GeradorFalso:
+            def gerar(self, review, oficina, recentes):
+                vistos.append(list(recentes))
+                return f"resposta {review['reviewId']}", "ia"
+
+        client = FakeClient({TITULOS[1]: [
+            review("a", "FIVE"), review("b", "FIVE", reply="Obrigado, até breve!"), review("c", "FOUR")]})
+        processar(client, self.oficinas, self.config, publicar=False, gerador=GeradorFalso(), agora=AGORA)
+        self.assertEqual(vistos, [[], ["resposta a", "Obrigado, até breve!"]])
+
 
 class FakeGitHub(AlertasGitHub):
     def __init__(self, issues):

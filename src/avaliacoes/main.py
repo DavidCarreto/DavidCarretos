@@ -20,6 +20,7 @@ from .respostas import Gerador, comentario_original, estrelas, normalizar
 
 log = logging.getLogger("avaliacoes")
 RAIZ = Path(__file__).resolve().parents[2]
+N_RECENTES = 10
 SECRETS_GOOGLE = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN")
 
 
@@ -70,11 +71,14 @@ def processar(client, oficinas: list[dict], config: dict, publicar: bool,
     res.oficinas_em_falta = [o["nome"] for o in ativas if o["nome"] not in mapa]
 
     for nome, local in mapa.items():
+        recentes: list[str] = []  # últimas respostas desta oficina, para a IA não se repetir
         try:
             for review in client.listar_avaliacoes(local):
                 if limite_data and _data(review) < limite_data:
                     break  # ordenadas da mais recente para a mais antiga
                 if review.get("reviewReply"):
+                    if len(recentes) < N_RECENTES:
+                        recentes.append(review["reviewReply"].get("comment", "").strip())
                     continue
                 n = estrelas(review)
                 info = {
@@ -90,10 +94,11 @@ def processar(client, oficinas: list[dict], config: dict, publicar: bool,
                     continue
                 if restantes <= 0:
                     continue
-                texto, origem = gerador.gerar(review, nome)
+                texto, origem = gerador.gerar(review, nome, recentes[-N_RECENTES:])
                 if publicar:
                     client.responder(review["name"], texto)
                 res.respondidas.append({**info, "resposta": texto, "origem": origem})
+                recentes.append(texto)
                 restantes -= 1
         except Exception as e:  # noqa: BLE001 - uma oficina com erro não pára as outras
             log.exception("Erro na oficina %s", nome)
