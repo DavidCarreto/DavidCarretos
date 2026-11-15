@@ -3,6 +3,8 @@ name: Responder avaliações Google
 on:
   schedule:
     - cron: "17 7-22 * * *"   # de hora a hora, das 7h às 22h (UTC)
+  push:   # na branch de desenvolvimento, cada envio só testa a IA (não usa o Google)
+    branches: [claude/google-reviews-auto-response-f5f1ad]
   workflow_dispatch:
     inputs:
       publicar:
@@ -44,7 +46,7 @@ jobs:
           # Execução manual: segue a opção escolhida.
           # Execução agendada: só publica se a variável PUBLICAR_AUTOMATICO = true.
           PUBLICAR: ${{ github.event_name == 'workflow_dispatch' && inputs.publicar || github.event_name == 'schedule' && vars.PUBLICAR_AUTOMATICO == 'true' }}
-          TESTAR_IA: ${{ github.event_name == 'workflow_dispatch' && inputs.testar_ia }}
+          TESTAR_IA: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' && inputs.testar_ia }}
         run: |
           if [ "$TESTAR_IA" = "true" ]; then
             python -m avaliacoes.main --testar-ia
