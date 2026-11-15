@@ -13,7 +13,8 @@ oficinas:
     ativa: true
   - nome: Carretos Mafra
     procurar: "Carretos Mafra"
-    ativa: true   # Encerrada temporariamente no Google; mudar para false para não responder.
+    ativa: true   # Abre em março de 2027 (no Google aparece "Encerrada temporariamente"). Fica ativa:
+                  # se não houver avaliações não faz nada, e quando abrir já está a funcionar.
   - nome: Carretos Santarém
     procurar: "Carretos Santarem"
     ativa: true
