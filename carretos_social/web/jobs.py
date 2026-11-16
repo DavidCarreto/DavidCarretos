@@ -16,18 +16,20 @@ _lock = threading.Lock()
 _started = False
 
 
-def enqueue(kind: str, args: list[str], label: str = "") -> int:
+def enqueue(kind: str, args: list[str], label: str = "", user_id: int | None = None) -> int:
     with connect() as conn:
-        return conn.execute("INSERT INTO jobs(kind, args, label, created_at) VALUES (?,?,?,?)",
-                            (kind, json.dumps(args, ensure_ascii=False), label or kind, now())).lastrowid
+        return conn.execute("INSERT INTO jobs(kind, args, label, created_at, created_by) VALUES (?,?,?,?,?)",
+                            (kind, json.dumps(args, ensure_ascii=False), label or kind, now(), user_id)).lastrowid
 
 
 def _run(job) -> None:
     args = json.loads(job["args"])
     with connect() as conn:
         conn.execute("UPDATE jobs SET status='running' WHERE id=?", (job["id"],))
+    import os
+    env = {**os.environ, "CARRETOS_USER_ID": str(job["created_by"] or "")}
     proc = subprocess.run([sys.executable, "-m", "carretos_social", job["kind"], *args],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, env=env)
     log = (proc.stdout + "\n" + "\n".join(l for l in proc.stderr.splitlines()
                                          if "warn" not in l.lower()))[-6000:]
     post = re.findall(r"[Pp]ublica[çc][ãa]o #(\d+)", proc.stdout)

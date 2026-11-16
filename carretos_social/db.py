@@ -80,6 +80,25 @@ CREATE TABLE IF NOT EXISTS chat (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    name TEXT,
+    pw_hash TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+
+-- permissões por conta, combináveis: criar e/ou aprovar
+CREATE TABLE IF NOT EXISTS user_accounts (
+    user_id INTEGER NOT NULL,
+    account_id TEXT NOT NULL,
+    can_create INTEGER NOT NULL DEFAULT 0,
+    can_approve INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, account_id)
+);
+
 CREATE TABLE IF NOT EXISTS account_stats (
     account_id TEXT NOT NULL,
     day TEXT NOT NULL,
@@ -100,11 +119,28 @@ def db_path() -> Path:
     return DATA_DIR / "carretos.db"
 
 
+MIGRATIONS = [  # colunas acrescentadas depois (ALTER TABLE é ignorado se já existirem)
+    "ALTER TABLE posts ADD COLUMN created_by INTEGER",
+    "ALTER TABLE posts ADD COLUMN approved_by INTEGER",
+    "ALTER TABLE jobs ADD COLUMN created_by INTEGER",
+    "ALTER TABLE chat ADD COLUMN user_id INTEGER",
+]
+
+
+def _migrate(conn) -> None:
+    cols = {t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")} for t in ("posts", "jobs", "chat")}
+    for sql in MIGRATIONS:
+        table, col = sql.split()[2], sql.split()[5]
+        if col not in cols[table]:
+            conn.execute(sql)
+
+
 @contextmanager
 def connect(path: Path | None = None):
     conn = sqlite3.connect(path or db_path())
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     try:
         yield conn
         conn.commit()
@@ -125,6 +161,9 @@ def add_post(conn, **fields) -> int:
         if key in fields and not isinstance(fields[key], str):
             fields[key] = json.dumps(fields[key], ensure_ascii=False)
     fields.setdefault("status", "idea")
+    import os
+    if os.environ.get("CARRETOS_USER_ID", "").isdigit():  # quem pediu (tarefas do dashboard)
+        fields.setdefault("created_by", int(os.environ["CARRETOS_USER_ID"]))
     fields["created_at"] = fields["updated_at"] = now()
     cols = ",".join(fields)
     marks = ",".join("?" * len(fields))

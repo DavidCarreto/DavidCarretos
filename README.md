@@ -67,6 +67,8 @@ analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legenda
 - **Criar**: vídeo do zero a partir de um tema, edição de um vídeo teu, montagem de vários vídeos ou imagem com uma frase.
 - **Assistente**: escreves em português ("passa o post de quarta para as 20h", "cria 3 vídeos sobre liderança") e ele faz.
 
+**Equipa e permissões:** cada pessoa entra com o seu utilizador. Em **Equipa** (só o administrador), dás a cada pessoa, conta a conta, as permissões **Criar** e/ou **Aprovar**. Quem não tem acesso a uma conta não a vê: nem a agenda, nem os vídeos, nem as métricas, e o assistente também não lhe mexe. Fica registado quem criou e quem aprovou cada publicação.
+
 Para instalar num servidor Ubuntu: `deploy/setup_servidor.sh`. Guias: `docs/GUIA_INSTAGRAM.md` e `docs/TESTE_KLING.md`.
 
 ## Montagem de vários vídeos

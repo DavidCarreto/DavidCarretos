@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block body %}
+<h1>Equipa</h1>
+{% if criado == 'erro' %}<div class="card" style="border-color:#f85149">Esse utilizador já existe.</div>
+{% elif senha %}<div class="card" style="border-color:#D4AF37">✓ {{ 'Palavra-passe reposta' if criado == 'senha' else 'Utilizador <b>' ~ criado ~ '</b> criado' }}.
+Palavra-passe temporária: <b class="gold" style="font-size:18px">{{ senha }}</b><br><span class="muted">Envia-a à pessoa por um canal privado; ela muda-a em "A minha conta". Não volta a ser mostrada.</span></div>{% endif %}
+<form method="post" action="/equipa/novo" class="card" style="margin:12px 0"><b>Novo utilizador</b>
+<div class="row"><div style="flex:1"><label>Nome</label><input name="name" required placeholder="Ex.: Ana Silva"></div>
+<div style="flex:1"><label>Utilizador (para entrar)</label><input name="username" required autocapitalize="none" placeholder="ana"></div></div>
+<p><button class="btn gold">Criar</button></p></form>
+{% for p in people %}
+<form method="post" action="/equipa/{{ p.id }}" class="card" style="margin-bottom:12px">
+<div class="row" style="justify-content:space-between"><b>{{ p.name }} <span class="muted">({{ p.username }})</span></b>
+<span>{% if p.is_admin %}<span class="pill gold" style="border-color:currentColor">Administrador</span>{% elif not p.active %}<span class="pill" style="color:#f85149;border-color:currentColor">Desativado</span>{% endif %}</span></div>
+{% if p.is_admin %}<p class="muted">Acesso total a todas as contas.</p>
+{% elif p.active %}
+<table style="width:100%;margin-top:8px;font-size:14px;border-collapse:collapse"><tr class="muted"><td>Conta</td><td style="text-align:center">Criar</td><td style="text-align:center">Aprovar</td></tr>
+{% for a in contas %}<tr style="border-top:1px solid var(--line)"><td style="padding:6px 0">{{ ICON.get(a.platform,'') }} {{ a.name }}</td>
+<td style="text-align:center"><input type="checkbox" style="width:20px;height:20px" name="c_{{ a.id }}" {{ 'checked' if p.u and p.u.perms.get(a.id,{}).get('create') }}></td>
+<td style="text-align:center"><input type="checkbox" style="width:20px;height:20px" name="a_{{ a.id }}" {{ 'checked' if p.u and p.u.perms.get(a.id,{}).get('approve') }}></td></tr>{% endfor %}</table>
+<div class="row" style="margin-top:10px"><button class="btn gold" name="action" value="guardar">Guardar permissões</button>
+<button class="btn" name="action" value="senha">Repor palavra-passe</button><button class="btn red" name="action" value="desativar">Desativar</button></div>
+{% else %}<button class="btn" name="action" value="ativar">Reativar</button>{% endif %}
+</form>{% endfor %}{% endblock %}

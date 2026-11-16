@@ -1,15 +1,16 @@
 {% extends "base.html" %}{% block body %}
 <h1>Configuração</h1>
 {% if ok %}<div class="card" style="border-color:#3fb950;margin-bottom:12px">✓ Guardado. As alterações já estão ativas.
-{% if first %}<br><a class="gold" href="/login">Entrar no dashboard</a>{% endif %}</div>{% endif %}
+{% if first %}<br><a class="gold" href="/">Abrir o dashboard</a>{% endif %}</div>{% endif %}
 <form method="post" class="card" autocomplete="off">
  {% if first %}<p class="muted">Primeira configuração. Introduz o código que escolheste ao criar o servidor e define a
- palavra-passe do dashboard. As chaves nunca são mostradas depois de guardadas.</p>
- <label>Código de configuração</label><input type="password" name="codigo" required>{% endif %}
+ tua palavra-passe de administrador. As chaves nunca são mostradas depois de guardadas.</p>
+ <label>Código de configuração</label><input type="password" name="codigo" required>
+ <label>Palavra-passe do administrador (utilizador: <b>david</b>)</label><input type="password" name="admin_password" minlength="8" required>{% endif %}
  {% for k, label, secret, has in fields %}
  <label>{{ label }} {% if has %}<span class="gold">✓ definida</span>{% else %}<span class="muted">(vazia)</span>{% endif %}</label>
  <input type="{{ 'password' if secret else 'text' }}" name="{{ k }}" placeholder="{{ 'deixa vazio para manter' if has else '' }}"
-  {% if first and k == 'DASHBOARD_PASSWORD' %}required minlength="8"{% endif %}>
+>
  {% endfor %}
  <p><button class="btn gold" style="width:100%">Guardar</button></p>
 </form>{% endblock %}

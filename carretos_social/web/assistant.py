@@ -13,9 +13,25 @@ from datetime import date, datetime
 import anthropic
 from anthropic import beta_tool
 
+from contextvars import ContextVar
+
 from ..config import accounts, brand
 from ..db import connect, get_post, update_post
 from . import jobs
+
+_USER: ContextVar = ContextVar("user", default=None)
+
+
+def _me():
+    return _USER.get()
+
+
+def _deny(account_id: str, action: str = "ver") -> str | None:
+    me = _me()
+    if me is None:
+        return "Sem utilizador."
+    ok = {"ver": me.can_see, "criar": me.can_create, "aprovar": me.can_approve}[action](account_id)
+    return None if ok else f"Não tens permissão para {action} na conta {account_id}."
 
 MODEL = os.environ.get("CARRETOS_MODEL", "claude-opus-5-5")
 
@@ -39,8 +55,10 @@ def listar_publicacoes(dias: int = 14, estado: str = "", conta: str = "") -> str
         rows = conn.execute("SELECT * FROM posts WHERE scheduled_at >= ? ORDER BY scheduled_at",
                             (date.today().isoformat(),)).fetchall()
     limit = datetime.now().timestamp() + dias * 86400
+    me = _me()
     out = [_fmt(r) for r in rows if datetime.fromisoformat(r["scheduled_at"][:19]).timestamp() <= limit
-           and (not estado or r["status"] == estado) and (not conta or r["account_id"] == conta)]
+           and (not estado or r["status"] == estado) and (not conta or r["account_id"] == conta)
+           and me and me.can_see(r["account_id"])]
     return json.dumps(out[:60], ensure_ascii=False)
 
 
@@ -53,6 +71,8 @@ def ver_publicacao(id: int) -> str:
     """
     with connect() as conn:
         r = dict(get_post(conn, id))
+    if (err := _deny(r["account_id"])):
+        return err
     return json.dumps(r, ensure_ascii=False, default=str)
 
 
@@ -66,6 +86,8 @@ def reagendar(id: int, quando: str) -> str:
     """
     from ..scheduler import parse_dt
     with connect() as conn:
+        if (err := _deny(get_post(conn, id)["account_id"], "criar")) and (err := _deny(get_post(conn, id)["account_id"], "aprovar")):
+            return err
         update_post(conn, id, scheduled_at=parse_dt(quando).isoformat())
     return f"Publicação #{id} reagendada para {quando}"
 
@@ -79,6 +101,9 @@ def alterar_legenda(id: int, legenda: str) -> str:
         legenda: nova legenda completa.
     """
     with connect() as conn:
+        acc = get_post(conn, id)["account_id"]
+        if _deny(acc, "criar") and (err := _deny(acc, "aprovar")):
+            return err
         update_post(conn, id, caption=legenda)
     return f"Legenda da publicação #{id} atualizada"
 
@@ -92,10 +117,13 @@ def aprovar(id: int) -> str:
     """
     from ..scheduler import ready_problems
     with connect() as conn:
-        problems = ready_problems(get_post(conn, id))
+        row = get_post(conn, id)
+        if (err := _deny(row["account_id"], "aprovar")):
+            return err
+        problems = ready_problems(row)
         if problems:
             return f"Não aprovada: {', '.join(problems)}"
-        update_post(conn, id, status="approved", error=None)
+        update_post(conn, id, status="approved", error=None, approved_by=_me().id)
     return f"Publicação #{id} aprovada"
 
 
@@ -107,7 +135,9 @@ def rejeitar(id: int) -> str:
         id: número da publicação.
     """
     with connect() as conn:
-        update_post(conn, id, status="rejected")
+        if (err := _deny(get_post(conn, id)["account_id"], "aprovar")):
+            return err
+        update_post(conn, id, status="rejected", approved_by=_me().id)
     return f"Publicação #{id} rejeitada"
 
 
@@ -122,11 +152,13 @@ def criar_video(conta: str, tema: str, segundos: int = 35, data_hora: str = "") 
         data_hora: opcional, AAAA-MM-DDTHH:MM para agendar já.
     """
     if conta not in accounts():
-        return f"Conta desconhecida. Opções: {', '.join(accounts())}"
+        return f"Conta desconhecida. Opções: {', '.join(_me().creatable_accounts)}"
+    if (err := _deny(conta, "criar")):
+        return err
     args = ["--account", conta, "--topic", tema, "--seconds", str(segundos)]
     if data_hora:
         args += ["--schedule", data_hora]
-    job = jobs.enqueue("create-video", args, f"Vídeo: {tema[:60]}")
+    job = jobs.enqueue("create-video", args, f"Vídeo: {tema[:60]}", user_id=_me().id)
     return f"Tarefa #{job} criada: o vídeo aparece em 'Para aprovar' daqui a alguns minutos."
 
 
@@ -139,11 +171,14 @@ def planear_semana(inicio: str = "", contas: str = "") -> str:
         contas: ids separados por vírgula, ou vazio para todas.
     """
     args = ["--days", "7"] + (["--start", inicio] if inicio else [])
-    acc = [c.strip() for c in contas.split(",") if c.strip()]
-    if acc:
-        args += ["--accounts", *acc]
-    j1 = jobs.enqueue("plan", args, "Planear semana")
-    j2 = jobs.enqueue("generate", (["--accounts", *acc] if acc else []), "Escrever conteúdos da semana")
+    me = _me()
+    acc = [c.strip() for c in contas.split(",") if c.strip()] or me.creatable_accounts
+    acc = [a for a in acc if me.can_create(a)]
+    if not acc:
+        return "Não tens contas onde possas criar."
+    args += ["--accounts", *acc]
+    j1 = jobs.enqueue("plan", args, "Planear semana", user_id=me.id)
+    j2 = jobs.enqueue("generate", ["--accounts", *acc], "Escrever conteúdos da semana", user_id=me.id)
     return f"Tarefas #{j1} (agenda) e #{j2} (conteúdos) criadas."
 
 
@@ -154,16 +189,17 @@ def relatorio(dias: int = 30) -> str:
     Args:
         dias: período em dias.
     """
-    from ..analytics.analyzer import full_report
+    from ..analytics.analyzer import summary
     with connect() as conn:
-        return json.dumps(full_report(conn, dias), ensure_ascii=False)
+        return json.dumps([summary(conn, a, dias) for a in _me().visible_accounts], ensure_ascii=False)
 
 
 @beta_tool
 def estado_tarefas() -> str:
     """Mostra as últimas tarefas da fila (vídeos a criar, planos) e o seu estado."""
     with connect() as conn:
-        rows = conn.execute("SELECT id, label, status, post_id, created_at FROM jobs ORDER BY id DESC LIMIT 10")
+        rows = conn.execute("SELECT id, label, status, post_id, created_at FROM jobs WHERE created_by=? "
+                            "ORDER BY id DESC LIMIT 10", (_me().id,))
         return json.dumps([dict(r) for r in rows], ensure_ascii=False)
 
 
@@ -171,13 +207,18 @@ TOOLS = [listar_publicacoes, ver_publicacao, reagendar, alterar_legenda, aprovar
          planear_semana, relatorio, estado_tarefas]
 
 
-def _system() -> str:
-    acc = "\n".join(f"- {a.id}: {a.name} ({a.platform})" for a in accounts().values())
-    return f"""És o assistente das redes sociais de {brand()['owner']}, dentro do dashboard dele.
+def _system(me) -> str:
+    acc = "\n".join(f"- {a.id}: {a.name} ({a.platform}) — "
+                    f"{'criar' if me.can_create(a.id) else ''}{' + ' if me.can_create(a.id) and me.can_approve(a.id) else ''}"
+                    f"{'aprovar' if me.can_approve(a.id) else ''}"
+                    for a in accounts().values() if me.can_see(a.id))
+    return f"""És o assistente do sistema de redes sociais de {brand()['owner']} e da {brand()['company']}.
+Estás a falar com: {me.name}{' (administrador)' if me.is_admin else ''}.
 Hoje é {date.today().isoformat()} (hora de Lisboa). Responde em português de Portugal, curto e direto.
 
-Contas:
+Contas a que esta pessoa tem acesso (e o que pode fazer):
 {acc}
+Nunca fales de contas fora desta lista.
 
 Usa as ferramentas para consultar e agir. Regras:
 - Só aprovas, rejeitas ou alteras quando o David pede claramente. Na dúvida, mostra e pergunta.
@@ -187,18 +228,20 @@ Usa as ferramentas para consultar e agir. Regras:
 - Indica sempre o número (#id) das publicações de que falas."""
 
 
-def reply(message: str) -> str:
+def reply(message: str, user) -> str:
+    _USER.set(user)
     key = os.environ.get("SOCIAL_ANTHROPIC_API_KEY")
     if not key:
         return "Falta configurar a chave da IA (SOCIAL_ANTHROPIC_API_KEY)."
     with connect() as conn:
-        conn.execute("INSERT INTO chat(role, content, created_at) VALUES ('user', ?, ?)",
-                     (message, datetime.now().isoformat(timespec="seconds")))
-        history = [dict(r) for r in conn.execute("SELECT role, content FROM chat ORDER BY id DESC LIMIT 20")][::-1]
+        conn.execute("INSERT INTO chat(role, content, created_at, user_id) VALUES ('user', ?, ?, ?)",
+                     (message, datetime.now().isoformat(timespec="seconds"), user.id))
+        history = [dict(r) for r in conn.execute("SELECT role, content FROM chat WHERE user_id=? ORDER BY id DESC "
+                                                 "LIMIT 20", (user.id,))][::-1]
     messages = [{"role": h["role"], "content": h["content"]} for h in history]
     client = anthropic.Anthropic(api_key=key)
     runner = client.beta.messages.tool_runner(
-        model=MODEL, max_tokens=8000, system=_system(), tools=TOOLS, messages=messages,
+        model=MODEL, max_tokens=8000, system=_system(user), tools=TOOLS, messages=messages,
         thinking={"type": "adaptive"}, output_config={"effort": "medium"},
     )
     final = None
@@ -209,6 +252,6 @@ def reply(message: str) -> str:
     else:
         text = "\n".join(b.text for b in final.content if b.type == "text").strip() or "Feito."
     with connect() as conn:
-        conn.execute("INSERT INTO chat(role, content, created_at) VALUES ('assistant', ?, ?)",
-                     (text, datetime.now().isoformat(timespec="seconds")))
+        conn.execute("INSERT INTO chat(role, content, created_at, user_id) VALUES ('assistant', ?, ?, ?)",
+                     (text, datetime.now().isoformat(timespec="seconds"), user.id))
     return text

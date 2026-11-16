@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block body %}
+<h1>A minha conta</h1>
+<p class="muted">{{ me.name }} · utilizador <b>{{ me.username }}</b>{% if me.is_admin %} · administrador{% endif %}</p>
+{% if ok == '1' %}<div class="card" style="border-color:#3fb950">✓ Palavra-passe alterada.</div>{% elif ok %}<div class="card" style="border-color:#f85149">Palavra-passe atual errada, ou a nova tem menos de 8 caracteres.</div>{% endif %}
+<form method="post" class="card" style="margin-top:12px"><label>Palavra-passe atual</label><input type="password" name="atual" required>
+<label>Nova palavra-passe (mín. 8)</label><input type="password" name="nova" minlength="8" required>
+<p><button class="btn gold">Mudar palavra-passe</button></p></form>
+<h2>As minhas contas</h2>
+<div class="card">{% for a in accounts().values() %}{% if me.can_see(a.id) %}<p style="margin:6px 0">{{ ICON.get(a.platform,'') }} {{ a.name }} —
+<span class="gold">{{ 'criar' if me.can_create(a.id) }}{{ ' + ' if me.can_create(a.id) and me.can_approve(a.id) }}{{ 'aprovar' if me.can_approve(a.id) }}</span></p>{% endif %}{% endfor %}</div>
+{% endblock %}
