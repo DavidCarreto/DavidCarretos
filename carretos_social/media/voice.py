@@ -268,3 +268,61 @@ def prepare_sample(src: str | Path, out: str | Path, max_seconds: float = 10.0) 
     return {"sample": str(out), "speech_seconds": round(len(best) / sr, 1),
             "total_speech_seconds": round(len(speech) / sr, 1),
             "representativeness": round(score, 3) if score is not None else None}
+
+
+def collect_voice(folder: str | Path, reference: str | Path, out_dir: str | Path, threshold: float = 0.82,
+                  window: float = 4.0) -> dict:
+    """Percorre vídeos/áudios de uma pasta e guarda SÓ os trechos em que fala a pessoa da referência.
+
+    Cada janela de `window` segundos é comparada com a voz de referência (codificador de voz);
+    janelas com semelhança >= threshold são juntadas e exportadas como WAV (24 kHz) em out_dir.
+    Devolve um relatório por ficheiro. Serve para preparar material de treino/clonagem.
+    """
+    import numpy as np
+    import soundfile as sf  # type: ignore
+    ve = _speaker_encoder()
+    if ve is None:
+        raise RuntimeError("Precisa do chatterbox-tts instalado para verificar a voz.")
+    import librosa  # type: ignore
+    sr = 16000
+
+    def emb(w):
+        e = ve.embeds_from_wavs([w], sample_rate=sr)[0]
+        return e / np.linalg.norm(e)
+
+    ref = emb(_load_mono(reference, sr))
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    exts = {".mp4", ".mov", ".m4v", ".m4a", ".mp3", ".wav", ".webm"}
+    report = {}
+    for f in sorted(p for p in Path(folder).iterdir() if p.suffix.lower() in exts):
+        try:
+            audio = _load_mono(f, sr)
+        except subprocess.CalledProcessError:
+            report[f.name] = {"erro": "sem áudio"}
+            continue
+        win, step = int(window * sr), int(window * sr / 2)
+        keep, sims = [], []
+        for start in range(0, max(1, len(audio) - win + 1), step):
+            seg = audio[start:start + win]
+            if float(np.sqrt((seg ** 2).mean())) < 0.01:
+                continue
+            s = float(emb(seg) @ ref)
+            sims.append(s)
+            if s >= threshold:
+                keep.append((start, start + win))
+        merged: list[list[int]] = []
+        for s, e in keep:
+            if merged and s <= merged[-1][1]:
+                merged[-1][1] = e
+            else:
+                merged.append([s, e])
+        secs = sum(e - s for s, e in merged) / sr
+        if merged:
+            clip = np.concatenate([audio[s:e] for s, e in merged])
+            clip24 = librosa.resample(clip, orig_sr=sr, target_sr=24000)
+            sf.write(out_dir / f"{f.stem}.wav", clip24, 24000)
+        report[f.name] = {"duracao": round(len(audio) / sr, 1), "fala_tua_s": round(secs, 1),
+                          "semelhanca_max": round(max(sims), 2) if sims else None,
+                          "semelhanca_media": round(float(np.mean(sims)), 2) if sims else None}
+    return report

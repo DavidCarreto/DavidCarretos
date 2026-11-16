@@ -536,6 +536,17 @@ def cmd_voice_setup(a):
     print('Testa com: carretos voice-test "Olá, sou o David Carreto."')
 
 
+def cmd_voice_collect(a):
+    from .config import ROOT
+    from .media.voice import collect_voice
+    rep = collect_voice(a.folder, a.reference, a.out or ROOT / "assets" / "voz" / "dataset", a.threshold)
+    total = 0.0
+    for name, r in rep.items():
+        total += r.get("fala_tua_s", 0) or 0
+        print(f"{name[:45]:45} {r}")
+    print(f"\nTotal de fala verificada como tua: {total / 60:.1f} min")
+
+
 def cmd_voice_test(a):
     from .media.voice import speak
     out = Path(a.out or DATA_DIR / f"teste_voz_{a.narrator}.wav")
@@ -625,6 +636,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--only-images", action="store_true")
     s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
     s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=10)
+    s = add("voice-collect", cmd_voice_collect, "extrai de uma pasta de vídeos só os trechos com a tua voz")
+    s.add_argument("folder"); s.add_argument("--reference", default="assets/voz/david_referencia.wav")
+    s.add_argument("--out"); s.add_argument("--threshold", type=float, default=0.82)
     s = add("voice-test", cmd_voice_test, "gera uma frase de teste com um narrador")
     s.add_argument("text"); s.add_argument("--narrator", default="david"); s.add_argument("--speed", type=float, default=1.0)
     s.add_argument("--out")
