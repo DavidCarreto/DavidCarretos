@@ -201,3 +201,20 @@ def test_dictation_endpoint(client, monkeypatch):
     assert client.post("/transcrever", files={"audio": ("v.webm", b"x", "audio/webm")},
                        follow_redirects=False).status_code == 303
     assert 'data-mic' in TestClient.__module__ or True
+
+
+def test_send_test_email(client, monkeypatch):
+    from carretos_social.web import mailer
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    assert "nao_configurado" in client.post("/configurar/testar-email", follow_redirects=False).headers["location"]
+    sent = []
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    monkeypatch.setattr(mailer, "send", lambda to, subject, body: sent.append((to, subject)))
+    r = client.post("/configurar/testar-email", follow_redirects=False)
+    assert r.headers["location"].endswith("teste=ok") and sent == [("david@exemplo.pt", "Email de teste")]
+    def boom(*a):
+        raise OSError("Authentication failed")
+    monkeypatch.setattr(mailer, "send", boom)
+    loc = client.post("/configurar/testar-email", follow_redirects=False).headers["location"]
+    assert "teste=erro" in loc and "falhou" in client.get(loc).text

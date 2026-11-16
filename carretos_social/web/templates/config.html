@@ -1,5 +1,10 @@
 {% extends "base.html" %}{% block body %}
 <h1>Configuração</h1>
+{% set testes = {'ok': ('#3fb950', '✓ Email de teste enviado para ' ~ (me.email if me else '') ~ '. Confirma na caixa de entrada (e no spam).'),
+ 'erro': ('#f85149', '✘ O email de teste falhou: ' ~ motivo ~ '. Confirma o servidor, a porta (587 ou 465), o utilizador e a palavra-passe de aplicação.'),
+ 'nao_configurado': ('#d29922', 'O envio de email ainda não está configurado: preenche os campos "Email · …" e guarda.'),
+ 'sem_email': ('#d29922', 'Primeiro indica o teu email em "A minha conta".')} %}
+{% if teste in testes %}<div class="card" style="border-color:{{ testes[teste][0] }};margin-bottom:12px">{{ testes[teste][1] }}</div>{% endif %}
 {% if erros %}<div class="card" style="border-color:#f85149;margin-bottom:12px">⚠ Não guardei estes campos porque o valor não parece certo
 (o browser pode ter preenchido um utilizador ou uma palavra-passe guardada):
 <ul style="margin:6px 0 0">{% for nome, dica in erros %}<li><b>{{ nome }}</b>: devia ter o formato "{{ dica }}"</li>{% endfor %}</ul>
@@ -19,4 +24,10 @@ Os outros campos foram guardados.</div>{% endif %}
 >
  {% endfor %}
  <p><button class="btn gold" style="width:100%">Guardar</button></p>
-</form>{% endblock %}
+</form>
+{% if not first %}<form method="post" action="/configurar/testar-email" class="card" style="margin-top:12px">
+<b>Testar o envio de email</b>
+<p class="muted" style="font-size:13px;margin:4px 0 10px">Envia um email de teste para {{ me.email or 'o teu email (indica-o em "A minha conta")' }}.
+{% if not email_ok %}Primeiro preenche e guarda os campos "Email · …".{% endif %}</p>
+<button class="btn" {{ 'disabled' if not email_ok }}>✉ Enviar email de teste</button></form>{% endif %}
+{% endblock %}

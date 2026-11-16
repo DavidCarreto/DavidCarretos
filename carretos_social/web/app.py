@@ -632,7 +632,7 @@ def _bad_key(key: str, value: str) -> str | None:
 
 
 @app.get("/configurar", response_class=HTMLResponse)
-def config_page(request: Request, ok: str = "", erro: str = ""):
+def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "", motivo: str = ""):
     first = users.count() == 0
     me = _current_user(request) if not first else None
     if not first and not (me and me.is_admin):
@@ -641,7 +641,8 @@ def config_page(request: Request, ok: str = "", erro: str = ""):
     fields = [(k, label, secret, bool(os.environ.get(k))) for k, label, secret in CONFIG_FIELDS]
     labels = {k: label for k, label, _ in CONFIG_FIELDS}
     erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
-    return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok, "erros": erros})
+    return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok, "erros": erros,
+                                            "teste": teste, "motivo": motivo, "email_ok": mailer.configured()})
 
 
 @app.post("/configurar")
@@ -689,6 +690,27 @@ async def config_save(request: Request):
     r = RedirectResponse("/configurar?ok=1" + (f"&erro={','.join(rejected)}" if rejected else ""), 303)
     _set_session(r, admin_id)
     return r
+
+
+@app.post("/configurar/testar-email")
+def config_test_email(request: Request):
+    """Envia um email de teste ao administrador (confirma a configuração SMTP)."""
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    if not me.email:
+        return RedirectResponse("/configurar?teste=sem_email", 303)
+    if not mailer.configured():
+        return RedirectResponse("/configurar?teste=nao_configurado", 303)
+    try:
+        mailer.send(me.email, "Email de teste",
+                    "Olá David,\n\nO envio de emails do dashboard das redes sociais está a funcionar.\n"
+                    "A partir de agora os convites e o 'esqueci-me da palavra-passe' chegam por email.\n")
+    except Exception as exc:  # noqa: BLE001 — mostra o motivo (nunca a palavra-passe)
+        motivo = type(exc).__name__ + ": " + str(exc).replace(os.environ.get("SMTP_PASSWORD", "\0"), "***")[:200]
+        from urllib.parse import quote
+        return RedirectResponse(f"/configurar?teste=erro&motivo={quote(motivo)}", 303)
+    return RedirectResponse("/configurar?teste=ok", 303)
 
 
 @app.on_event("startup")
