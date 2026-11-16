@@ -561,6 +561,33 @@ def cmd_voice_test(a):
     print(f"{out} ({secs:.1f} s)")
 
 
+
+def cmd_montage(a):
+    """Vários vídeos teus → um vídeo: melhores trechos, imagens a meio, legendas, música, capa."""
+    from .media import image_gen
+    from .media.montage import montage
+    acc = account(a.account)
+    w, h = _render_size(acc)
+    out_dir = _out_dir(acc.id, "montagens")
+    res = montage(a.files, out_dir, acc=acc, width=w, height=h, target_seconds=a.seconds, goal=a.goal or "",
+                  use_ai=not a.no_ai, broll=not a.no_broll, fill=a.fill, music=None if a.no_music else "auto",
+                  max_seconds=strategy()["render"].get(acc.platform, {}).get("max_seconds"),
+                  library=_library_names())
+    stem = Path(res["video"]).stem
+    cover = image_gen.cover(res["cover_frame"], res.get("cover_text") or res.get("hook_text") or acc.name,
+                            out_dir / f"{stem}_capa.jpg", size=(w, h))
+    with connect() as conn:
+        vid_id = add_media(conn, "video", res["video"], None, {"account": acc.id, "montage": res.get("pieces")})
+        cov_id = add_media(conn, "cover", cover, vid_id)
+        pid = add_post(conn, account_id=acc.id, format="reel" if acc.platform == "instagram" else "video",
+                       title=res.get("title") or stem, hook=res.get("hook_text") or "",
+                       caption=res.get("caption") or "", hashtags=res.get("hashtags") or [], media_ids=[vid_id],
+                       cover_id=cov_id, scheduled_at=_aware(a.schedule) if a.schedule else None, status="draft")
+    for s in res["steps"]:
+        print(" •", s)
+    print(f"Vídeo: {res['video']} ({res['duration']} s)\nCapa:  {cover}\nPublicação #{pid}")
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="carretos", description="Gestão automática das redes sociais Carretos")
@@ -641,6 +668,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--days", type=int, default=7); s.add_argument("--accounts", nargs="*")
     s.add_argument("--seconds", type=int, default=35); s.add_argument("--no-ai", action="store_true")
     s.add_argument("--only-images", action="store_true")
+    s = add("montage", cmd_montage, "junta vários vídeos teus num só (trechos, imagens a meio, legendas, música)")
+    s.add_argument("files", nargs="+"); s.add_argument("--account", required=True)
+    s.add_argument("--seconds", type=int, default=45); s.add_argument("--goal"); s.add_argument("--schedule")
+    s.add_argument("--fill", choices=["blur", "crop"], default="crop")
+    s.add_argument("--no-ai", action="store_true"); s.add_argument("--no-broll", action="store_true")
+    s.add_argument("--no-music", action="store_true")
     s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
     s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=10)
     s = add("voice-collect", cmd_voice_collect, "extrai de uma pasta de vídeos só os trechos com a tua voz")

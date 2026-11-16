@@ -240,3 +240,37 @@ verdadeiros; nunca inventes estatísticas da empresa — a empresa tem 5 oficina
 "mechanic workshop"); dá prioridade a estes ficheiros reais do David se fizerem sentido: {library or []}
 - caption, hashtags e cover_text (máx. 5 palavras) prontos a publicar."""
     return _ask(prompt, STORYBOARD_SCHEMA, effort="high")
+
+
+MONTAGE_SCHEMA = _obj({
+    "title": STR, "hook_text": STR, "cover_text": STR, "caption": STR, "hashtags": STRS,
+    "segments": {"type": "array", "items": _obj({
+        "clip": {"type": "integer"}, "start": {"type": "number"}, "end": {"type": "number"}, "reason": STR})},
+    "broll": {"type": "array", "items": _obj({
+        "at": {"type": "number"}, "seconds": {"type": "number"}, "visual": STR, "caption": STR})},
+})
+
+
+def plan_montage(acc: Account, clips: list[dict], target_seconds: int, goal: str = "",
+                 library: list[str] | None = None) -> dict:
+    """Escolhe os melhores trechos de vários vídeos e onde encaixar imagens (b-roll).
+
+    clips: [{"clip": i, "name": "...", "segments": [{"start","end","text"}]}]
+    """
+    prompt = f"""{_account_line(acc)}
+Tens a transcrição de {len(clips)} vídeos do David a falar (tempos em segundos, por vídeo).
+Monta UM vídeo vertical de ~{target_seconds} s. {goal}
+
+1. segments: escolhe trechos (clip = número do vídeo; start/end dentro dos tempos desse vídeo) e põe-nos
+   pela ordem que conta a melhor história: abre com a frase mais forte (gancho), desenvolve, termina com
+   uma ideia marcante. Corta hesitações e repetições. Usa trechos de vários vídeos se fizer sentido.
+   Cada trecho deve ser uma ou mais frases completas.
+2. broll: 2–4 momentos (at = segundo na linha temporal FINAL, depois de juntar os trechos) em que a imagem
+   muda para uma foto/vídeo da biblioteca durante 2–4 s enquanto a voz continua. visual = nome do ficheiro
+   ou palavras-chave da biblioteca: {library or []}. caption = texto curto opcional (vazio se não houver).
+3. hook_text (máx. 8 palavras, no ecrã nos primeiros segundos), cover_text (máx. 5 palavras), caption e
+   hashtags prontos a publicar. Não inventes factos.
+
+Vídeos:
+{json.dumps(clips, ensure_ascii=False)}"""
+    return _ask(prompt, MONTAGE_SCHEMA, effort="high")
