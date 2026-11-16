@@ -17,5 +17,13 @@ regista o que existe e para que serve.
   não extrair factos, não acrescentar a `config/factos.yaml`, não usar em guiões nem legendas.
 - Factos sobre o David só vêm de `config/factos.yaml`, confirmados por ele.
 
+## ⛔ Regra sobre o USO dos áudios e vídeos de voz (pedido do David, 16/11/2026)
+Aplica-se aos vídeos do YouTube (2020/2021, com datas desatualizadas) e à gravação do telemóvel:
+- **Não usar** o áudio nem a voz destes ficheiros para criar vídeos, cortes, narrações ou vozes
+  **sem autorização explícita do David**.
+- É permitido **propor** um uso ("este trecho podia dar um vídeo sobre X"); só se avança depois de ele aprovar.
+- O uso para treinar o clone profissional na ElevenLabs também precisa de aprovação dele, e o David
+  faz esse passo por si.
+
 Testes gratuitos (Chatterbox e Piper com conversão): o timbre não ficou parecido e os L e os R saíram fracos,
 por isso estão abandonados. Solução escolhida: o clone profissional da ElevenLabs.

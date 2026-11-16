@@ -37,6 +37,11 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
 | Notificações | Telegram, prefixo "📣 Redes Sociais · " | Email "[Carretos] …" |
 | Google | não usa nenhuma API Google | Business Profile, projeto "carretos-reviews" |
 
+## Voz e gravações do David
+Ler `docs/VOZ.md` antes de usar qualquer áudio ou vídeo de voz. As gravações servem só para a voz;
+o conteúdo não é factual. Os vídeos do YouTube e a gravação do telemóvel **não se usam sem
+autorização explícita do David**: propor primeiro e esperar pela aprovação.
+
 ## Não inventar factos
 A IA só afirma factos concretos que estejam em `config/factos.yaml`; o resto sai como
 `[PREENCHER: ...]` e a publicação fica bloqueada até ser completada.
