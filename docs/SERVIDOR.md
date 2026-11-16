@@ -38,6 +38,17 @@ Pode correr como `carretos` (por SSH) ou como root (na consola); como root volta
 `deploy/setup_servidor.sh` também pode voltar a correr-se (é idempotente): faz `git pull` se `/opt/carretos`
 já existir, não duplica o `SETUP_CODE` e só mexe no Caddy se o endereço mudar.
 
+## Cópias de segurança e repor publicações
+- `atualizar.sh` faz sempre uma cópia da base de dados antes de atualizar (`/opt/carretos/data/backups/`,
+  ficam as últimas 30). As migrações também fazem uma cópia antes de acrescentar colunas e só podem
+  ACRESCENTAR colunas (nunca apagam media nem mudam estados).
+- Cópia à mão: `sudo -u carretos /opt/carretos/.venv/bin/carretos backup`
+- Cada publicação tem "Histórico de alterações" (estado, imagem/vídeo, tipo, data, legenda, quem mudou),
+  com o botão "↶ Repor esta imagem/vídeo".
+- Repor por comando (como root):
+  `sudo -u carretos /opt/carretos/.venv/bin/carretos repor <n.º> --ficheiro <caminho da imagem/vídeo>`
+  (sem `--ficheiro` repõe a versão anterior do histórico; o estado volta a "Para aprovar").
+
 ## Endereço próprio (ex.: studio.carretos.pt)
 1. No DNS do domínio carretos.pt, criar um registo **A**: nome `studio`, valor `2.29.177.117`.
 2. Quando o registo estiver ativo (minutos a algumas horas), no servidor, como root:

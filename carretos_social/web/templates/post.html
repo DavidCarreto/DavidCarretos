@@ -17,8 +17,9 @@
  <p class="verdict">{{ f.verdict_label }}</p>
  {% for x in f.problems %}<p class="fmt-line editar">✕ {{ x }}</p>{% endfor %}
  {% for x in f.warnings %}<p class="fmt-line ajustar">⚠ {{ x }}</p>{% endfor %}
+ {% for x in f.info %}<p class="muted" style="margin:2px 0;font-size:13px">ℹ {{ x }}</p>{% endfor %}
  {% for i in f.items %}<div class="fmt-item">
-  <b>{{ '🎬' if i.video else '🖼' }} {{ loop.index if f.items|length > 1 }}{{ ' · ' if f.items|length > 1 }}{{ i.size }} · {{ i.ratio }}{% if i.duration %} · {{ i.duration }}{% endif %}</b>
+  <b>{{ '🎬' if i.video else '📷' }} {{ loop.index if f.items|length > 1 }}{{ ' · ' if f.items|length > 1 }}{{ i.size }} · {{ i.ratio }}{% if i.duration %} · {{ i.duration }}{% endif %}</b>
   {% for n in i.notes %}<p class="fmt-line {{ i.verdict }}">{{ {'ok':'✓','ajustar':'⚠','editar':'✕'}[i.verdict] }} {{ n }}</p>{% endfor %}
   {% if i.screen %}<p class="muted" style="margin:2px 0 0;font-size:13px">📱 {{ i.screen }}</p>{% endif %}
  </div>{% endfor %}
@@ -43,4 +44,9 @@
  {% if can_approve %}<button class="btn red" name="action" value="rejeitar">Rejeitar</button>{% endif %}</div>
  {% else %}<p class="muted">Tens acesso só para ver esta conta.</p>{% endif %}
  {% if extra.script %}<h2>Guião</h2>{% for s in extra.script %}<p style="font-size:14px"><b class="gold">{{ s.seconds }}</b> {{ s.voice_or_text }}<br><span class="muted">{{ s.visual }}</span></p>{% endfor %}{% endif %}
-</form></div></div>{% endblock %}
+</form>
+{% if history %}<details class="card" style="margin-top:12px"><summary><b>Histórico de alterações</b> <span class="muted">({{ history|length }})</span></summary>
+{% for h in history %}<div class="hist"><span class="muted">{{ h.at }} · {{ h.who }}</span><br><b>{{ h.field }}</b>: {{ h.old }} → {{ h.new }}
+{% if h.restorable and can_create %}<form method="post" style="display:inline"><input type="hidden" name="hist" value="{{ h.id }}"><button class="btn" name="action" value="repor" style="padding:4px 10px;font-size:12px;margin-left:6px">↶ Repor esta imagem/vídeo</button></form>{% endif %}</div>{% endfor %}
+</details>{% endif %}
+</div></div>{% endblock %}

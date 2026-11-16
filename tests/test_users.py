@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -234,9 +236,9 @@ def test_post_shows_media_kind_and_whole_image(client, tmp_path):
         car = add_post(conn, account_id="ig_davidcarreto", format="carousel", caption="x", status="draft",
                        media_ids=[mid, mid, mid], scheduled_at="2030-01-02T10:00:00+00:00")
     page = client.get(f"/post/{one}").text
-    assert "🖼 Imagem" in page and "Refazer vídeo" not in page
-    assert "🖼 Carrossel · 3 imagens" in client.get(f"/post/{car}").text
-    assert "🖼 Imagem" in client.get("/aprovar").text
+    assert "📷 Imagem" in page and "Refazer vídeo" not in page
+    assert "📷 Carrossel · 3 imagens" in client.get(f"/post/{car}").text
+    assert "📷 Imagem" in client.get("/aprovar").text
 
 
 def test_post_type_field_and_format_panel(client, tmp_path):
@@ -257,3 +259,31 @@ def test_post_type_field_and_format_panel(client, tmp_path):
         assert get_post(conn, pid)["format"] == "image"
     assert "Pronto a publicar" in client.get(f"/post/{pid}").text
     assert client.post(f"/post/{pid}", data={"action": "guardar", "tipo": "text"}).status_code == 403  # não há no IG
+
+
+def test_refazer_keeps_media_and_history_restore(client, tmp_path):
+    from PIL import Image
+    from carretos_social.db import add_media, add_post, connect, get_post, update_post
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    img = tmp_path / "q.png"
+    Image.new("RGB", (1080, 1350)).save(img)
+    img2 = tmp_path / "q2.png"
+    Image.new("RGB", (1080, 1350), (200, 0, 0)).save(img2)
+    with connect() as conn:
+        mid = add_media(conn, "image", str(img))
+        mid2 = add_media(conn, "image", str(img2))
+        pid = add_post(conn, account_id="ig_davidcarreto", format="image", caption="x", status="draft",
+                       media_ids=[mid], scheduled_at="2030-01-01T10:00:00+00:00")
+    assert client.post(f"/post/{pid}", data={"action": "refazer"}).status_code == 403   # imagem: não há refazer
+    with connect() as conn:
+        row = get_post(conn, pid)
+        assert (json.loads(row["media_ids"]), row["status"]) == ([mid], "draft")
+        update_post(conn, pid, media_ids=[mid2])                                        # nova versão
+    page = client.get(f"/post/{pid}").text
+    assert "Histórico de alterações" in page and "Repor esta imagem/vídeo" in page
+    import re
+    hist = re.search(r'name="hist" value="(\d+)"', page).group(1)
+    client.post(f"/post/{pid}", data={"action": "repor", "hist": hist}, follow_redirects=False)
+    with connect() as conn:
+        assert json.loads(get_post(conn, pid)["media_ids"]) == [mid]

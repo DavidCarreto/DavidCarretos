@@ -28,6 +28,13 @@ class TikTokPublisher(Publisher):
             privacy = creator["privacy_level_options"][0]
 
         video = Path(req.media[0])
+        # a duração máxima depende da conta (3, 5 ou 10 min): validar antes de enviar
+        max_sec = creator.get("max_video_post_duration_sec")
+        if max_sec:
+            from ..media.video_editor import probe
+            secs = probe(video).duration
+            if secs > float(max_sec) + 0.5:
+                raise ApiError(f"vídeo com {secs:.0f} s; esta conta TikTok só aceita até {int(max_sec)} s")
         size = video.stat().st_size
         chunk = size if size <= CHUNK else CHUNK
         count = max(1, size // chunk) if size > CHUNK else 1

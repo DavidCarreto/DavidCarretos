@@ -216,11 +216,11 @@ def _post_view(conn, r) -> dict:
         secs = next((i.seconds for i in items if i.video), 0)
         p["kind"] = ("video", f"🎬 Vídeo · {int(secs // 60)}:{int(secs % 60):02d}" if secs else "🎬 Vídeo")
     elif n_img > 1:
-        p["kind"] = ("carousel", f"🖼 Carrossel · {n_img} imagens")
+        p["kind"] = ("carousel", f"📷 Carrossel · {n_img} imagens")
     elif n_img:
-        p["kind"] = ("image", "🖼 Imagem")
+        p["kind"] = ("image", "📷 Imagem")
     elif p["type"] == "text":
-        p["kind"] = ("none", "✍ Só texto")
+        p["kind"] = ("none", "Só texto")
     else:
         p["kind"] = ("none", "Ainda sem vídeo/imagem")
     p["is_video"] = p["type"] == "video"
@@ -308,17 +308,50 @@ def post_page(request: Request, pid: int):
     me = request.state.user
     with connect() as conn:
         p = _post_view(conn, get_post(conn, pid))
+        history = _history_view(conn, pid, p)
     if not me.can_see(p["account_id"]):
         return _forbidden()
     extra = json.loads(p.get("script") or "{}")
     acc = p["account_id"]
     return _render(request, "post.html", {"p": p, "extra": extra, "can_create": me.can_create(acc),
-                                          "can_approve": me.can_approve(acc)})
+                                          "can_approve": me.can_approve(acc), "history": history})
+
+
+HIST_FIELDS = {"status": "Estado", "media_ids": "Imagem/vídeo", "cover_id": "Capa", "format": "Tipo",
+               "scheduled_at": "Data", "caption": "Legenda"}
+
+
+def _history_view(conn, pid: int, p: dict) -> list[dict]:
+    from ..db import post_history
+    from ..media.formats import KINDS, kind_of
+    out = []
+    for h in post_history(conn, pid):
+        def show(v, field=h["field"]):
+            if v in (None, ""):
+                return "—"
+            if field == "status":
+                return STATUS.get(v, (v,))[0]
+            if field == "media_ids":
+                n = len(json.loads(v or "[]"))
+                return "nenhum" if not n else f"{n} ficheiro(s)"
+            if field == "format":
+                return KINDS.get(kind_of(v), v)
+            if field == "scheduled_at":
+                return v[:16].replace("T", " ")
+            if field == "caption":
+                return (v[:60] + "…") if len(v) > 60 else v
+            return v
+        restorable = (h["field"] == "media_ids" and json.loads(h["old"] or "[]")
+                      and h["old"] != p.get("media_ids"))
+        out.append({"id": h["id"], "at": h["at"][:16].replace("T", " "), "who": h["user_name"] or "sistema",
+                    "field": HIST_FIELDS.get(h["field"], h["field"]), "old": show(h["old"]), "new": show(h["new"]),
+                    "restorable": bool(restorable)})
+    return out
 
 
 @app.post("/post/{pid}")
 def post_action(request: Request, pid: int, action: str = Form(...), caption: str = Form(""),
-                quando: str = Form(""), tipo: str = Form("")):
+                quando: str = Form(""), tipo: str = Form(""), hist: int = Form(0)):
     from ..media.formats import format_for, kind_of, kinds_for
     from ..scheduler import all_problems, parse_dt
     me = request.state.user
@@ -346,7 +379,17 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
                 return _forbidden("Esse tipo de publicação não existe para esta rede.")
             fields["format"] = format_for(tipo, platform)
         if fields:
-            update_post(conn, pid, **fields)
+            update_post(conn, pid, _by=me.id, **fields)
+        if action == "repor":   # repõe a imagem/vídeo de uma versão anterior (histórico)
+            h = conn.execute("SELECT * FROM post_history WHERE id=? AND post_id=? AND field='media_ids'",
+                             (hist, pid)).fetchone()
+            if not h or not json.loads(h["old"] or "[]"):
+                return _forbidden("Essa versão não existe.")
+            restore = {"media_ids": h["old"], "error": None}
+            if row["status"] == "idea":
+                restore["status"] = "draft"
+            update_post(conn, pid, _by=me.id, **restore)
+            return RedirectResponse(f"/post/{pid}", 303)
         if action == "ajustar":
             jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id)
             return RedirectResponse("/tarefas", 303)
@@ -355,16 +398,17 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             if problems:
                 update_post(conn, pid, error="; ".join(problems))
             else:
-                update_post(conn, pid, status="approved", error=None, approved_by=me.id)
+                update_post(conn, pid, _by=me.id, status="approved", error=None, approved_by=me.id)
         elif action == "rejeitar":
-            update_post(conn, pid, status="rejected", approved_by=me.id)
+            update_post(conn, pid, _by=me.id, status="rejected", approved_by=me.id)
         elif action == "refazer":
-            if not me.can_create(acc):
-                return _forbidden()
-            update_post(conn, pid, media_ids=[], status="idea")
-            if kind_of(row["format"]) == "video":
-                jobs.enqueue("create-video", ["--account", acc, "--post", str(pid)], f"Refazer #{pid}",
-                             user_id=me.id)
+            # Só para vídeos. O vídeo atual FICA até o novo estar pronto (a tarefa substitui-o no fim;
+            # o anterior continua no histórico). Nunca apaga a media nem muda o estado.
+            if kind_of(get_post(conn, pid)["format"]) != "video":
+                return _forbidden("'Refazer vídeo' só existe para publicações de vídeo.")
+            jobs.enqueue("create-video", ["--account", acc, "--post", str(pid)], f"Refazer #{pid}",
+                         user_id=me.id)
+            return RedirectResponse("/tarefas", 303)
     return RedirectResponse(f"/post/{pid}" if action == "guardar" else "/aprovar", 303)
 
 

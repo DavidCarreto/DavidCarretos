@@ -88,7 +88,7 @@ def reagendar(id: int, quando: str) -> str:
     with connect() as conn:
         if (err := _deny(get_post(conn, id)["account_id"], "aprovar")):   # agendar é de quem aprova
             return err
-        update_post(conn, id, scheduled_at=parse_dt(quando).isoformat())
+        update_post(conn, id, _by=_me().id, scheduled_at=parse_dt(quando).isoformat())
     return f"Publicação #{id} reagendada para {quando}"
 
 
@@ -104,7 +104,7 @@ def alterar_legenda(id: int, legenda: str) -> str:
         acc = get_post(conn, id)["account_id"]
         if (err := _deny(acc, "criar")):
             return err
-        update_post(conn, id, caption=legenda)
+        update_post(conn, id, _by=_me().id, caption=legenda)
     return f"Legenda da publicação #{id} atualizada"
 
 
@@ -123,7 +123,7 @@ def aprovar(id: int) -> str:
         problems = all_problems(conn, row)
         if problems:
             return f"Não aprovada: {', '.join(problems)}"
-        update_post(conn, id, status="approved", error=None, approved_by=_me().id)
+        update_post(conn, id, _by=_me().id, status="approved", error=None, approved_by=_me().id)
     return f"Publicação #{id} aprovada"
 
 
@@ -137,7 +137,7 @@ def rejeitar(id: int) -> str:
     with connect() as conn:
         if (err := _deny(get_post(conn, id)["account_id"], "aprovar")):
             return err
-        update_post(conn, id, status="rejected", approved_by=_me().id)
+        update_post(conn, id, _by=_me().id, status="rejected", approved_by=_me().id)
     return f"Publicação #{id} rejeitada"
 
 

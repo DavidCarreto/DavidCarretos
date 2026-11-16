@@ -33,6 +33,9 @@ else
   git --no-pager log --oneline "$ANTES..$DEPOIS" | head -20
 fi
 
+echo "==> Cópia de segurança da base de dados (data/backups/, guarda as últimas 30)"
+.venv/bin/carretos backup antes-atualizar || echo "(sem cópia: $?)"
+
 echo "==> Dependências (pip install -e .)"
 .venv/bin/pip install --quiet -U pip wheel
 .venv/bin/pip install --quiet -e .

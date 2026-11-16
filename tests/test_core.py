@@ -204,8 +204,13 @@ def test_format_check_and_fit(tmp_path):
     tall = tmp_path / "tall.jpg"; Image.new("RGB", (1080, 1920)).save(tall)    # 9:16
     assert formats.check("instagram", "image", [str(ok)]).verdict == "ok"
     assert formats.check("instagram", "image", [str(wide)]).verdict == "ajustar"       # aceite, não ideal
-    rep = formats.check("linkedin_member", "image", [str(tall)])
-    assert rep.verdict == "editar" and rep.fixable                                      # fora dos limites
+    rep = formats.check("instagram", "image", [str(tall)])
+    assert rep.verdict == "editar" and rep.fixable                                      # 9:16 fora do feed (API)
+    assert formats.check("linkedin_member", "image", [str(tall)]).verdict == "ajustar"  # LinkedIn: só recomendação
+    rep = formats.check("instagram", "carousel", [])
+    assert any("pelo menos 2" in p for p in rep.problems) and "ainda sem imagem/vídeo" in rep.problems
+    assert any("1.ª imagem" in i for i in formats.check("instagram", "carousel", [str(ok), str(ok)]).info)
+    assert any("telemóvel" in i for i in formats.check("facebook_profile", "image", [str(ok)]).info)
     assert "carrossel" in formats.check("instagram", "image", [str(ok), str(ok)]).problems[0]
     assert formats.check("instagram", "carousel", [str(ok)]).verdict == "editar"       # só 1 imagem
     assert formats.check("youtube", "image", [str(ok)]).verdict == "editar"            # o YouTube não leva imagens
@@ -214,10 +219,17 @@ def test_format_check_and_fit(tmp_path):
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=360x640:d=200:r=5",
                     "-pix_fmt", "yuv420p", str(v)], check=True)
     rep = formats.check("youtube", "video", [str(v)])
-    assert rep.verdict == "editar" and any("longo" in n for n in rep.items[0].notes)
-    out = formats.fit_image(str(tall), str(tmp_path / "fit.jpg"), (1200, 1500))
-    assert Image.open(out).size == (1200, 1500)
-    assert formats.check("linkedin_member", "image", [out]).verdict == "ok"
+    assert rep.verdict == "editar" and any("não como Short" in n for n in rep.items[0].notes)
+    assert any("imagens por segundo" in n for n in formats.check("tiktok", "video", [str(v)]).items[0].notes)
+    reel = tmp_path / "reel_largo.mp4"                                                  # 2.4:1, 30 fps, 10 s
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1920x800:d=10:r=30",
+                    "-pix_fmt", "yuv420p", str(reel)], check=True)
+    assert formats.check("instagram", "reel", [str(reel)]).verdict == "ajustar"         # API aceita 0.01–10:1
+    fb = formats.check("facebook_page", "video", [str(reel)])
+    assert fb.spec["seconds"] == (3, 90)
+    out = formats.fit_image(str(tall), str(tmp_path / "fit.jpg"), (1080, 1350))
+    assert Image.open(out).size == (1080, 1350)
+    assert formats.check("instagram", "image", [out]).verdict == "ok"
 
 
 def test_fit_format_command_replaces_media(tmp_path):
@@ -227,10 +239,41 @@ def test_fit_format_command_replaces_media(tmp_path):
     tall = tmp_path / "tall.jpg"; Image.new("RGB", (1080, 1920), (90, 90, 90)).save(tall)
     with connect() as conn:
         mid = add_media(conn, "image", str(tall))
-        pid = add_post(conn, account_id="li_davidcarreto", format="image", caption="x", media_ids=[mid],
+        pid = add_post(conn, account_id="ig_davidcarreto", format="image", caption="x", media_ids=[mid],
                        scheduled_at="2030-01-01T10:00:00+00:00", status="draft")
         assert any(p.startswith("formato:") for p in all_problems(conn, get_post(conn, pid)))
     main(["ajustar-formato", str(pid)])
     with connect() as conn:
         row = get_post(conn, pid)
         assert json.loads(row["media_ids"]) != [mid] and all_problems(conn, row) == []
+    main(["repor", str(pid)])                                         # volta à versão anterior (histórico)
+    with connect() as conn:
+        assert json.loads(get_post(conn, pid)["media_ids"]) == [mid]
+
+
+def test_media_never_lost_history_and_safe_migration(tmp_path):
+    import pytest as _pytest
+    from carretos_social.db import MediaLossError, post_history, update_post
+    img = tmp_path / "a.jpg"
+    from PIL import Image
+    Image.new("RGB", (1080, 1350)).save(img)
+    with connect() as conn:
+        mid = add_media(conn, "image", str(img))
+        pid = add_post(conn, account_id="ig_davidcarreto", format="image", caption="x", media_ids=[mid],
+                       status="draft", scheduled_at="2030-01-01T10:00:00+00:00")
+        with _pytest.raises(MediaLossError):
+            update_post(conn, pid, media_ids=[], status="idea")          # nunca apaga a media
+        update_post(conn, pid, status="approved", _by=None)
+        assert [h["field"] for h in post_history(conn, pid)] == ["status"]
+    # migração numa base "antiga" (sem colunas novas): media e estados intactos + cópia de segurança
+    import sqlite3
+    from carretos_social import db
+    old = tmp_path / "antiga.db"
+    with sqlite3.connect(old) as c:
+        c.executescript(db.SCHEMA)                          # tabelas sem as colunas das migrações
+        c.execute("INSERT INTO posts(account_id, format, media_ids, status, created_at, updated_at) "
+                  "VALUES ('ig_davidcarreto','image','[7]','draft','x','x')")
+    with db.connect(old) as conn:
+        row = conn.execute("SELECT media_ids, status, created_by FROM posts").fetchone()
+        assert (row["media_ids"], row["status"], row["created_by"]) == ("[7]", "draft", None)
+    assert list((tmp_path / "backups").glob("carretos-*-antes-migracao.db"))

@@ -3,7 +3,9 @@ from .base import PublishRequest, PublishResult, Publisher
 
 
 def get_publisher(acc: Account) -> Publisher:
-    if acc.publish_mode == "assist":
+    # perfil pessoal do Facebook: a Graph API não publica em perfis (publish_actions removido em 2018);
+    # vai SEMPRE para o telemóvel, seja qual for a configuração
+    if acc.publish_mode == "assist" or acc.platform == "facebook_profile":
         from .assist import AssistPublisher
         return AssistPublisher()
     if acc.platform == "instagram":

@@ -76,3 +76,11 @@ render:
   linkedin_org: {video: [1080, 1350], image: [1200, 1500], max_seconds: 600}
   facebook_page: {video: [1080, 1920], image: [1080, 1350], max_seconds: 180}
   youtube: {video: [1080, 1920], image: [1280, 720], max_seconds: 60}   # Shorts
+
+# Ajustes aos limites de cada rede usados na verificação "Formato para publicar"
+# (valores por defeito em carretos_social/media/formats.py; ver docs/FORMATOS.md).
+formatos:
+  instagram:
+    carousel:
+      # A API atual do Instagram permite até 20 itens; fica 10 até testarmos 20 na conta real.
+      count: [2, 10]

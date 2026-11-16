@@ -400,16 +400,19 @@ def cmd_fit_format(a):
         out_dir.mkdir(parents=True, exist_ok=True)
         new_ids = []
         for mid, path, item in zip(ids, media_paths(conn, ids), rep.items):
-            fixable = item.width and any(k in " ".join(item.notes) for k in ("proporção", "resolução"))
+            fixable = item.width and any(k in " ".join(item.notes) for k in (
+                "proporção", "resolução", "pequeno", "largura", "imagens por segundo", "fora do aceite"))
             if item.verdict == "ok" or not fixable:
                 new_ids.append(mid)
                 continue
             spec = rep.spec if not item.video or rep.kind == "video" else \
-                formats.SPECS[rep.platform].get("video", rep.spec)
+                (formats.spec_for(rep.platform, "video") or rep.spec)
             size = tuple(spec["size"])
             stem = f"post{a.post}_{mid}_{size[0]}x{size[1]}"
             if item.video:
-                out = formats.fit_video(path, str(out_dir / f"{stem}.mp4"), size)
+                lo, hi = spec.get("fps", (0, 999))
+                fps = 30 if item.fps and not (lo - 0.5 <= item.fps <= hi + 0.5) else None
+                out = formats.fit_video(path, str(out_dir / f"{stem}.mp4"), size, fps=fps)
             else:
                 out = formats.fit_image(path, str(out_dir / f"{stem}.jpg"), size)
             old = conn.execute("SELECT kind, meta FROM media WHERE id=?", (mid,)).fetchone()
@@ -419,6 +422,40 @@ def cmd_fit_format(a):
         if new_ids != ids:
             update_post(conn, a.post, media_ids=new_ids, error=None)
         print(f"#{a.post}: {format_report(conn, get_post(conn, a.post)).verdict_label}")
+
+
+def cmd_restore(a):
+    """Repõe a imagem/vídeo de uma publicação: um ficheiro indicado, ou a última versão do histórico."""
+    from .db import post_history
+    with connect() as conn:
+        row = get_post(conn, a.post)
+        if a.ficheiro:
+            path = str(Path(a.ficheiro).resolve())
+            if not Path(path).exists():
+                raise SystemExit(f"O ficheiro não existe: {path}")
+            found = conn.execute("SELECT id FROM media WHERE path=? ORDER BY id DESC LIMIT 1", (path,)).fetchone()
+            kind = "video" if path.lower().endswith((".mp4", ".mov")) else "image"
+            ids = [found["id"] if found else add_media(conn, kind, path)]
+        else:
+            prev = next((h for h in post_history(conn, a.post)
+                         if h["field"] == "media_ids" and json.loads(h["old"] or "[]")), None)
+            if not prev:
+                raise SystemExit("Sem versão anterior no histórico. Indica o ficheiro: --ficheiro CAMINHO")
+            ids = json.loads(prev["old"])
+        fields = {"media_ids": ids, "error": None}
+        if a.estado:
+            fields["status"] = a.estado
+        elif row["status"] == "idea":
+            fields["status"] = "draft"
+        update_post(conn, a.post, **fields)
+        row = get_post(conn, a.post)
+    print(f"#{a.post}: media {json.loads(row['media_ids'])} · estado {row['status']}")
+
+
+def cmd_backup(a):
+    from .db import backup
+    dest = backup(a.motivo)
+    print(f"Cópia da base de dados: {dest}" if dest else "Ainda não há base de dados.")
 
 
 def cmd_reject(a):
@@ -817,6 +854,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("ids", nargs="+", type=int); s.add_argument("--force", action="store_true")
     s = add("ajustar-formato", cmd_fit_format, "ajusta imagens/vídeos ao tamanho da rede, sem cortar")
     s.add_argument("post", type=int)
+    s = add("repor", cmd_restore, "repõe a imagem/vídeo de uma publicação (ficheiro ou histórico)")
+    s.add_argument("post", type=int); s.add_argument("--ficheiro")
+    s.add_argument("--estado", choices=["idea", "draft", "approved"], help="por defeito: 'draft' (Para aprovar)")
+    s = add("backup", cmd_backup, "cópia de segurança da base de dados (data/backups/)")
+    s.add_argument("motivo", nargs="?", default="manual")
     s = add("reject", cmd_reject, "rejeita publicações"); s.add_argument("ids", nargs="+", type=int)
     s.add_argument("--regenerate", action="store_true")
     s = add("calendar", cmd_calendar, "agenda de conteúdos")

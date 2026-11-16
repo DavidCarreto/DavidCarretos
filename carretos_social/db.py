@@ -41,6 +41,18 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 CREATE INDEX IF NOT EXISTS idx_posts_due ON posts(status, scheduled_at);
 
+-- histórico de alterações às publicações (para saber quem mudou o quê e poder repor)
+CREATE TABLE IF NOT EXISTS post_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    user_id INTEGER,
+    field TEXT NOT NULL,
+    old TEXT,
+    new TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_post_history ON post_history(post_id, id);
+
 CREATE TABLE IF NOT EXISTS metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id TEXT NOT NULL,
@@ -139,15 +151,38 @@ MIGRATIONS = [  # colunas acrescentadas depois (ALTER TABLE é ignorado se já e
 
 
 def _migrate(conn) -> None:
+    """Só ACRESCENTA colunas (nunca apaga nem altera media/estados). Antes de mudar, faz uma cópia da base."""
     tables = ("posts", "jobs", "chat", "users", "user_accounts")
     cols = {t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")} for t in tables}
-    for sql in MIGRATIONS:
-        table, col = sql.split()[2], sql.split()[5]
-        if col not in cols[table]:
-            conn.execute(sql)
+    pending = [sql for sql in MIGRATIONS if sql.split()[5] not in cols[sql.split()[2]]]
+    if pending:
+        _snapshot(conn, "antes-migracao")
+    before = conn.execute("SELECT COUNT(*), COALESCE(GROUP_CONCAT(id || ':' || status || ':' || media_ids), '') "
+                          "FROM posts").fetchone()
+    for sql in pending:
+        assert sql.startswith("ALTER TABLE") and " ADD COLUMN " in sql, "migrações só podem acrescentar colunas"
+        conn.execute(sql)
+    after = conn.execute("SELECT COUNT(*), COALESCE(GROUP_CONCAT(id || ':' || status || ':' || media_ids), '') "
+                         "FROM posts").fetchone()
+    if tuple(before) != tuple(after):
+        conn.rollback()
+        raise RuntimeError("migração alteraria publicações: cancelada")
     # permissões antigas (criar/aprovar) → nível por conta, sem perder nada
     conn.execute("UPDATE user_accounts SET level = CASE WHEN can_approve=1 THEN 'aprovar' "
                  "WHEN can_create=1 THEN 'criar' ELSE 'ver' END WHERE level IS NULL")
+
+
+def _snapshot(conn, reason: str) -> None:
+    """Cópia de segurança a partir da ligação aberta (só se houver dados)."""
+    try:
+        if not conn.execute("SELECT 1 FROM posts LIMIT 1").fetchone():
+            return
+        dest_dir = DATA_DIR / "backups"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(dest_dir / f"carretos-{datetime.now():%Y%m%d-%H%M%S}-{reason}.db") as dest:
+            conn.backup(dest)
+    except sqlite3.Error:
+        pass
 
 
 @contextmanager
@@ -185,13 +220,57 @@ def add_post(conn, **fields) -> int:
     return conn.execute(f"INSERT INTO posts({cols}) VALUES ({marks})", list(fields.values())).lastrowid
 
 
-def update_post(conn, post_id: int, **fields) -> None:
+TRACKED = ("status", "media_ids", "cover_id", "format", "scheduled_at", "caption")
+
+
+class MediaLossError(ValueError):
+    """Tentativa de deixar sem imagem/vídeo uma publicação que já os tem."""
+
+
+def update_post(conn, post_id: int, _by: int | None = None, _allow_clear_media: bool = False, **fields) -> None:
+    """Atualiza uma publicação e regista no histórico o que mudou (estado, media, tipo, data, legenda).
+
+    Nunca deixa sem media uma publicação que já tem imagem/vídeo, a não ser com _allow_clear_media=True.
+    """
+    import os
     for key in ("hashtags", "media_ids"):
         if key in fields and not isinstance(fields[key], str):
             fields[key] = json.dumps(fields[key], ensure_ascii=False)
+    old = conn.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()
+    if old is not None:
+        if (fields.get("media_ids") in ("[]", "", None) and "media_ids" in fields
+                and json.loads(old["media_ids"] or "[]") and not _allow_clear_media):
+            raise MediaLossError(f"publicação #{post_id}: não se apaga a imagem/vídeo de uma publicação")
+        if _by is None and os.environ.get("CARRETOS_USER_ID", "").isdigit():
+            _by = int(os.environ["CARRETOS_USER_ID"])
+        for key in TRACKED:
+            if key in fields and str(fields[key] if fields[key] is not None else "") != \
+                    str(old[key] if old[key] is not None else ""):
+                conn.execute("INSERT INTO post_history(post_id, at, user_id, field, old, new) VALUES (?,?,?,?,?,?)",
+                             (post_id, now(), _by, key, old[key], fields[key]))
     fields["updated_at"] = now()
     sets = ",".join(f"{k}=?" for k in fields)
     conn.execute(f"UPDATE posts SET {sets} WHERE id=?", [*fields.values(), post_id])
+
+
+def post_history(conn, post_id: int, limit: int = 30) -> list[sqlite3.Row]:
+    return conn.execute("SELECT h.*, u.name AS user_name FROM post_history h LEFT JOIN users u ON u.id = h.user_id "
+                        "WHERE post_id=? ORDER BY h.id DESC LIMIT ?", (post_id, limit)).fetchall()
+
+
+def backup(reason: str = "manual", keep: int = 30) -> Path | None:
+    """Cópia da base de dados (sqlite backup, segura com os serviços a correr); guarda as últimas `keep`."""
+    src = db_path()
+    if not src.exists():
+        return None
+    dest_dir = DATA_DIR / "backups"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"carretos-{datetime.now():%Y%m%d-%H%M%S}-{reason}.db"
+    with sqlite3.connect(src) as a, sqlite3.connect(dest) as b:
+        a.backup(b)
+    for old in sorted(dest_dir.glob("carretos-*.db"))[:-keep]:
+        old.unlink()
+    return dest
 
 
 def get_post(conn, post_id: int) -> sqlite3.Row:
