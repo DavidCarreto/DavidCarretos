@@ -64,7 +64,8 @@ def test_assist_publisher_builds_package(tmp_path, monkeypatch):
     with connect() as conn:
         mid = add_media(conn, "image", str(img))
         pid = add_post(conn, account_id="fb_davidcarreto", format="image", caption="Obrigado equipa!",
-                       media_ids=[mid], title="equipa", status="approved")
+                       media_ids=[mid], title="equipa", status="approved",
+                       scheduled_at="2020-01-01T10:00:00+00:00")
         out = publish_post(conn, pid)
         assert "assist_sent" in out
     assert (next((tmp_path / "prontos_a_publicar").iterdir()) / "legenda.txt").read_text() == "Obrigado equipa!"
@@ -135,3 +136,19 @@ def test_narrator_falls_back_to_generic_without_sample(monkeypatch):
         "david": {"engine": "chatterbox", "sample": "nao/existe.wav"},
         "generica": {"engine": "piper", "voice": "pt_PT-tugão-medium"}}})
     assert voice.narrator("david")["engine"] == "piper"
+
+
+def test_next_free_slot_and_no_date_blocks_approval():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from carretos_social.content.planner import next_free_slot
+    tz = ZoneInfo("Europe/Lisbon")
+    base = datetime(2030, 1, 7, 8, 0, tzinfo=tz)            # segunda-feira
+    with connect() as conn:
+        first = next_free_slot(conn, "li_carretosgroup", after=base)   # estratégia: ter/qui às 09:00
+        assert first.startswith("2030-01-08T09:00")
+        add_post(conn, account_id="li_carretosgroup", format="image", caption="x", scheduled_at=first)
+        second = next_free_slot(conn, "li_carretosgroup", after=base)
+        assert second.startswith("2030-01-10T09:00")           # o slot ocupado é saltado
+        pid = add_post(conn, account_id="li_carretosgroup", format="text", caption="sem data")
+        assert "sem data/hora" in ready_problems(get_post(conn, pid))

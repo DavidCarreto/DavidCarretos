@@ -308,8 +308,7 @@ def create(request: Request, tipo: str = Form(...), conta: str = Form(...), tema
             return RedirectResponse("/criar?erro=ficheiros", 303)
         if tipo == "editar" and len(paths) == 1:
             jobs.enqueue("edit-video", [paths[0], "--account", conta, "--seconds", str(segundos), "--fill", "crop",
-                                        *(["--goal", tema] if tema else []), *(sched or ["--schedule",
-                                        (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT19:00")])],
+                                        *(["--goal", tema] if tema else []), *sched],
                          f"Editar vídeo: {Path(paths[0]).name}", user_id=me.id)
         else:
             jobs.enqueue("montage", [*paths, "--account", conta, "--seconds", str(segundos),

@@ -31,6 +31,8 @@ def caption_with_tags(row) -> str:
 
 def ready_problems(row) -> list[str]:
     problems = []
+    if not row["scheduled_at"]:
+        problems.append("sem data/hora")
     if not row["caption"]:
         problems.append("sem legenda")
     if "[PREENCHER" in (row["caption"] or ""):

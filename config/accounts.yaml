@@ -13,7 +13,7 @@ accounts:
     name: "David Carreto (Instagram pessoal)"
     handle: "davidcarretos"
     voice: pessoal          # pessoal | marca | empresa
-    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    narrator: david_elevenlabs  # a tua voz (ElevenLabs); sem chave/Voice ID configurados sai sem narração
     theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     publish_mode: auto
     auto_approve: false     # true = publica sem pedir a tua aprovação
@@ -38,7 +38,7 @@ accounts:
     name: "David Carreto (Facebook pessoal)"
     handle: "davidcarreto"
     voice: pessoal
-    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    narrator: david_elevenlabs  # a tua voz (ElevenLabs); sem chave/Voice ID configurados sai sem narração
     theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     # A Meta não permite publicar em perfis pessoais por API desde 2018.
     publish_mode: assist
@@ -50,7 +50,7 @@ accounts:
     name: "David Carreto (TikTok pessoal)"
     handle: "davidcarreto"
     voice: pessoal
-    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    narrator: david_elevenlabs  # a tua voz (ElevenLabs); sem chave/Voice ID configurados sai sem narração
     theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     publish_mode: auto
     auto_approve: false
@@ -73,7 +73,7 @@ accounts:
     name: "David Carreto (LinkedIn pessoal)"
     handle: "davidcarreto"
     voice: pessoal
-    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    narrator: david_elevenlabs  # a tua voz (ElevenLabs); sem chave/Voice ID configurados sai sem narração
     theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     publish_mode: auto
     auto_approve: false

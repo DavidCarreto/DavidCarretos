@@ -90,3 +90,29 @@ def calendar(conn, start: date, days: int = 14) -> list[dict]:
         "SELECT * FROM posts WHERE substr(scheduled_at,1,10) >= ? AND substr(scheduled_at,1,10) < ? "
         "ORDER BY scheduled_at", (start.isoformat(), end.isoformat())).fetchall()
     return [dict(r) for r in rows]
+
+
+def next_free_slot(conn, account_id: str, after: datetime | None = None, horizon_days: int = 21) -> str | None:
+    """Próximo horário livre da conta segundo a estrutura acordada (dias e horas; melhores horas se houver
+    métricas). Nunca hoje antes de 2 horas a partir de agora. Devolve ISO com fuso horário, ou None."""
+    from datetime import timedelta as _td
+    cfg = strategy()["accounts"].get(account_id)
+    if not cfg:
+        return None
+    tz = ZoneInfo(strategy().get("timezone", "Europe/Lisbon"))
+    start = (after or datetime.now(tz)).astimezone(tz) + _td(hours=2)
+    times = sorted(_times_for(conn, account_id, cfg))
+    allowed = cfg.get("days", WEEKDAYS)
+    taken = {r["scheduled_at"][:16] for r in conn.execute(
+        "SELECT scheduled_at FROM posts WHERE account_id=? AND scheduled_at IS NOT NULL AND status != 'rejected'",
+        (account_id,))}
+    for d in range(horizon_days):
+        day = (start + _td(days=d)).date()
+        if WEEKDAYS[day.weekday()] not in allowed:
+            continue
+        for hhmm in times:
+            h, m = map(int, hhmm.split(":"))
+            dt = datetime.combine(day, time(h, m), tzinfo=tz)
+            if dt >= start and dt.isoformat()[:16] not in taken:
+                return dt.isoformat()
+    return None

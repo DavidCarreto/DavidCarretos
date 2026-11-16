@@ -21,6 +21,26 @@ def _render_size(acc, kind: str = "video") -> tuple[int, int]:
     return int(w), int(h)
 
 
+def _narrator_ready(name: str) -> bool:
+    """Há narração? 'nenhum' nunca; a voz da ElevenLabs só quando a chave e o Voice ID estão configurados
+    (até lá, as contas pessoais saem sem narração, em vez de uma voz que não é a do David)."""
+    import os
+    if name == "nenhum":
+        return False
+    cfg = config.brand().get("narrators", {}).get(name, {})
+    if cfg.get("engine") == "elevenlabs":
+        return bool(os.environ.get("ELEVENLABS_API_KEY") and (cfg.get("voice_id") or os.environ.get("ELEVENLABS_VOICE_ID")))
+    return True
+
+
+def _when(conn, account_id: str, schedule: str | None) -> str | None:
+    """Data pedida, ou o próximo horário livre da conta (nenhuma publicação fica sem data)."""
+    if schedule:
+        return _aware(schedule)
+    from .content.planner import next_free_slot
+    return next_free_slot(conn, account_id)
+
+
 def _aware(value: str) -> str:
     from .scheduler import parse_dt
     return parse_dt(value).isoformat()
@@ -200,11 +220,12 @@ def cmd_edit_video(a):
         cov_id = add_media(conn, "cover", cover_path, vid_id)
         if a.post:
             update_post(conn, a.post, media_ids=[vid_id], cover_id=cov_id)
-        elif a.schedule:
+        else:  # cria a publicação (na data pedida ou no próximo horário livre da conta)
             post_id = add_post(conn, account_id=acc.id, format="reel" if acc.platform == "instagram" else "video",
                                title=res.get("title") or Path(a.file).stem, hook=hook,
                                caption=res.get("caption") or "", hashtags=res.get("hashtags") or [],
-                               media_ids=[vid_id], cover_id=cov_id, scheduled_at=_aware(a.schedule), status="draft")
+                               media_ids=[vid_id], cover_id=cov_id, scheduled_at=_when(conn, acc.id, a.schedule),
+                               status="draft")
             print(f"Criada publicação #{post_id}")
     for s in res["steps"]:
         print(" •", s)
@@ -304,6 +325,15 @@ def cmd_image(a):
 
 def _maybe_attach(a, paths, cover=False):
     if not getattr(a, "post", None):
+        acc_id = getattr(a, "account", None)
+        if acc_id and not cover:  # imagem feita para uma conta: fica como publicação a aprovar
+            with connect() as conn:
+                ids = [add_media(conn, "image", p) for p in paths]
+                fmt = "carousel" if len(paths) > 1 else "image"
+                pid = add_post(conn, account_id=acc_id, format=fmt, title=(getattr(a, "text", "") or fmt)[:60],
+                               caption=getattr(a, "text", "") or "", media_ids=ids,
+                               scheduled_at=_when(conn, acc_id, None), status="draft")
+            print(f"Criada publicação #{pid}")
         return
     with connect() as conn:
         ids = [add_media(conn, "cover" if cover else "image", p) for p in paths]
@@ -443,7 +473,7 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
     out_dir = _out_dir(acc.id, "criados")
     (out_dir / "storyboards").mkdir(exist_ok=True)
     res = create_video(sb, out_dir, size=(w, h), handle=acc.handle,
-                       narration=narration and acc.narrator != "nenhum", narrator=acc.narrator,
+                       narration=narration and _narrator_ready(acc.narrator), narrator=acc.narrator,
                        music="auto" if music else None,
                        max_seconds=strategy()["render"].get(acc.platform, {}).get("max_seconds"))
     stem = Path(res["video"]).stem
@@ -467,7 +497,7 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
                                   title=res.get("title") or stem, hook=sb["scenes"][0].get("title", ""),
                                   caption=res.get("caption") or "", hashtags=res.get("hashtags") or [],
                                   media_ids=[vid_id], cover_id=cov_id,
-                                  scheduled_at=_aware(schedule) if schedule else None, status="draft")
+                                  scheduled_at=_when(conn, acc.id, schedule), status="draft")
     return res
 
 
@@ -584,7 +614,7 @@ def cmd_montage(a):
         pid = add_post(conn, account_id=acc.id, format="reel" if acc.platform == "instagram" else "video",
                        title=res.get("title") or stem, hook=res.get("hook_text") or "",
                        caption=res.get("caption") or "", hashtags=res.get("hashtags") or [], media_ids=[vid_id],
-                       cover_id=cov_id, scheduled_at=_aware(a.schedule) if a.schedule else None, status="draft")
+                       cover_id=cov_id, scheduled_at=_when(conn, acc.id, a.schedule), status="draft")
     for s in res["steps"]:
         print(" •", s)
     print(f"Vídeo: {res['video']} ({res['duration']} s)\nCapa:  {cover}\nPublicação #{pid}")
