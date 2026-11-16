@@ -13,7 +13,7 @@ from .http import request
 
 
 # todas as mensagens deste sistema começam assim (distingue do sistema de avaliações)
-PREFIX = "📣 Redes Sociais · "
+PREFIX = "📣 Carretos Studio · "
 
 
 def enabled() -> bool:

@@ -1,4 +1,4 @@
-# Carretos Social: instruções para quem trabalha neste repositório
+# Carretos Studio (sistema de redes sociais): instruções para quem trabalha neste repositório
 
 Este projeto é o **sistema de redes sociais** (análise, criação, edição e publicação de conteúdos).
 Trabalha-se apenas na branch `claude/social-media-management-system-goj30w`.
@@ -26,7 +26,8 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
 
 **Emails**
 - Os emails com assunto "[Carretos] …" e "📬 Resumo diário Carretos" são do sistema de avaliações.
-  Este sistema notifica por Telegram e não usa esses assuntos.
+  Este sistema (Carretos Studio) só envia emails de convite e de reposição de palavra-passe, com assunto
+  "Carretos Studio · …", a partir de uma conta de email PRÓPRIA (SMTP no ⚙), nunca a "carretos-avaliacoes".
 
 ## Separação entre os dois sistemas (convenções deste projeto)
 
@@ -34,7 +35,7 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
 |---|---|---|
 | Repositório / branch | `DavidCarretos` · `claude/social-media-management-system-goj30w` | `carretos-avaliacoes` |
 | Chave da IA | `SOCIAL_ANTHROPIC_API_KEY` ("carretos-redes-sociais") | `ANTHROPIC_API_KEY` ("carretos-github") |
-| Notificações | Telegram, prefixo "📣 Redes Sociais · " | Email "[Carretos] …" |
+| Notificações | Telegram "📣 Carretos Studio · "; emails "Carretos Studio · …" (conta própria) | Email "[Carretos] …" |
 | Google | não usa nenhuma API Google | Business Profile, projeto "carretos-reviews" |
 
 ## Voz e gravações do David

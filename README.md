@@ -1,4 +1,4 @@
-# Carretos Social
+# Carretos Studio
 
 Sistema de gestão automática das redes sociais de **David Carreto** e da **Carretos Group**:
 analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legendas com IA,

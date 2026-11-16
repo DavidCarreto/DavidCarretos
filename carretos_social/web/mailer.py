@@ -2,7 +2,7 @@
 
 Usa uma conta de email PRÓPRIA deste sistema (variáveis SMTP_*), configurada no ⚙ do dashboard.
 NÃO usar a palavra-passe de aplicação "carretos-avaliacoes" (pertence ao sistema de avaliações Google).
-Os assuntos começam por "Redes Sociais ·" (os assuntos "[Carretos] …" são do outro sistema).
+Os assuntos começam por "Carretos Studio ·" (os assuntos "[Carretos] …" são do outro sistema).
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
-PREFIX = "Redes Sociais · "
+PREFIX = "Carretos Studio · "
 
 
 def configured() -> bool:

@@ -62,3 +62,5 @@ select.lvl-nenhum{color:var(--muted)}select.lvl-ver{color:#7cc4ff}select.lvl-cri
 .mic-status{color:var(--muted)}
 .mic-preview{color:var(--text);font-style:italic;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .composer form{position:relative}
+
+.brand b{color:var(--text);font-weight:800}

@@ -1,7 +1,7 @@
 <!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Entrar · David Carreto</title><link rel="stylesheet" href="/static/style.css"></head><body>
+<title>Entrar · Carretos Studio</title><link rel="stylesheet" href="/static/style.css"><link rel="manifest" href="/static/manifest.webmanifest"><link rel="icon" href="/static/icon-192.png"><link rel="apple-touch-icon" href="/static/icon-180.png"><meta name="apple-mobile-web-app-title" content="Carretos Studio"></head><body>
 <main class="wrap" style="max-width:380px;padding-top:18vh">
-<div class="brand" style="font-size:18px;margin-bottom:24px">DAVID CARRETO</div>
+<div style="margin-bottom:24px"><span class="brand" style="font-size:20px">CARRETOS <b>STUDIO</b></span><div class="muted" style="font-size:13px;margin-top:4px">Redes do David Carreto e da Carretos Group</div></div>
 <form method="post" class="card"><label>Utilizador ou email</label><input name="username" autocapitalize="none" autocomplete="username" required><label>Palavra-passe</label><input type="password" name="password" autocomplete="current-password" required>
 {% if request.query_params.get("reposta") %}<p style="color:#3fb950">✓ Palavra-passe definida. Já podes entrar.</p>{% endif %}
 {% if erro %}<p style="color:#ff8f8f">Utilizador ou palavra-passe errados.</p>{% endif %}
