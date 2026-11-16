@@ -45,8 +45,10 @@ def test_csv_import_and_best_times(tmp_path):
 
 def test_publish_requires_media_and_dry_run_works(tmp_path, monkeypatch):
     monkeypatch.setenv("TT_CARRETOCLIPS_TOKEN", "token-de-teste")   # conta "ligada"
-    f = tmp_path / "v.mp4"
-    f.write_bytes(b"x")
+    import subprocess
+    f = tmp_path / "v.mp4"   # vídeo verdadeiro (a verificação de formato lê o ficheiro)
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=540x960:d=4", "-pix_fmt",
+                    "yuv420p", str(f)], check=True)
     with connect() as conn:
         pid = add_post(conn, account_id="tt_carretoclips", format="video", caption="Olá",
                        scheduled_at="2020-01-01T10:00:00+00:00", status="approved")
@@ -60,8 +62,9 @@ def test_publish_requires_media_and_dry_run_works(tmp_path, monkeypatch):
 def test_assist_publisher_builds_package(tmp_path, monkeypatch):
     import carretos_social.publishers.assist as assist
     monkeypatch.setattr(assist, "DATA_DIR", tmp_path)
+    from PIL import Image
     img = tmp_path / "a.jpg"
-    img.write_bytes(b"x")
+    Image.new("RGB", (1080, 1350), (20, 20, 20)).save(img)
     with connect() as conn:
         mid = add_media(conn, "image", str(img))
         pid = add_post(conn, account_id="fb_davidcarreto", format="image", caption="Obrigado equipa!",
@@ -190,3 +193,44 @@ def test_migration_from_old_database(tmp_path):
         admin = conn.execute("SELECT username, is_admin, must_change FROM users WHERE id=1").fetchone()
         assert tuple(admin) == ("david", 1, 0)                # o david continua administrador, sem obrigações
     _ = users
+
+
+def test_format_check_and_fit(tmp_path):
+    import subprocess
+    from PIL import Image
+    from carretos_social.media import formats
+    ok = tmp_path / "ok.jpg"; Image.new("RGB", (1080, 1350)).save(ok)          # 4:5
+    wide = tmp_path / "wide.jpg"; Image.new("RGB", (1920, 1080)).save(wide)    # 16:9
+    tall = tmp_path / "tall.jpg"; Image.new("RGB", (1080, 1920)).save(tall)    # 9:16
+    assert formats.check("instagram", "image", [str(ok)]).verdict == "ok"
+    assert formats.check("instagram", "image", [str(wide)]).verdict == "ajustar"       # aceite, não ideal
+    rep = formats.check("linkedin_member", "image", [str(tall)])
+    assert rep.verdict == "editar" and rep.fixable                                      # fora dos limites
+    assert "carrossel" in formats.check("instagram", "image", [str(ok), str(ok)]).problems[0]
+    assert formats.check("instagram", "carousel", [str(ok)]).verdict == "editar"       # só 1 imagem
+    assert formats.check("youtube", "image", [str(ok)]).verdict == "editar"            # o YouTube não leva imagens
+    assert "Um vídeo" in formats.check("tiktok", "video", [str(ok)]).problems[0]
+    v = tmp_path / "longo.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=360x640:d=200:r=5",
+                    "-pix_fmt", "yuv420p", str(v)], check=True)
+    rep = formats.check("youtube", "video", [str(v)])
+    assert rep.verdict == "editar" and any("longo" in n for n in rep.items[0].notes)
+    out = formats.fit_image(str(tall), str(tmp_path / "fit.jpg"), (1200, 1500))
+    assert Image.open(out).size == (1200, 1500)
+    assert formats.check("linkedin_member", "image", [out]).verdict == "ok"
+
+
+def test_fit_format_command_replaces_media(tmp_path):
+    from PIL import Image
+    from carretos_social.cli import main
+    from carretos_social.scheduler import all_problems
+    tall = tmp_path / "tall.jpg"; Image.new("RGB", (1080, 1920), (90, 90, 90)).save(tall)
+    with connect() as conn:
+        mid = add_media(conn, "image", str(tall))
+        pid = add_post(conn, account_id="li_davidcarreto", format="image", caption="x", media_ids=[mid],
+                       scheduled_at="2030-01-01T10:00:00+00:00", status="draft")
+        assert any(p.startswith("formato:") for p in all_problems(conn, get_post(conn, pid)))
+    main(["ajustar-formato", str(pid)])
+    with connect() as conn:
+        row = get_post(conn, pid)
+        assert json.loads(row["media_ids"]) != [mid] and all_problems(conn, row) == []

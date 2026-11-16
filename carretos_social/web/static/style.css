@@ -67,3 +67,9 @@ select.lvl-nenhum{color:var(--muted)}select.lvl-ver{color:#7cc4ff}select.lvl-cri
 .composer form{position:relative}
 
 .brand b{color:var(--text);font-weight:800}
+
+.fmt{border-left:3px solid var(--line)}.fmt.ok{border-left-color:#3fb950}.fmt.ajustar{border-left-color:#e3b341}.fmt.editar{border-left-color:#f85149}
+.fmt .verdict{font-weight:700;margin:0 0 6px}.fmt.ok .verdict{color:#56d364}.fmt.ajustar .verdict{color:#e3b341}.fmt.editar .verdict{color:#ff7b72}
+.fmt-line{margin:2px 0;font-size:13px}.fmt-line.ok{color:#8ddb8c}.fmt-line.ajustar{color:#f2cc60}.fmt-line.editar{color:#ff9b93}
+.fmt-item{border-top:1px solid var(--line);padding-top:8px;margin-top:8px;font-size:14px}
+.fmtdot{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line)}.fmtdot.ok{color:#56d364;border-color:#2f6f3a}.fmtdot.ajustar{color:#e3b341;border-color:#7a5c12}.fmtdot.editar{color:#ff7b72;border-color:#8b2b25}

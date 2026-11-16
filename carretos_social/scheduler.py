@@ -42,13 +42,28 @@ def ready_problems(row) -> list[str]:
     return problems
 
 
+def format_report(conn, row):
+    """Verificação do tipo/tamanho/duração para a rede da publicação (ver media/formats.py)."""
+    from .media.formats import check
+    paths = media_paths(conn, json.loads(row["media_ids"] or "[]"))
+    return check(account(row["account_id"]).platform, row["format"], paths)
+
+
+def all_problems(conn, row) -> list[str]:
+    """Tudo o que impede aprovar/publicar: dados em falta e formato que tem de ser editado."""
+    problems = ready_problems(row)
+    if "sem vídeo/imagem associado" not in problems:
+        problems += [f"formato: {p}" for p in format_report(conn, row).blocking()]
+    return problems
+
+
 def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
     row = get_post(conn, post_id)
     acc = account(row["account_id"])
     if not acc.connected:
         update_post(conn, post_id, error="conta por ligar (falta o handle/os tokens): não publicado")
         return f"#{post_id} não publicado: a conta {acc.name} ainda está por ligar"
-    problems = ready_problems(row)
+    problems = all_problems(conn, row)
     if problems:
         update_post(conn, post_id, error="; ".join(problems))
         return f"#{post_id} não publicado: {', '.join(problems)}"
@@ -79,7 +94,7 @@ def due_posts(conn, now: datetime | None = None) -> list:
 def auto_approve(conn) -> None:
     """Contas com auto_approve: rascunhos completos passam a aprovados."""
     for r in conn.execute("SELECT * FROM posts WHERE status='draft'").fetchall():
-        if account(r["account_id"]).auto_approve and not ready_problems(r):
+        if account(r["account_id"]).auto_approve and not all_problems(conn, r):
             update_post(conn, r["id"], status="approved")
 
 

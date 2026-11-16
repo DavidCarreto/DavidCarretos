@@ -6,9 +6,32 @@
 <div><p style="margin:0 0 8px"><span class="kind {{ p.kind[0] }}">{{ p.kind[1] }}</span></p>
 <div class="{{ 'gallery' if p.media|length > 1 }}">{% for m in p.media %}{% if m.video %}<video class="media-big" src="/media/{{ m.id }}" controls playsinline preload="metadata"></video>{% else %}<img class="media-big" src="/media/{{ m.id }}" alt="">{% endif %}{% endfor %}</div>
 {% if not p.media %}<div class="card muted">Ainda sem vídeo/imagem.</div>{% endif %}
+
 {% if p.stock_sources %}<p class="muted" style="font-size:12px;margin-top:8px">Imagens de stock:
 {% for src in p.stock_sources %}{% if src.pagina %}<a class="gold" href="{{ src.pagina }}" target="_blank" rel="noopener">{{ src.fonte }}{% if src.autor %} · {{ src.autor }}{% endif %}</a>{% else %}{{ src.fonte }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
+<div>
+{% set f = p.fmt %}
+<div class="card fmt {{ f.verdict }}" style="margin:0 0 12px">
+ <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em">Formato para publicar</div>
+ <p style="margin:4px 0 8px"><b>{{ f.target }}</b></p>
+ <p class="verdict">{{ f.verdict_label }}</p>
+ {% for x in f.problems %}<p class="fmt-line editar">✕ {{ x }}</p>{% endfor %}
+ {% for x in f.warnings %}<p class="fmt-line ajustar">⚠ {{ x }}</p>{% endfor %}
+ {% for i in f.items %}<div class="fmt-item">
+  <b>{{ '🎬' if i.video else '🖼' }} {{ loop.index if f.items|length > 1 }}{{ ' · ' if f.items|length > 1 }}{{ i.size }} · {{ i.ratio }}{% if i.duration %} · {{ i.duration }}{% endif %}</b>
+  {% for n in i.notes %}<p class="fmt-line {{ i.verdict }}">{{ {'ok':'✓','ajustar':'⚠','editar':'✕'}[i.verdict] }} {{ n }}</p>{% endfor %}
+  {% if i.screen %}<p class="muted" style="margin:2px 0 0;font-size:13px">📱 {{ i.screen }}</p>{% endif %}
+ </div>{% endfor %}
+ {% if f.verdict != 'ok' and can_create %}
+  {% if f.fixable %}<form method="post" style="margin-top:10px"><button class="btn gold" name="action" value="ajustar">⤢ Ajustar ao formato (sem cortar)</button>
+  <p class="muted" style="font-size:12px;margin:6px 0 0">Cria uma versão no tamanho certo com fundo desfocado. O original fica guardado.</p></form>{% endif %}
+  {% if 'longo' in (f.items|map(attribute='notes')|map('join')|join) %}<p class="muted" style="font-size:12px">A duração não se ajusta sozinha: use "Refazer vídeo" ou edite o vídeo e volte a carregá-lo.</p>{% endif %}
+ {% endif %}
+</div>
 <form method="post" class="card">
+ <label>Tipo de publicação</label>
+ <select name="tipo" {{ 'disabled' if not can_create }}>{% for k, label in p.types.items() %}<option value="{{ k }}" {{ 'selected' if k == p.type }}>{{ label }}</option>{% endfor %}</select>
+ {% if can_create %}<p class="muted" style="font-size:12px;margin:4px 0 0">Ao mudar o tipo, carregue em "Guardar" para voltar a verificar o formato.</p>{% endif %}
  <label>Data e hora{% if not can_approve %} <span class="muted">(só quem aprova pode mudar)</span>{% endif %}</label>
  <input type="datetime-local" name="quando" value="{{ p.when.strftime('%Y-%m-%dT%H:%M') if p.when else '' }}" {{ 'disabled' if not can_approve }}>
  <label>Legenda</label><textarea name="caption" rows="9" {{ 'readonly' if not can_create }}>{{ p.caption or '' }}</textarea>
@@ -20,4 +43,4 @@
  {% if can_approve %}<button class="btn red" name="action" value="rejeitar">Rejeitar</button>{% endif %}</div>
  {% else %}<p class="muted">Tens acesso só para ver esta conta.</p>{% endif %}
  {% if extra.script %}<h2>Guião</h2>{% for s in extra.script %}<p style="font-size:14px"><b class="gold">{{ s.seconds }}</b> {{ s.voice_or_text }}<br><span class="muted">{{ s.visual }}</span></p>{% endfor %}{% endif %}
-</form></div>{% endblock %}
+</form></div></div>{% endblock %}

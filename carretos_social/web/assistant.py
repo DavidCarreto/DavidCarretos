@@ -115,12 +115,12 @@ def aprovar(id: int) -> str:
     Args:
         id: número da publicação.
     """
-    from ..scheduler import ready_problems
+    from ..scheduler import all_problems
     with connect() as conn:
         row = get_post(conn, id)
         if (err := _deny(row["account_id"], "aprovar")):
             return err
-        problems = ready_problems(row)
+        problems = all_problems(conn, row)
         if problems:
             return f"Não aprovada: {', '.join(problems)}"
         update_post(conn, id, status="approved", error=None, approved_by=_me().id)

@@ -373,15 +373,52 @@ def cmd_schedule(a):
 
 
 def cmd_approve(a):
-    from .scheduler import ready_problems
+    from .scheduler import all_problems
     with connect() as conn:
         for pid in a.ids:
-            problems = ready_problems(get_post(conn, pid))
+            problems = all_problems(conn, get_post(conn, pid))
             if problems and not a.force:
                 print(f"#{pid} não aprovado: {', '.join(problems)} (usa --force para ignorar)")
                 continue
             update_post(conn, pid, status="approved", error=None)
             print(f"#{pid} aprovado ✔")
+
+
+def cmd_fit_format(a):
+    """Cria versões dos ficheiros no tamanho certo para a rede, sem cortar nada (fundo desfocado)."""
+    from .db import media_paths
+    from .media import formats
+    from .scheduler import format_report
+    with connect() as conn:
+        row = get_post(conn, a.post)
+        rep = format_report(conn, row)
+        if not rep.spec.get("size"):
+            print(f"#{a.post}: nada a ajustar ({'; '.join(rep.problems) or 'sem tamanho definido'})")
+            return
+        ids = json.loads(row["media_ids"] or "[]")
+        out_dir = DATA_DIR / "renders" / "ajustados"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        new_ids = []
+        for mid, path, item in zip(ids, media_paths(conn, ids), rep.items):
+            fixable = item.width and any(k in " ".join(item.notes) for k in ("proporção", "resolução"))
+            if item.verdict == "ok" or not fixable:
+                new_ids.append(mid)
+                continue
+            spec = rep.spec if not item.video or rep.kind == "video" else \
+                formats.SPECS[rep.platform].get("video", rep.spec)
+            size = tuple(spec["size"])
+            stem = f"post{a.post}_{mid}_{size[0]}x{size[1]}"
+            if item.video:
+                out = formats.fit_video(path, str(out_dir / f"{stem}.mp4"), size)
+            else:
+                out = formats.fit_image(path, str(out_dir / f"{stem}.jpg"), size)
+            old = conn.execute("SELECT kind, meta FROM media WHERE id=?", (mid,)).fetchone()
+            meta = {**json.loads(old["meta"] or "{}"), "ajustado_de": mid}
+            new_ids.append(add_media(conn, old["kind"], out, meta=meta))
+            print(f"✔ ficheiro {len(new_ids)}: {item.size} → {size[0]}×{size[1]}")
+        if new_ids != ids:
+            update_post(conn, a.post, media_ids=new_ids, error=None)
+        print(f"#{a.post}: {format_report(conn, get_post(conn, a.post)).verdict_label}")
 
 
 def cmd_reject(a):
@@ -778,6 +815,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("schedule", cmd_schedule, "agenda uma publicação"); s.add_argument("id", type=int); s.add_argument("when")
     s = add("approve", cmd_approve, "aprova publicações para saírem automaticamente")
     s.add_argument("ids", nargs="+", type=int); s.add_argument("--force", action="store_true")
+    s = add("ajustar-formato", cmd_fit_format, "ajusta imagens/vídeos ao tamanho da rede, sem cortar")
+    s.add_argument("post", type=int)
     s = add("reject", cmd_reject, "rejeita publicações"); s.add_argument("ids", nargs="+", type=int)
     s.add_argument("--regenerate", action="store_true")
     s = add("calendar", cmd_calendar, "agenda de conteúdos")

@@ -202,40 +202,33 @@ def _post_view(conn, r) -> dict:
                 if src and src not in sources:
                     sources.append(src)
     p["stock_sources"] = sources
-    # tipo de publicação, bem visível: vídeo (com duração), carrossel ou imagem
-    videos = [m for m in p["media"] if m["video"]]
-    images = [m for m in p["media"] if not m["video"]]
-    if videos:
-        secs = _duration(media_paths(conn, [videos[0]["id"]])[0])
+    # tipo de publicação (o escolhido) e verificação de tamanho/ecrã para a rede (media/formats.py)
+    from ..media.formats import KINDS, check, kind_of, kinds_for
+    acc_obj = accounts().get(p["account_id"])
+    platform = acc_obj.platform if acc_obj else ""
+    paths = media_paths(conn, ids)
+    p["fmt"] = check(platform, p.get("format"), paths)
+    p["type"] = kind_of(p.get("format"))
+    p["types"] = kinds_for(platform) or {p["type"]: KINDS.get(p["type"], p["type"])}
+    items = p["fmt"].items
+    n_img = sum(1 for m in p["media"] if not m["video"])
+    if any(m["video"] for m in p["media"]):
+        secs = next((i.seconds for i in items if i.video), 0)
         p["kind"] = ("video", f"🎬 Vídeo · {int(secs // 60)}:{int(secs % 60):02d}" if secs else "🎬 Vídeo")
-    elif len(images) > 1:
-        p["kind"] = ("carousel", f"🖼 Carrossel · {len(images)} imagens")
-    elif images:
+    elif n_img > 1:
+        p["kind"] = ("carousel", f"🖼 Carrossel · {n_img} imagens")
+    elif n_img:
         p["kind"] = ("image", "🖼 Imagem")
+    elif p["type"] == "text":
+        p["kind"] = ("none", "✍ Só texto")
     else:
         p["kind"] = ("none", "Ainda sem vídeo/imagem")
-    p["is_video"] = bool(videos) or p.get("format") in ("reel", "video")
+    p["is_video"] = p["type"] == "video"
     p["account"] = accounts().get(p["account_id"])
     p["group"] = group_of(p["account_id"])
     p["when"] = datetime.fromisoformat(p["scheduled_at"][:19]) if p.get("scheduled_at") else None
     p["tags"] = " ".join(json.loads(p.get("hashtags") or "[]"))
     return p
-
-
-@__import__("functools").lru_cache(maxsize=512)
-def _duration_cached(path: str, mtime: float) -> float:
-    from ..media.video_editor import probe
-    try:
-        return probe(path).duration
-    except Exception:  # noqa: BLE001
-        return 0.0
-
-
-def _duration(path: str) -> float:
-    try:
-        return _duration_cached(path, Path(path).stat().st_mtime)
-    except OSError:
-        return 0.0
 
 
 def _group_posts(posts: list[dict]) -> list[tuple[dict, list[dict]]]:
@@ -325,8 +318,9 @@ def post_page(request: Request, pid: int):
 
 @app.post("/post/{pid}")
 def post_action(request: Request, pid: int, action: str = Form(...), caption: str = Form(""),
-                quando: str = Form("")):
-    from ..scheduler import parse_dt, ready_problems
+                quando: str = Form(""), tipo: str = Form("")):
+    from ..media.formats import format_for, kind_of, kinds_for
+    from ..scheduler import all_problems, parse_dt
     me = request.state.user
     with connect() as conn:
         row = get_post(conn, pid)
@@ -346,10 +340,18 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
                 if not me.can_approve(acc):
                     return _forbidden("Agendar (mudar a data) é para quem aprova nesta conta.")
                 fields["scheduled_at"] = new_when
+        platform = accounts()[acc].platform if acc in accounts() else ""
+        if tipo and tipo != kind_of(row["format"]):
+            if tipo not in kinds_for(platform):
+                return _forbidden("Esse tipo de publicação não existe para esta rede.")
+            fields["format"] = format_for(tipo, platform)
         if fields:
             update_post(conn, pid, **fields)
+        if action == "ajustar":
+            jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id)
+            return RedirectResponse("/tarefas", 303)
         if action == "aprovar":
-            problems = ready_problems(get_post(conn, pid))
+            problems = all_problems(conn, get_post(conn, pid))
             if problems:
                 update_post(conn, pid, error="; ".join(problems))
             else:
@@ -360,7 +362,7 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             if not me.can_create(acc):
                 return _forbidden()
             update_post(conn, pid, media_ids=[], status="idea")
-            if row["format"] in ("reel", "video"):
+            if kind_of(row["format"]) == "video":
                 jobs.enqueue("create-video", ["--account", acc, "--post", str(pid)], f"Refazer #{pid}",
                              user_id=me.id)
     return RedirectResponse(f"/post/{pid}" if action == "guardar" else "/aprovar", 303)
