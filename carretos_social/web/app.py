@@ -694,3 +694,7 @@ async def config_save(request: Request):
 @app.on_event("startup")
 def _startup():
     jobs.start_worker()
+    if os.environ.get("DICTATION_PRELOAD", "1") == "1":  # modelo do ditado já em memória
+        import threading
+        from ..media.video_editor import preload_dictation
+        threading.Thread(target=preload_dictation, daemon=True).start()

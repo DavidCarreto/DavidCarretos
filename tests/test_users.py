@@ -10,6 +10,7 @@ def client(tmp_path, monkeypatch):
     for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("SETUP_CODE", "codigo-teste")
+    monkeypatch.setenv("DICTATION_PRELOAD", "0")
     import carretos_social.web.app as app_mod
     monkeypatch.setattr(app_mod, "DATA_DIR", tmp_path)
     monkeypatch.setattr(app_mod, "ROOT", tmp_path)          # .env de teste
