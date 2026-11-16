@@ -405,7 +405,13 @@ def _library_names(limit: int = 60) -> list[str]:
     from .media.stock import LIBRARY
     if not LIBRARY.exists():
         return []
-    return sorted(p.name for p in LIBRARY.rglob("*") if p.is_file() and not p.name.startswith("."))[:limit]
+    import yaml
+    tags_file = LIBRARY / "etiquetas.yaml"
+    tags = (yaml.safe_load(tags_file.read_text(encoding="utf-8")) or {}) if tags_file.exists() else {}
+    names = sorted(p.name for p in LIBRARY.rglob("*") if p.is_file() and p.suffix.lower() in
+                   {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov"})[:limit]
+    # a IA recebe o ficheiro + o que mostra, para escolher o fundo certo em "visual"
+    return [f"{n} ({', '.join(tags[n][:8])})" if n in tags else n for n in names]
 
 
 def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, storyboard_file: str | None = None,

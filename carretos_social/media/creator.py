@@ -320,8 +320,15 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
     tmp = Path(tempfile.mkdtemp(prefix="create_"))
     used: set[str] = set()
     parts, subs, offset, log = [], [], 0.0, []
+    from .video_editor import _EMOJI
     for i, scene in enumerate(storyboard["scenes"]):
         scene.setdefault("type", "text")
+        # a fonte Inter não tem emojis (apareciam como quadrados): só no ecrã; a legenda do post mantém-nos
+        for key in ("title", "body", "kicker", "value"):
+            if isinstance(scene.get(key), str):
+                scene[key] = _EMOJI.sub("", scene[key]).strip()
+        if scene.get("items"):
+            scene["items"] = [_EMOJI.sub("", it).strip() for it in scene["items"]]
         wav = tmp / f"s{i:02d}.wav"
         text = scene.get("voiceover", "").strip()
         speech = voice.speak(text, wav, voice_speed, narrator) if (narration and text) else 0.0
