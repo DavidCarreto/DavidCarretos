@@ -41,16 +41,48 @@ class Account:
     auto_approve: bool = False
     narrator: str = "generica"
     theme: str = "carretos"
+    group: str = "david"
+    status: str = ""                 # "por_ligar" = ainda sem handle/tokens
     credentials: dict = field(default_factory=dict)
 
     def secret(self, key: str) -> str | None:
         env_name = self.credentials.get(key)
         return os.environ.get(env_name) if env_name else None
 
+    @property
+    def connected(self) -> bool:
+        """Conta ligada: não está marcada 'por ligar' e tem as credenciais (o modo assistido não precisa)."""
+        if self.status == "por_ligar":
+            return False
+        if self.publish_mode == "assist":
+            return True
+        return bool(self.credentials) and all(self.secret(k) for k in self.credentials)
+
+    @property
+    def label(self) -> str:
+        return self.name + ("" if self.connected else " · por ligar")
+
 
 @lru_cache
 def accounts() -> dict[str, Account]:
     return {a["id"]: Account(**a) for a in _yaml("accounts.yaml")["accounts"]}
+
+
+@lru_cache
+def groups() -> list[dict]:
+    """Grupos de contas (ordem de apresentação): [{"id","name","short"}]."""
+    return _yaml("accounts.yaml").get("groups") or [{"id": "david", "name": "Redes do David Carreto",
+                                                    "short": "David Carreto"}]
+
+
+def group_of(account_id: str) -> dict:
+    acc = accounts().get(account_id)
+    gid = acc.group if acc else "david"
+    return next((g for g in groups() if g["id"] == gid), {"id": gid, "name": gid, "short": gid})
+
+
+def accounts_by_group() -> list[tuple[dict, list[Account]]]:
+    return [(g, [a for a in accounts().values() if a.group == g["id"]]) for g in groups()]
 
 
 @lru_cache

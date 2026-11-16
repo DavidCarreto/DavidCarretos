@@ -78,7 +78,7 @@ def ver_publicacao(id: int) -> str:
 
 @beta_tool
 def reagendar(id: int, quando: str) -> str:
-    """Muda a data/hora de uma publicação.
+    """Muda a data/hora de uma publicação (só quem pode aprovar na conta).
 
     Args:
         id: número da publicação.
@@ -86,7 +86,7 @@ def reagendar(id: int, quando: str) -> str:
     """
     from ..scheduler import parse_dt
     with connect() as conn:
-        if (err := _deny(get_post(conn, id)["account_id"], "criar")) and (err := _deny(get_post(conn, id)["account_id"], "aprovar")):
+        if (err := _deny(get_post(conn, id)["account_id"], "aprovar")):   # agendar é de quem aprova
             return err
         update_post(conn, id, scheduled_at=parse_dt(quando).isoformat())
     return f"Publicação #{id} reagendada para {quando}"
@@ -102,7 +102,7 @@ def alterar_legenda(id: int, legenda: str) -> str:
     """
     with connect() as conn:
         acc = get_post(conn, id)["account_id"]
-        if _deny(acc, "criar") and (err := _deny(acc, "aprovar")):
+        if (err := _deny(acc, "criar")):
             return err
         update_post(conn, id, caption=legenda)
     return f"Legenda da publicação #{id} atualizada"
@@ -208,15 +208,14 @@ TOOLS = [listar_publicacoes, ver_publicacao, reagendar, alterar_legenda, aprovar
 
 
 def _system(me) -> str:
-    acc = "\n".join(f"- {a.id}: {a.name} ({a.platform}) — "
-                    f"{'criar' if me.can_create(a.id) else ''}{' + ' if me.can_create(a.id) and me.can_approve(a.id) else ''}"
-                    f"{'aprovar' if me.can_approve(a.id) else ''}"
-                    for a in accounts().values() if me.can_see(a.id))
+    from ..config import group_of
+    acc = "\n".join(f"- {a.id}: {a.name} [{group_of(a.id)['short']}]{' (por ligar: não publica ainda)' if not a.connected else ''}"
+                    f" — nível: {me.level(a.id)}" for a in accounts().values() if me.can_see(a.id))
     return f"""És o assistente do sistema de redes sociais de {brand()['owner']} e da {brand()['company']}.
 Estás a falar com: {me.name}{' (administrador)' if me.is_admin else ''}.
 Hoje é {date.today().isoformat()} (hora de Lisboa). Responde em português de Portugal, curto e direto.
 
-Contas a que esta pessoa tem acesso (e o que pode fazer):
+Contas a que esta pessoa tem acesso e nível (ver < criar < aprovar; agendar/aprovar só com "aprovar"):
 {acc}
 Nunca fales de contas fora desta lista.
 

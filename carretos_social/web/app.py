@@ -20,9 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
-from ..config import DATA_DIR, ROOT, accounts, load_env
+from ..config import DATA_DIR, ROOT, accounts, accounts_by_group, group_of, groups, load_env
 from ..db import connect, get_post, media_paths, update_post
-from . import jobs, users
+from . import jobs, mailer, users
 
 load_env()
 HERE = Path(__file__).parent
@@ -49,7 +49,9 @@ def _tema(pillar) -> str:
     return names.get(pillar or "", pillar or "Sem tema")
 
 
-tpl.env.globals.update(STATUS=STATUS, ICON=ICON, accounts=accounts, tema=_tema)
+tpl.env.globals.update(STATUS=STATUS, ICON=ICON, accounts=accounts, tema=_tema, groups=groups,
+                       accounts_by_group=accounts_by_group, group_of=group_of,
+                       LEVELS=users.LEVELS, LEVEL_LABELS=users.LEVEL_LABELS)
 tpl.env.filters["quando"] = _quando
 
 
@@ -94,7 +96,7 @@ def _render(request: Request, name: str, ctx: dict):
 @app.middleware("http")
 async def auth(request: Request, call_next):
     request.state.user = None
-    open_paths = ("/login", "/static", "/configurar")
+    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor")
     users.bootstrap_admin()
     if users.count() == 0:  # ainda não há administrador: 1.ª configuração
         if not request.url.path.startswith(open_paths):
@@ -104,6 +106,8 @@ async def auth(request: Request, call_next):
     request.state.user = user
     if user is None and not request.url.path.startswith(open_paths):
         return RedirectResponse("/login", 303)
+    if user and user.must_change and not request.url.path.startswith(("/conta", "/sair", "/static")):
+        return RedirectResponse("/conta?primeira=1", 303)   # palavra-passe temporária: tem de a mudar
     return await call_next(request)
 
 
@@ -119,12 +123,62 @@ def login_page(request: Request, erro: str = ""):
 
 @app.post("/login")
 def login(username: str = Form("david"), password: str = Form(...)):
-    user = users.authenticate(username, password)
+    ident = username.strip()
+    if "@" in ident:  # também se pode entrar com o email
+        uid = users.find_by_email(ident)
+        u = users.load(uid) if uid else None
+        ident = u.username if u else ident
+    user = users.authenticate(ident, password)
     if not user:
         return RedirectResponse("/login?erro=1", 303)
     r = RedirectResponse("/", 303)
     _set_session(r, user.id)
     return r
+
+
+# ------------------------------------------------------------------ esqueci-me da palavra-passe
+def _base_url(request: Request) -> str:
+    f = ROOT / "ENDERECO_DASHBOARD.txt"
+    if f.exists() and f.read_text().strip():
+        return f.read_text().strip().rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+@app.get("/recuperar", response_class=HTMLResponse)
+def forgot_page(request: Request, enviado: str = ""):
+    return tpl.TemplateResponse(request, "forgot.html", {"enviado": enviado, "email_ok": mailer.configured()})
+
+
+@app.post("/recuperar")
+def forgot(request: Request, email: str = Form(...)):
+    uid = users.find_by_email(email)
+    if uid and mailer.configured():
+        token = users.create_reset_token(uid)
+        link = f"{_base_url(request)}/repor?codigo={token}"
+        try:
+            mailer.send(users.normalize_email(email), "Repor a palavra-passe",
+                        f"Olá,\n\nPediste para repor a palavra-passe do dashboard das redes sociais.\n"
+                        f"Abre este link (válido durante {users.RESET_MINUTES} minutos, uso único):\n\n{link}\n\n"
+                        f"Se não foste tu, ignora este email.")
+        except Exception:  # noqa: BLE001 — não revela se o email existe
+            pass
+    # resposta sempre igual: não revela se o email está registado
+    return RedirectResponse("/recuperar?enviado=1", 303)
+
+
+@app.get("/repor", response_class=HTMLResponse)
+def reset_page(request: Request, codigo: str = "", erro: str = ""):
+    valido = bool(users.reset_user_for(codigo))
+    return tpl.TemplateResponse(request, "reset.html", {"codigo": codigo, "valido": valido, "erro": erro})
+
+
+@app.post("/repor")
+def reset(codigo: str = Form(...), nova: str = Form(...), confirmar: str = Form(...)):
+    if nova != confirmar or len(nova) < 8:
+        return RedirectResponse(f"/repor?codigo={codigo}&erro=1", 303)
+    if not users.use_reset_token(codigo, nova):
+        return RedirectResponse("/repor?erro=2", 303)
+    return RedirectResponse("/login?reposta=1", 303)
 
 
 @app.get("/sair")
@@ -149,9 +203,16 @@ def _post_view(conn, r) -> dict:
                     sources.append(src)
     p["stock_sources"] = sources
     p["account"] = accounts().get(p["account_id"])
+    p["group"] = group_of(p["account_id"])
     p["when"] = datetime.fromisoformat(p["scheduled_at"][:19]) if p.get("scheduled_at") else None
     p["tags"] = " ".join(json.loads(p.get("hashtags") or "[]"))
     return p
+
+
+def _group_posts(posts: list[dict]) -> list[tuple[dict, list[dict]]]:
+    """[(grupo, publicações)] pela ordem dos grupos; grupos sem publicações são omitidos."""
+    return [(g, [p for p in posts if p["group"]["id"] == g["id"]]) for g in groups()
+            if any(p["group"]["id"] == g["id"] for p in posts)]
 
 
 def _visible_clause(user: users.User) -> tuple[str, list]:
@@ -171,18 +232,20 @@ def home(request: Request):
     where, params = _visible_clause(me)
     with connect() as conn:
         report = [summary(conn, a, 30) for a in me.visible_accounts]
+        report_groups = [(g, [r for r in report if accounts()[r["account_id"]].group == g["id"]]) for g in groups()]
+        report_groups = [(g, rs) for g, rs in report_groups if rs]
         drafts = conn.execute(f"SELECT account_id FROM posts WHERE status='draft' AND {where}", params).fetchall()
         drafts_n = sum(1 for d in drafts if me.can_approve(d["account_id"]))
         nxt = [_post_view(conn, r) for r in conn.execute(
             f"SELECT * FROM posts WHERE scheduled_at >= ? AND status IN ('approved','draft') AND {where} "
-            f"ORDER BY scheduled_at LIMIT 6", [datetime.now().isoformat(), *params])]
+            f"ORDER BY scheduled_at LIMIT 12", [datetime.now().isoformat(), *params])]
         running = conn.execute("SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running')").fetchone()[0]
-    return _render(request, "home.html", {"report": report, "drafts": drafts_n, "next": nxt, "running": running,
-                                          "page": "home"})
+    return _render(request, "home.html", {"report_groups": report_groups, "drafts": drafts_n,
+                                          "next_groups": _group_posts(nxt), "running": running, "page": "home"})
 
 
 @app.get("/calendario", response_class=HTMLResponse)
-def calendar_page(request: Request, mes: str = ""):
+def calendar_page(request: Request, mes: str = "", grupo: str = ""):
     me = request.state.user
     where, params = _visible_clause(me)
     first = date.fromisoformat(mes + "-01") if mes else date.today().replace(day=1)
@@ -192,6 +255,8 @@ def calendar_page(request: Request, mes: str = ""):
         rows = [_post_view(conn, r) for r in conn.execute(
             f"SELECT * FROM posts WHERE substr(scheduled_at,1,10) >= ? AND substr(scheduled_at,1,10) < ? "
             f"AND status != 'rejected' AND {where} ORDER BY scheduled_at", [start.isoformat(), end.isoformat(), *params])]
+    if grupo:
+        rows = [p for p in rows if p["group"]["id"] == grupo]
     by_day: dict[str, list] = {}
     for p in rows:
         by_day.setdefault(p["scheduled_at"][:10], []).append(p)
@@ -201,7 +266,9 @@ def calendar_page(request: Request, mes: str = ""):
              "outubro", "novembro", "dezembro"]
     return _render(request, "calendar.html", {
         "weeks": weeks, "by_day": by_day, "first": first, "today": date.today(), "prev_m": prev_m,
-        "next_m": next_m, "titulo": f"{meses[first.month - 1].capitalize()} {first.year}", "page": "cal"})
+        "next_m": next_m, "titulo": f"{meses[first.month - 1].capitalize()} {first.year}", "page": "cal",
+        "grupo": grupo, "mes": first.strftime("%Y-%m"),
+        "grupos_visiveis": [g for g in groups() if any(accounts()[a].group == g["id"] for a in me.visible_accounts)]})
 
 
 @app.get("/aprovar", response_class=HTMLResponse)
@@ -211,7 +278,7 @@ def approve_page(request: Request):
     with connect() as conn:
         rows = [_post_view(conn, r) for r in conn.execute(
             f"SELECT * FROM posts WHERE status='draft' AND {where} ORDER BY scheduled_at IS NULL, scheduled_at", params)]
-    return _render(request, "approve.html", {"posts": rows, "page": "approve"})
+    return _render(request, "approve.html", {"posts": rows, "post_groups": _group_posts(rows), "page": "approve"})
 
 
 @app.get("/post/{pid}", response_class=HTMLResponse)
@@ -222,7 +289,9 @@ def post_page(request: Request, pid: int):
     if not me.can_see(p["account_id"]):
         return _forbidden()
     extra = json.loads(p.get("script") or "{}")
-    return _render(request, "post.html", {"p": p, "extra": extra})
+    acc = p["account_id"]
+    return _render(request, "post.html", {"p": p, "extra": extra, "can_create": me.can_create(acc),
+                                          "can_approve": me.can_approve(acc)})
 
 
 @app.post("/post/{pid}")
@@ -237,11 +306,17 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             return _forbidden()
         if action in ("aprovar", "rejeitar") and not me.can_approve(acc):
             return _forbidden("Podes criar e editar nesta conta, mas não aprovar. Pede a um aprovador.")
+        if not me.can_create(acc):
+            return _forbidden("Nesta conta só tens acesso para ver.")
         fields: dict = {}
-        if caption.strip():
+        if caption.strip() and caption.strip() != (row["caption"] or ""):
             fields["caption"] = caption.strip()
         if quando:
-            fields["scheduled_at"] = parse_dt(quando).isoformat()
+            new_when = parse_dt(quando).isoformat()
+            if new_when[:16] != (row["scheduled_at"] or "")[:16]:
+                if not me.can_approve(acc):
+                    return _forbidden("Agendar (mudar a data) é para quem aprova nesta conta.")
+                fields["scheduled_at"] = new_when
         if fields:
             update_post(conn, pid, **fields)
         if action == "aprovar":
@@ -281,8 +356,10 @@ def media(request: Request, mid: int):
 @app.get("/criar", response_class=HTMLResponse)
 def create_page(request: Request):
     me = request.state.user
-    return _render(request, "create.html", {"page": "create",
-                                            "contas": [accounts()[a] for a in me.creatable_accounts]})
+    contas = [accounts()[a] for a in me.creatable_accounts]
+    contas_grupos = [(g, [a for a in contas if a.group == g["id"]]) for g in groups()]
+    return _render(request, "create.html", {"page": "create", "contas": contas,
+                                            "contas_grupos": [(g, cs) for g, cs in contas_grupos if cs]})
 
 
 def _save_uploads(files: list[UploadFile]) -> list[str]:
@@ -360,28 +437,73 @@ def chat_send(request: Request, mensagem: str = Form(...)):
 
 
 # ------------------------------------------------------------------ equipa (só administrador)
+def _invite(request: Request, uid: int, email: str, name: str, temp: str, novo: bool) -> bool:
+    """Envia o convite / a reposição por email, se o envio estiver configurado. Devolve True se enviou."""
+    if not (email and mailer.configured()):
+        return False
+    token = users.create_reset_token(uid)
+    link = f"{_base_url(request)}/repor?codigo={token}"
+    assunto = "Convite para o dashboard" if novo else "Repor a palavra-passe"
+    corpo = (f"Olá {name},\n\n" +
+             ("Foste convidado/a para o dashboard das redes sociais.\n" if novo else
+              "O administrador pediu a reposição da tua palavra-passe.\n") +
+             f"Define a tua palavra-passe neste link (válido {users.RESET_MINUTES} min, uso único):\n\n{link}\n\n"
+             f"Endereço do dashboard: {_base_url(request)}\n")
+    try:
+        mailer.send(email, assunto, corpo)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 @app.get("/equipa", response_class=HTMLResponse)
-def team_page(request: Request, criado: str = "", senha: str = ""):
+def team_page(request: Request, msg: str = "", senha: str = "", quem: str = ""):
     me = request.state.user
     if not me.is_admin:
         return _forbidden()
     with connect() as conn:
-        rows = [dict(r) for r in conn.execute("SELECT * FROM users ORDER BY is_admin DESC, name")]
+        rows = [dict(r) for r in conn.execute("SELECT * FROM users ORDER BY is_admin DESC, active DESC, name")]
     people = [{**r, "u": users.load(r["id"]) if r["active"] else None} for r in rows]
-    return _render(request, "team.html", {"people": people, "contas": list(accounts().values()),
-                                          "criado": criado, "senha": senha, "page": "team"})
+    ativos = sum(1 for r in rows if r["active"])
+    tabelas = [(g, accs, [p for p in people if p["active"]]) for g, accs in accounts_by_group()]
+    return _render(request, "team.html", {"people": people, "tabelas": tabelas, "msg": msg, "senha": senha,
+                                          "quem": quem, "ativos": ativos, "max_users": users.MAX_USERS,
+                                          "email_ok": mailer.configured(), "page": "team"})
 
 
 @app.post("/equipa/novo")
-def team_new(request: Request, username: str = Form(...), name: str = Form(...)):
+def team_new(request: Request, username: str = Form(...), name: str = Form(...), email: str = Form(...)):
     if not request.state.user.is_admin:
         return _forbidden()
-    temp = secrets.token_urlsafe(8)
+    if not users.valid_email(email):
+        return RedirectResponse("/equipa?msg=email_invalido", 303)
+    temp = secrets.token_urlsafe(9)
     try:
-        users.create(username, name, temp)
+        uid = users.create(username, name, temp, must_change=True, email=email)   # sem acesso a nenhuma conta
+    except users.LimitError:
+        return RedirectResponse("/equipa?msg=limite", 303)
+    except ValueError:
+        return RedirectResponse("/equipa?msg=email_repetido", 303)
     except Exception:  # noqa: BLE001 — utilizador repetido
-        return RedirectResponse("/equipa?criado=erro", 303)
-    return RedirectResponse(f"/equipa?criado={username}&senha={temp}", 303)
+        return RedirectResponse("/equipa?msg=repetido", 303)
+    if _invite(request, uid, users.normalize_email(email), name, temp, novo=True):
+        return RedirectResponse(f"/equipa?msg=convite_enviado&quem={username}", 303)
+    return RedirectResponse(f"/equipa?msg=criado&quem={username}&senha={temp}", 303)
+
+
+@app.post("/equipa/permissoes/{grupo}")
+async def team_levels(request: Request, grupo: str):
+    """Grava a tabela de permissões de UM grupo (linhas = utilizadores, colunas = contas do grupo)."""
+    if not request.state.user.is_admin:
+        return _forbidden()
+    form = await request.form()
+    contas = [a.id for g, accs in accounts_by_group() if g["id"] == grupo for a in accs]
+    with connect() as conn:
+        uids = [r["id"] for r in conn.execute("SELECT id FROM users WHERE active=1 AND is_admin=0")]
+    for uid in uids:
+        levels = {acc: str(form.get(f"lvl_{uid}_{acc}", "nenhum")) for acc in contas}
+        users.set_levels(uid, levels, only_accounts=contas)
+    return RedirectResponse(f"/equipa?msg=permissoes#grupo-{grupo}", 303)
 
 
 @app.post("/equipa/{uid}")
@@ -390,33 +512,58 @@ async def team_update(request: Request, uid: int):
     if not me.is_admin:
         return _forbidden()
     form = await request.form()
-    action = form.get("action", "guardar")
+    action = form.get("action", "")
+    target = users.load(uid)
     if action == "senha":
-        temp = secrets.token_urlsafe(8)
-        users.set_password(uid, temp)
-        return RedirectResponse(f"/equipa?criado=senha&senha={temp}", 303)
+        temp = secrets.token_urlsafe(9)
+        users.set_password(uid, temp, must_change=True)
+        if target and _invite(request, uid, target.email, target.name, temp, novo=False):
+            return RedirectResponse(f"/equipa?msg=reposicao_enviada&quem={target.username}", 303)
+        return RedirectResponse(f"/equipa?msg=senha&quem={target.username if target else ''}&senha={temp}", 303)
     if action in ("desativar", "ativar"):
         if uid == me.id:
             return _forbidden("Não te podes desativar a ti próprio.")
-        with connect() as conn:
-            conn.execute("UPDATE users SET active=? WHERE id=?", (int(action == "ativar"), uid))
+        try:
+            users.set_active(uid, action == "ativar")
+        except users.LimitError:
+            return RedirectResponse("/equipa?msg=limite", 303)
         return RedirectResponse("/equipa", 303)
-    perms = {a: {"create": f"c_{a}" in form, "approve": f"a_{a}" in form} for a in accounts()}
-    users.set_perms(uid, perms)
+    if action == "email":
+        email = str(form.get("email", ""))
+        if not users.valid_email(email):
+            return RedirectResponse("/equipa?msg=email_invalido", 303)
+        try:
+            users.set_email(uid, email)
+        except ValueError:
+            return RedirectResponse("/equipa?msg=email_repetido", 303)
+        return RedirectResponse("/equipa?msg=email_ok", 303)
     return RedirectResponse("/equipa", 303)
 
 
 @app.get("/conta", response_class=HTMLResponse)
-def my_account(request: Request, ok: str = ""):
-    return _render(request, "account.html", {"ok": ok})
+def my_account(request: Request, ok: str = "", primeira: str = ""):
+    return _render(request, "account.html", {"ok": ok, "primeira": primeira or request.state.user.must_change})
 
 
 @app.post("/conta")
-def my_account_save(request: Request, atual: str = Form(...), nova: str = Form(...)):
+def my_account_save(request: Request, atual: str = Form(...), nova: str = Form(""), confirmar: str = Form(""),
+                    email: str = Form("")):
     me = request.state.user
-    if len(nova) < 8 or not users.authenticate(me.username, atual):
+    if not users.authenticate(me.username, atual):
         return RedirectResponse("/conta?ok=erro", 303)
-    users.set_password(me.id, nova)
+    if email.strip() and users.normalize_email(email) != me.email:
+        if not users.valid_email(email):
+            return RedirectResponse("/conta?ok=email_invalido", 303)
+        try:
+            users.set_email(me.id, email)
+        except ValueError:
+            return RedirectResponse("/conta?ok=email_repetido", 303)
+    if nova or me.must_change:
+        if len(nova) < 8 or nova != confirmar or nova == atual:
+            return RedirectResponse("/conta?ok=erro", 303)
+        users.set_password(me.id, nova, must_change=False)
+    if not users.load(me.id).email:
+        return RedirectResponse("/conta?ok=falta_email", 303)
     return RedirectResponse("/conta?ok=1", 303)
 
 
@@ -427,6 +574,12 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("ELEVENLABS_VOICE_ID", "Voice ID da voz 'David Carreto'", False),
     ("PIXABAY_API_KEY", "Chave da Pixabay", True),
     ("PEXELS_API_KEY", "Chave do Pexels (opcional; se existir, tem prioridade sobre a Pixabay)", True),
+    # envio de emails (convites e "esqueci-me da palavra-passe"): conta PRÓPRIA deste sistema
+    ("SMTP_HOST", "Email · servidor SMTP (ex.: smtp.gmail.com)", False),
+    ("SMTP_PORT", "Email · porta (587 ou 465)", False),
+    ("SMTP_USER", "Email · utilizador (endereço de envio)", False),
+    ("SMTP_PASSWORD", "Email · palavra-passe de aplicação (NÃO usar a 'carretos-avaliacoes')", True),
+    ("SMTP_FROM", "Email · remetente (opcional, ex.: Redes Sociais <endereco@…>)", False),
 ]
 
 
@@ -439,6 +592,10 @@ KEY_FORMATS = {
     "ELEVENLABS_VOICE_ID": (_re.compile(r"^[A-Za-z0-9]{15,40}$"), "só letras e números, sem espaços (~20)"),
     "PIXABAY_API_KEY": (_re.compile(r"^\d+-[0-9a-fA-F]{20,}$"), "números, um hífen e letras/números"),
     "PEXELS_API_KEY": (_re.compile(r"^[A-Za-z0-9]{40,64}$"), "~56 letras e números"),
+    "SMTP_HOST": (_re.compile(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"), "um servidor, ex.: smtp.gmail.com"),
+    "SMTP_PORT": (_re.compile(r"^(25|465|587|2525)$"), "587 ou 465"),
+    "SMTP_USER": (_re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$"), "um endereço de email"),
+    "SMTP_PASSWORD": (_re.compile(r"^\S{8,}$"), "a palavra-passe de aplicação, sem espaços"),
 }
 
 
@@ -473,7 +630,10 @@ async def config_save(request: Request):
         pw = str(form.get("admin_password", ""))
         if len(pw) < 8:
             return HTMLResponse("A palavra-passe tem de ter pelo menos 8 caracteres.", 400)
-        admin_id = users.create("david", "David Carreto", pw, is_admin=True)
+        admin_email = str(form.get("admin_email", ""))
+        if not users.valid_email(admin_email):
+            return HTMLResponse("Indica um email válido para o administrador.", 400)
+        admin_id = users.create("david", "David Carreto", pw, is_admin=True, email=admin_email)
     else:
         me = _current_user(request)
         if not (me and me.is_admin):
@@ -484,6 +644,8 @@ async def config_save(request: Request):
     rejected = []
     for key, _, _ in CONFIG_FIELDS:
         value = str(form.get(key, "")).strip()
+        if key == "SMTP_PASSWORD":
+            value = value.replace(" ", "")                    # o Gmail mostra-a em blocos de 4 com espaços
         if not value:
             continue                                         # vazio = manter o valor atual
         if _bad_key(key, value):

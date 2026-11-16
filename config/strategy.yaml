@@ -74,3 +74,5 @@ render:
   facebook_profile: {video: [1080, 1920], image: [1080, 1350], max_seconds: 180}
   linkedin_member: {video: [1080, 1350], image: [1200, 1500], max_seconds: 600}
   linkedin_org: {video: [1080, 1350], image: [1200, 1500], max_seconds: 600}
+  facebook_page: {video: [1080, 1920], image: [1080, 1350], max_seconds: 180}
+  youtube: {video: [1080, 1920], image: [1280, 720], max_seconds: 60}   # Shorts

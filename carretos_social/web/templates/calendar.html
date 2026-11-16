@@ -1,10 +1,14 @@
 {% extends "base.html" %}{% block body %}
 <div class="row" style="justify-content:space-between"><h1>{{ titulo }}</h1>
-<div class="row"><a class="btn" href="/calendario?mes={{ prev_m }}">‹</a><a class="btn" href="/calendario">Hoje</a><a class="btn" href="/calendario?mes={{ next_m }}">›</a></div></div>
+<div class="row"><a class="btn" href="/calendario?mes={{ prev_m }}&grupo={{ grupo }}">‹</a><a class="btn" href="/calendario?grupo={{ grupo }}">Hoje</a><a class="btn" href="/calendario?mes={{ next_m }}&grupo={{ grupo }}">›</a></div></div>
+{% if grupos_visiveis|length > 1 %}<div class="tabsel" style="margin-bottom:10px">
+<a href="/calendario?mes={{ mes }}"><span style="{{ 'border-color:var(--gold);color:var(--gold)' if not grupo }}">Todos</span></a>
+{% for g in grupos_visiveis %}<a href="/calendario?mes={{ mes }}&grupo={{ g.id }}"><span style="{{ 'border-color:var(--gold);color:var(--gold)' if grupo == g.id }}"><span class="gtag {{ g.id }}">{{ 'DC' if g.id == 'david' else 'CG' }}</span>{{ g.short }}</span></a>{% endfor %}
+</div>{% endif %}
 <div class="cal">{% for d in ['seg','ter','qua','qui','sex','sáb','dom'] %}<div class="h">{{ d }}</div>{% endfor %}
 {% for w in weeks %}{% for d in w %}{% set key = d.isoformat() %}
 <div class="day {{ 'out' if d.month != first.month }} {{ 'today' if d == today }}"><div class="n">{{ d.day }}</div>
-{% for p in by_day.get(key, []) %}<a class="chip" href="/post/{{ p.id }}" style="border-color:{{ STATUS[p.status][1] }}" title="{{ p.title }}">{{ p.scheduled_at[11:16] }} {{ ICON[p.account.platform] }}<span class="t"> {{ p.title or tema(p.pillar) }}</span></a>{% endfor %}
+{% for p in by_day.get(key, []) %}<a class="chip" href="/post/{{ p.id }}" style="border-color:{{ STATUS[p.status][1] }}" title="{{ p.title }}"><span class="gtag {{ p.group.id }}">{{ 'DC' if p.group.id == 'david' else 'CG' }}</span>{{ p.scheduled_at[11:16] }} {{ ICON.get(p.account.platform,'') }}<span class="t"> {{ p.title or tema(p.pillar) }}</span></a>{% endfor %}
 </div>{% endfor %}{% endfor %}</div>
-<p class="row" style="margin-top:12px;font-size:12px">{% for k,v in STATUS.items() %}<span class="pill" style="color:{{ v[1] }};border-color:{{ v[1] }}">{{ v[0] }}</span>{% endfor %}</p>
+<p class="row" style="margin-top:12px;font-size:12px"><span><span class="gtag david">DC</span>David Carreto</span><span><span class="gtag carretos">CG</span>Carretos Group</span>{% for k,v in STATUS.items() %}<span class="pill" style="color:{{ v[1] }};border-color:{{ v[1] }}">{{ v[0] }}</span>{% endfor %}</p>
 {% endblock %}

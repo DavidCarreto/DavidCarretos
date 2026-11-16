@@ -67,7 +67,7 @@ analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legenda
 - **Criar**: vídeo do zero a partir de um tema, edição de um vídeo teu, montagem de vários vídeos ou imagem com uma frase.
 - **Assistente**: escreves em português ("passa o post de quarta para as 20h", "cria 3 vídeos sobre liderança") e ele faz.
 
-**Equipa e permissões:** cada pessoa entra com o seu utilizador. Em **Equipa** (só o administrador), dás a cada pessoa, conta a conta, as permissões **Criar** e/ou **Aprovar**. Quem não tem acesso a uma conta não a vê: nem a agenda, nem os vídeos, nem as métricas, e o assistente também não lhe mexe. Fica registado quem criou e quem aprovou cada publicação.
+**Equipa e permissões (até 5 utilizadores, incluindo o administrador):** as contas estão em dois grupos, **Redes do David Carreto** (pessoais e Carreto Clips) e **Redes da Carretos Group** (empresa). Na página **Equipa** há uma tabela de permissões por grupo (linhas = pessoas, colunas = contas), com um nível por conta: **Sem acesso**, **Ver** (agenda e métricas), **Criar** (rascunhos e enviar para aprovação) e **Aprovar** (aprovar, rejeitar e agendar). Cada nível inclui os anteriores, e há um atalho para aplicar o mesmo nível a todas as contas do grupo. Quem é convidado fica sem acesso a tudo até lhe dares permissões. Cada pessoa tem email; o convite e o "esqueci-me da palavra-passe" vão por email, se o envio estiver configurado no ⚙ (SMTP de uma conta própria). Senão, o administrador gera uma palavra-passe temporária, que tem de ser mudada no 1.º login.
 
 Servidor de produção (estado, atualizar, SSH): `docs/SERVIDOR.md`. Instalação: `deploy/setup_servidor.sh` (idempotente); atualizações: `deploy/atualizar.sh`. Guias: `docs/GUIA_INSTAGRAM.md` e `docs/TESTE_KLING.md`.
 

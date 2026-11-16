@@ -43,7 +43,8 @@ def test_csv_import_and_best_times(tmp_path):
         assert analyzer.best_times(conn, "tt_davidcarreto")[0] == "20:00"
 
 
-def test_publish_requires_media_and_dry_run_works(tmp_path):
+def test_publish_requires_media_and_dry_run_works(tmp_path, monkeypatch):
+    monkeypatch.setenv("TT_CARRETOCLIPS_TOKEN", "token-de-teste")   # conta "ligada"
     f = tmp_path / "v.mp4"
     f.write_bytes(b"x")
     with connect() as conn:
@@ -152,3 +153,40 @@ def test_next_free_slot_and_no_date_blocks_approval():
         assert second.startswith("2030-01-10T09:00")           # o slot ocupado é saltado
         pid = add_post(conn, account_id="li_carretosgroup", format="text", caption="sem data")
         assert "sem data/hora" in ready_problems(get_post(conn, pid))
+
+
+def test_unconnected_account_is_never_published():
+    with connect() as conn:
+        pid = add_post(conn, account_id="ig_carretosgroup", format="image", caption="x", status="approved",
+                       scheduled_at="2020-01-01T10:00:00+00:00", media_ids=[1])
+        assert "por ligar" in publish_post(conn, pid)
+        assert get_post(conn, pid)["status"] == "approved"      # continua aprovado, à espera da ligação
+
+
+def test_migration_from_old_database(tmp_path):
+    """Base de dados do servidor (formato antigo) → níveis por conta, email e must_change, sem perder nada."""
+    import sqlite3
+    old = tmp_path / "carretos.db"
+    c = sqlite3.connect(old)
+    c.executescript("""
+        CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, name TEXT,
+            pw_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL);
+        CREATE TABLE user_accounts (user_id INTEGER NOT NULL, account_id TEXT NOT NULL,
+            can_create INTEGER NOT NULL DEFAULT 0, can_approve INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, account_id));
+        INSERT INTO users(username, name, pw_hash, is_admin, created_at) VALUES ('david','David Carreto','x',1,'2026');
+        INSERT INTO users(username, name, pw_hash, is_admin, created_at) VALUES ('ana','Ana','y',0,'2026');
+        INSERT INTO user_accounts VALUES (2,'ig_carretoclips',1,0), (2,'tt_carretoclips',1,1);
+    """)
+    c.commit()
+    c.close()
+    from carretos_social.web import users
+    with connect(old) as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+        assert {"email", "must_change"} <= cols
+        lv = {r["account_id"]: r["level"] for r in conn.execute("SELECT * FROM user_accounts WHERE user_id=2")}
+        assert lv == {"ig_carretoclips": "criar", "tt_carretoclips": "aprovar"}
+        admin = conn.execute("SELECT username, is_admin, must_change FROM users WHERE id=1").fetchone()
+        assert tuple(admin) == ("david", 1, 0)                # o david continua administrador, sem obrigações
+    _ = users

@@ -35,3 +35,12 @@ textarea{min-height:120px}label{display:block;font-size:13px;color:var(--muted);
 .tabsel input:checked+span{border-color:var(--gold);color:var(--gold)}
 pre.log{white-space:pre-wrap;font-size:12px;color:var(--muted);max-height:180px;overflow:auto;background:#0b0b0c;padding:8px;border-radius:8px}
 input[type=checkbox]{accent-color:var(--gold);width:20px;height:20px}
+table.perm{border-collapse:collapse;width:100%;font-size:13px;min-width:560px}
+table.perm th{font-size:11px;color:var(--muted);padding:6px 4px;font-weight:700;vertical-align:bottom}
+table.perm td{border-top:1px solid var(--line);padding:6px 4px;text-align:center}
+table.perm select{padding:6px 4px;font-size:12px;border-radius:8px;min-width:86px}
+select.lvl-nenhum{color:var(--muted)}select.lvl-ver{color:#7cc4ff}select.lvl-criar{color:#e3b341}select.lvl-aprovar{color:#3fb950;font-weight:700}
+.gtag{display:inline-block;font-size:9px;font-weight:800;padding:0 4px;border-radius:4px;margin-right:3px;vertical-align:1px}
+.gtag.david{background:var(--gold);color:#000}.gtag.carretos{background:#00A3E0;color:#000}
+.ghead{display:flex;align-items:center;gap:8px;margin:22px 0 10px;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.ghead .gtag{font-size:11px;padding:2px 6px}

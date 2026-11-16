@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS user_accounts (
     PRIMARY KEY (user_id, account_id)
 );
 
+-- pedidos de reposição de palavra-passe (só se guarda o hash do código; uso único; expira)
+CREATE TABLE IF NOT EXISTS password_resets (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS account_stats (
     account_id TEXT NOT NULL,
     day TEXT NOT NULL,
@@ -124,15 +132,22 @@ MIGRATIONS = [  # colunas acrescentadas depois (ALTER TABLE é ignorado se já e
     "ALTER TABLE posts ADD COLUMN approved_by INTEGER",
     "ALTER TABLE jobs ADD COLUMN created_by INTEGER",
     "ALTER TABLE chat ADD COLUMN user_id INTEGER",
+    "ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE user_accounts ADD COLUMN level TEXT",
+    "ALTER TABLE users ADD COLUMN email TEXT",
 ]
 
 
 def _migrate(conn) -> None:
-    cols = {t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")} for t in ("posts", "jobs", "chat")}
+    tables = ("posts", "jobs", "chat", "users", "user_accounts")
+    cols = {t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")} for t in tables}
     for sql in MIGRATIONS:
         table, col = sql.split()[2], sql.split()[5]
         if col not in cols[table]:
             conn.execute(sql)
+    # permissões antigas (criar/aprovar) → nível por conta, sem perder nada
+    conn.execute("UPDATE user_accounts SET level = CASE WHEN can_approve=1 THEN 'aprovar' "
+                 "WHEN can_create=1 THEN 'criar' ELSE 'ver' END WHERE level IS NULL")
 
 
 @contextmanager

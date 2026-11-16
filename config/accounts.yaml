@@ -7,8 +7,21 @@
 #   assist  -> a plataforma não permite publicação por API; o sistema prepara tudo
 #              (vídeo, capa, legenda) e envia-te um lembrete para publicares em 1 toque.
 
+# group: a que grupo pertence a conta (define as duas tabelas de permissões na página "Equipa")
+#   david     -> "Redes do David Carreto" (pessoais + Carreto Clips)
+#   carretos  -> "Redes da Carretos Group" (empresa)
+# status: "por_ligar" enquanto não houver handle/tokens (o sistema não publica nestas contas)
+groups:
+  - id: david
+    name: "Redes do David Carreto"
+    short: "David Carreto"
+  - id: carretos
+    name: "Redes da Carretos Group"
+    short: "Carretos Group"
+
 accounts:
   - id: ig_davidcarreto
+    group: david
     platform: instagram
     name: "David Carreto (Instagram pessoal)"
     handle: "davidcarretos"
@@ -22,6 +35,7 @@ accounts:
       user_id_env: IG_DAVIDCARRETO_USER_ID
 
   - id: ig_carretoclips
+    group: david
     platform: instagram
     name: "Carreto Clips (Instagram)"
     handle: "carretoclips"
@@ -34,6 +48,7 @@ accounts:
       user_id_env: IG_CARRETOCLIPS_USER_ID
 
   - id: fb_davidcarreto
+    group: david
     platform: facebook_profile
     name: "David Carreto (Facebook pessoal)"
     handle: "davidcarreto"
@@ -46,6 +61,7 @@ accounts:
     credentials: {}
 
   - id: tt_davidcarreto
+    group: david
     platform: tiktok
     name: "David Carreto (TikTok pessoal)"
     handle: "davidcarreto"
@@ -58,6 +74,7 @@ accounts:
       access_token_env: TT_DAVIDCARRETO_TOKEN
 
   - id: tt_carretoclips
+    group: david
     platform: tiktok
     name: "Carreto Clips (TikTok)"
     handle: "carretoclips"
@@ -69,6 +86,7 @@ accounts:
       access_token_env: TT_CARRETOCLIPS_TOKEN
 
   - id: li_davidcarreto
+    group: david
     platform: linkedin_member
     name: "David Carreto (LinkedIn pessoal)"
     handle: "davidcarreto"
@@ -82,9 +100,11 @@ accounts:
       author_urn_env: LI_DAVIDCARRETO_URN        # urn:li:person:XXXX
 
   - id: li_carretosgroup
+    group: carretos
     platform: linkedin_org
     name: "Carretos Group (LinkedIn empresa)"
-    handle: "carretos-group"
+    handle: ""                # por preencher (o David indica)
+    status: por_ligar
     voice: empresa
     narrator: generica      # voz: david | generica | nenhum
     theme: carretos         # identidade: pessoal (preto e dourado) | carretos (azul)
@@ -93,3 +113,63 @@ accounts:
     credentials:
       access_token_env: LI_CARRETOSGROUP_TOKEN
       author_urn_env: LI_CARRETOSGROUP_URN       # urn:li:organization:XXXX
+
+  # ---------------- Grupo B (Carretos Group): contas novas, por ligar ----------------
+  - id: ig_carretosgroup
+    group: carretos
+    platform: instagram
+    name: "Carretos Group (Instagram)"
+    handle: ""                # por preencher (o David indica)
+    status: por_ligar
+    voice: empresa
+    narrator: generica
+    theme: carretos
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: IG_CARRETOSGROUP_TOKEN
+      user_id_env: IG_CARRETOSGROUP_USER_ID
+
+  - id: fb_carretosgroup
+    group: carretos
+    platform: facebook_page
+    name: "Carretos Group (Página de Facebook)"
+    handle: ""                # por preencher (o David indica)
+    status: por_ligar
+    voice: empresa
+    narrator: generica
+    theme: carretos
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: FB_CARRETOSGROUP_PAGE_TOKEN
+      page_id_env: FB_CARRETOSGROUP_PAGE_ID
+
+  - id: tt_carretosgroup
+    group: carretos
+    platform: tiktok
+    name: "Carretos Group (TikTok)"
+    handle: ""                # por preencher (o David indica)
+    status: por_ligar
+    voice: empresa
+    narrator: generica
+    theme: carretos
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: TT_CARRETOSGROUP_TOKEN
+
+  - id: yt_carretosgroup
+    group: carretos
+    platform: youtube
+    name: "Carretos Group (YouTube)"
+    handle: ""                # por preencher (o David indica)
+    status: por_ligar
+    voice: empresa
+    narrator: generica
+    theme: carretos
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      refresh_token_env: YT_CARRETOSGROUP_REFRESH_TOKEN
+      channel_id_env: YT_CARRETOSGROUP_CHANNEL_ID

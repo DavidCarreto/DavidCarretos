@@ -7,7 +7,7 @@
   <label><input type="radio" name="tipo" value="montagem"><span>⧉ Juntar vídeos</span></label>
   <label><input type="radio" name="tipo" value="imagem"><span>▢ Imagem com frase</span></label>
  </div>
- <label>Conta</label><select name="conta">{% for a in contas %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select>
+ <label>Conta</label><select name="conta">{% for g, cs in contas_grupos %}<optgroup label="{{ g.name }}">{% for a in cs %}<option value="{{ a.id }}">{{ a.label }}</option>{% endfor %}</optgroup>{% endfor %}</select>
  <label id="lt">Tema ou mensagem</label><textarea name="tema" rows="3" placeholder="Ex.: uma lição sobre falhar e voltar a tentar"></textarea>
  <div id="up" style="display:none"><label>Vídeo(s)</label><input type="file" name="ficheiros" accept="video/*" multiple></div>
  <div class="row"><div style="flex:1"><label>Duração (s)</label><input type="number" name="segundos" value="35" min="10" max="90"></div>

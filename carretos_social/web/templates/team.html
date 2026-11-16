@@ -1,23 +1,73 @@
 {% extends "base.html" %}{% block body %}
-<h1>Equipa</h1>
-{% if criado == 'erro' %}<div class="card" style="border-color:#f85149">Esse utilizador já existe.</div>
-{% elif senha %}<div class="card" style="border-color:#D4AF37">✓ {{ 'Palavra-passe reposta' if criado == 'senha' else 'Utilizador <b>' ~ criado ~ '</b> criado' }}.
-Palavra-passe temporária: <b class="gold" style="font-size:18px">{{ senha }}</b><br><span class="muted">Envia-a à pessoa por um canal privado; ela muda-a em "A minha conta". Não volta a ser mostrada.</span></div>{% endif %}
-<form method="post" action="/equipa/novo" class="card" style="margin:12px 0"><b>Novo utilizador</b>
-<div class="row"><div style="flex:1"><label>Nome</label><input name="name" required placeholder="Ex.: Ana Silva"></div>
-<div style="flex:1"><label>Utilizador (para entrar)</label><input name="username" required autocapitalize="none" placeholder="ana"></div></div>
-<p><button class="btn gold">Criar</button></p></form>
+<h1>Equipa <span class="muted" style="font-size:15px">({{ ativos }}/{{ max_users }} utilizadores ativos)</span></h1>
+
+{% set mensagens = {
+ 'limite': ('#f85149', 'Limite de ' ~ max_users ~ ' utilizadores ativos atingido (incluindo o administrador). Desativa alguém antes de criar ou reativar outro utilizador.'),
+ 'repetido': ('#f85149', 'Esse nome de utilizador já existe.'),
+ 'email_repetido': ('#f85149', 'Já existe um utilizador com esse email.'),
+ 'email_invalido': ('#f85149', 'O email não é válido.'),
+ 'permissoes': ('#3fb950', '✓ Permissões guardadas.'),
+ 'email_ok': ('#3fb950', '✓ Email atualizado.'),
+ 'convite_enviado': ('#3fb950', '✓ Utilizador ' ~ quem ~ ' criado. Foi enviado um convite por email para definir a palavra-passe.'),
+ 'reposicao_enviada': ('#3fb950', '✓ Foi enviado a ' ~ quem ~ ' um email para repor a palavra-passe.'),
+} %}
+{% if msg in mensagens %}<div class="card" style="border-color:{{ mensagens[msg][0] }};margin-bottom:12px">{{ mensagens[msg][1] }}</div>{% endif %}
+{% if senha %}<div class="card" style="border-color:#D4AF37;margin-bottom:12px">
+✓ {{ 'Utilizador <b>' ~ quem ~ '</b> criado' if msg == 'criado' else 'Palavra-passe de <b>' ~ quem ~ '</b> reposta' }}.
+Palavra-passe <b>temporária</b>: <b class="gold" style="font-size:18px">{{ senha }}</b><br>
+<span class="muted">Envia-a à pessoa por um canal privado. No 1.º login é obrigada a definir a sua. Não volta a ser mostrada.
+{% if not email_ok %}(Configura o envio de email no ⚙ para os convites e reposições irem automaticamente por email.){% endif %}</span></div>{% endif %}
+
+<form method="post" action="/equipa/novo" class="card" style="margin:12px 0" autocomplete="off"><b>Convidar utilizador</b>
+<p class="muted" style="font-size:13px;margin:4px 0">Fica <b>sem acesso</b> a todas as contas até lhe dares permissões nas tabelas abaixo.</p>
+<div class="row"><div style="flex:1;min-width:140px"><label>Nome</label><input name="name" required placeholder="Ex.: Ana Silva" autocomplete="off"></div>
+<div style="flex:1;min-width:120px"><label>Utilizador</label><input name="username" required autocapitalize="none" placeholder="ana" autocomplete="off"></div>
+<div style="flex:1.4;min-width:180px"><label>Email</label><input type="email" name="email" required placeholder="ana@exemplo.pt" autocomplete="off"></div></div>
+<p><button class="btn gold" {{ 'disabled' if ativos >= max_users }}>Convidar</button>
+{% if ativos >= max_users %}<span class="muted" style="font-size:13px"> Limite de {{ max_users }} atingido.</span>{% endif %}</p></form>
+
+{% for g, accs, pessoas in tabelas %}
+<h2 id="grupo-{{ g.id }}">{{ g.name }}</h2>
+<form method="post" action="/equipa/permissoes/{{ g.id }}" class="card" style="overflow-x:auto">
+<table class="perm" data-grupo="{{ g.id }}">
+<tr><th style="text-align:left">Utilizador</th>
+{% for a in accs %}<th title="{{ a.name }}">{{ ICON.get(a.platform,'') }}<br><span style="font-weight:500">{{ a.name.split('(')[-1].rstrip(')') if '(' in a.name else a.name }}</span>{% if not a.connected %}<br><span class="muted" style="font-size:10px">por ligar</span>{% endif %}</th>{% endfor %}
+<th>Todas</th></tr>
+{% for p in pessoas %}<tr>
+<td style="text-align:left;white-space:nowrap"><b>{{ p.name }}</b><br><span class="muted" style="font-size:12px">{{ p.username }}</span></td>
+{% if p.is_admin %}{% for a in accs %}<td><span class="gold" style="font-size:12px">Total</span></td>{% endfor %}<td></td>
+{% else %}
+{% for a in accs %}{% set cur = p.u.level(a.id) if p.u else 'nenhum' %}
+<td><select name="lvl_{{ p.id }}_{{ a.id }}" class="lvl lvl-{{ cur }}" autocomplete="off">
+{% for l in LEVELS %}<option value="{{ l }}" {{ 'selected' if l == cur }}>{{ LEVEL_LABELS[l] }}</option>{% endfor %}</select></td>{% endfor %}
+<td><select class="todas" autocomplete="off"><option value="">—</option>{% for l in LEVELS %}<option value="{{ l }}">{{ LEVEL_LABELS[l] }}</option>{% endfor %}</select></td>
+{% endif %}</tr>{% endfor %}
+</table>
+<p class="muted" style="font-size:12px">Ver = agenda e métricas · Criar = criar e editar rascunhos, enviar para aprovação · Aprovar = aprovar/rejeitar e agendar (inclui Criar e Ver).</p>
+<button class="btn gold">Guardar permissões — {{ g.short }}</button>
+</form>
+{% endfor %}
+
+<h2>Utilizadores</h2>
 {% for p in people %}
-<form method="post" action="/equipa/{{ p.id }}" class="card" style="margin-bottom:12px">
+<div class="card" style="margin-bottom:10px">
 <div class="row" style="justify-content:space-between"><b>{{ p.name }} <span class="muted">({{ p.username }})</span></b>
-<span>{% if p.is_admin %}<span class="pill gold" style="border-color:currentColor">Administrador</span>{% elif not p.active %}<span class="pill" style="color:#f85149;border-color:currentColor">Desativado</span>{% endif %}</span></div>
-{% if p.is_admin %}<p class="muted">Acesso total a todas as contas.</p>
-{% elif p.active %}
-<table style="width:100%;margin-top:8px;font-size:14px;border-collapse:collapse"><tr class="muted"><td>Conta</td><td style="text-align:center">Criar</td><td style="text-align:center">Aprovar</td></tr>
-{% for a in contas %}<tr style="border-top:1px solid var(--line)"><td style="padding:6px 0">{{ ICON.get(a.platform,'') }} {{ a.name }}</td>
-<td style="text-align:center"><input type="checkbox" style="width:20px;height:20px" name="c_{{ a.id }}" {{ 'checked' if p.u and p.u.perms.get(a.id,{}).get('create') }}></td>
-<td style="text-align:center"><input type="checkbox" style="width:20px;height:20px" name="a_{{ a.id }}" {{ 'checked' if p.u and p.u.perms.get(a.id,{}).get('approve') }}></td></tr>{% endfor %}</table>
-<div class="row" style="margin-top:10px"><button class="btn gold" name="action" value="guardar">Guardar permissões</button>
-<button class="btn" name="action" value="senha">Repor palavra-passe</button><button class="btn red" name="action" value="desativar">Desativar</button></div>
+<span>{% if p.is_admin %}<span class="pill gold" style="border-color:currentColor">Administrador</span>{% elif not p.active %}<span class="pill" style="color:#f85149;border-color:currentColor">Desativado</span>{% elif p.must_change %}<span class="pill" style="color:#d29922;border-color:currentColor">Por ativar</span>{% endif %}</span></div>
+<form method="post" action="/equipa/{{ p.id }}" class="row" style="margin-top:8px" autocomplete="off">
+<input type="email" name="email" value="{{ p.email or '' }}" placeholder="email" style="flex:1;min-width:200px" autocomplete="off">
+<button class="btn" name="action" value="email">Guardar email</button>
+{% if not p.is_admin %}
+{% if p.active %}<button class="btn" name="action" value="senha">Repor palavra-passe</button>
+<button class="btn red" name="action" value="desativar">Desativar</button>
 {% else %}<button class="btn" name="action" value="ativar">Reativar</button>{% endif %}
-</form>{% endfor %}{% endblock %}
+{% endif %}</form>
+</div>{% endfor %}
+
+<script>
+document.querySelectorAll('select.todas').forEach(s => s.addEventListener('change', () => {
+  if (!s.value) return;
+  s.closest('tr').querySelectorAll('select.lvl').forEach(x => { x.value = s.value; x.className = 'lvl lvl-' + s.value; });
+}));
+document.querySelectorAll('select.lvl').forEach(x => x.addEventListener('change', () => x.className = 'lvl lvl-' + x.value));
+</script>
+{% endblock %}

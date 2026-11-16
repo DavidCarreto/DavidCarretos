@@ -45,6 +45,9 @@ def ready_problems(row) -> list[str]:
 def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
     row = get_post(conn, post_id)
     acc = account(row["account_id"])
+    if not acc.connected:
+        update_post(conn, post_id, error="conta por ligar (falta o handle/os tokens): não publicado")
+        return f"#{post_id} não publicado: a conta {acc.name} ainda está por ligar"
     problems = ready_problems(row)
     if problems:
         update_post(conn, post_id, error="; ".join(problems))

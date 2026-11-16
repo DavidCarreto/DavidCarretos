@@ -1,11 +1,23 @@
 {% extends "base.html" %}{% block body %}
 <h1>A minha conta</h1>
 <p class="muted">{{ me.name }} · utilizador <b>{{ me.username }}</b>{% if me.is_admin %} · administrador{% endif %}</p>
-{% if ok == '1' %}<div class="card" style="border-color:#3fb950">✓ Palavra-passe alterada.</div>{% elif ok %}<div class="card" style="border-color:#f85149">Palavra-passe atual errada, ou a nova tem menos de 8 caracteres.</div>{% endif %}
-<form method="post" class="card" style="margin-top:12px"><label>Palavra-passe atual</label><input type="password" name="atual" required>
-<label>Nova palavra-passe (mín. 8)</label><input type="password" name="nova" minlength="8" required>
-<p><button class="btn gold">Mudar palavra-passe</button></p></form>
+{% if primeira %}<div class="card" style="border-color:#D4AF37;margin-bottom:12px">Bem-vindo/a! Estás a usar uma palavra-passe
+<b>temporária</b>: define já a tua (e confirma o teu email) para continuares.</div>{% endif %}
+{% set avisos = {'1': ('#3fb950', '✓ Guardado.'), 'erro': ('#f85149', 'Palavra-passe atual errada, ou a nova tem menos de 8 caracteres, não coincide ou é igual à atual.'),
+ 'email_invalido': ('#f85149', 'O email não é válido.'), 'email_repetido': ('#f85149', 'Esse email já está associado a outro utilizador.'),
+ 'falta_email': ('#d29922', 'Indica o teu email: é preciso para recuperares a palavra-passe.')} %}
+{% if ok in avisos %}<div class="card" style="border-color:{{ avisos[ok][0] }};margin-bottom:12px">{{ avisos[ok][1] }}</div>{% endif %}
+<form method="post" class="card">
+<label>Palavra-passe atual {% if primeira %}(a temporária){% endif %}</label><input type="password" name="atual" required autocomplete="current-password">
+<label>Email</label><input type="email" name="email" value="{{ me.email }}" {{ 'required' if not me.email }} autocomplete="email">
+<label>Nova palavra-passe (mín. 8){% if not primeira %} — deixa vazio para manter{% endif %}</label>
+<input type="password" name="nova" minlength="8" {{ 'required' if primeira }} autocomplete="new-password">
+<label>Confirmar nova palavra-passe</label><input type="password" name="confirmar" minlength="8" {{ 'required' if primeira }} autocomplete="new-password">
+<p><button class="btn gold">Guardar</button></p></form>
+{% if not primeira %}
 <h2>As minhas contas</h2>
-<div class="card">{% for a in accounts().values() %}{% if me.can_see(a.id) %}<p style="margin:6px 0">{{ ICON.get(a.platform,'') }} {{ a.name }} —
-<span class="gold">{{ 'criar' if me.can_create(a.id) }}{{ ' + ' if me.can_create(a.id) and me.can_approve(a.id) }}{{ 'aprovar' if me.can_approve(a.id) }}</span></p>{% endif %}{% endfor %}</div>
+{% for g, accs in accounts_by_group() %}{% set mine = accs|selectattr('id', 'in', me.visible_accounts)|list %}
+{% if mine %}<div class="card" style="margin-bottom:10px"><div class="ghead" style="margin:0 0 6px"><span class="gtag {{ g.id }}">{{ g.short }}</span></div>
+{% for a in mine %}<p style="margin:6px 0">{{ ICON.get(a.platform,'') }} {{ a.label }} — <span class="gold">{{ LEVEL_LABELS[me.level(a.id)] }}</span></p>{% endfor %}</div>{% endif %}
+{% endfor %}{% endif %}
 {% endblock %}

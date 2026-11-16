@@ -1,0 +1,14 @@
+<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nova palavra-passe</title><link rel="stylesheet" href="/static/style.css"></head><body>
+<main class="wrap" style="max-width:420px;padding-top:14vh">
+<div class="brand" style="font-size:18px;margin-bottom:24px">DAVID CARRETO</div>
+{% if not valido %}<div class="card">Este link já não é válido (expirou ou já foi usado).
+<p><a class="gold" href="/recuperar">Pedir um novo link</a></p></div>
+{% else %}
+<form method="post" class="card"><b>Define a tua palavra-passe</b>
+<input type="hidden" name="codigo" value="{{ codigo }}">
+{% if erro %}<p style="color:#ff8f8f">As palavras-passe não coincidem ou têm menos de 8 caracteres.</p>{% endif %}
+<label>Nova palavra-passe (mín. 8)</label><input type="password" name="nova" minlength="8" required autocomplete="new-password">
+<label>Confirmar</label><input type="password" name="confirmar" minlength="8" required autocomplete="new-password">
+<p><button class="btn gold" style="width:100%">Guardar</button></p></form>{% endif %}
+</main></body></html>
