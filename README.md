@@ -69,7 +69,7 @@ analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legenda
 
 **Equipa e permissões:** cada pessoa entra com o seu utilizador. Em **Equipa** (só o administrador), dás a cada pessoa, conta a conta, as permissões **Criar** e/ou **Aprovar**. Quem não tem acesso a uma conta não a vê: nem a agenda, nem os vídeos, nem as métricas, e o assistente também não lhe mexe. Fica registado quem criou e quem aprovou cada publicação.
 
-Para instalar num servidor Ubuntu: `deploy/setup_servidor.sh`. Guias: `docs/GUIA_INSTAGRAM.md` e `docs/TESTE_KLING.md`.
+Servidor de produção (estado, atualizar, SSH): `docs/SERVIDOR.md`. Instalação: `deploy/setup_servidor.sh` (idempotente); atualizações: `deploy/atualizar.sh`. Guias: `docs/GUIA_INSTAGRAM.md` e `docs/TESTE_KLING.md`.
 
 ## Montagem de vários vídeos
 

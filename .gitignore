@@ -12,4 +12,5 @@ models/
 assets/library/*
 !assets/library/LEIA-ME.md
 assets/voz/
-config/drive/
+config/drive/*
+!config/drive/musicas.csv
