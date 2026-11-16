@@ -17,3 +17,12 @@ Objetivo: ver se a IA consegue fazer-te parecido em movimento, antes de pagar.
 7. Envia-me os vídeos (Drive, como as fotos) e diz-me: **pareces tu?** O movimento é natural?
 
 Nota: pedimos "sem logótipos" de propósito (evita marcas de terceiros nos teus vídeos).
+
+## Resultados do teste (feito pelo David)
+- Modelo Kling 4.0 Flash, plano grátis: 9:16, 5 s, 720p, com marca de água.
+- **Oficina a partir da IMG15 (corpo inteiro): aprovado.** O movimento a caminhar ficou credível.
+- Grande plano a partir da IMG7 (retrato): feito, para referência.
+- Basta uma boa foto: corpo inteiro para movimento, retrato para planos fechados.
+- Plano grátis: 30 créditos por vídeo (Flash) ou 50 (4.0 normal), créditos diários, 1 vídeo de cada vez,
+  sem 1080p e com marca de água. Para usar nas redes é preciso um plano pago (sem marca, 1080p).
+- Próximo passo, quando lá chegarmos: ligar o Kling ao sistema (cena + voz ElevenLabs + legendas).
