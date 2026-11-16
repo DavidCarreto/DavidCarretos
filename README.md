@@ -57,6 +57,22 @@ analisa métricas, cria planos e agendas de conteúdo, escreve guiões e legenda
 
 `carretos repurpose video.mp4` faz o mesmo para **todas as contas de vídeo** de uma vez: renderiza cada formato uma só vez, adapta a legenda ao tom de cada conta e coloca cada versão no próximo slot livre.
 
+## Dashboard (o teu painel)
+
+`carretos web` arranca o painel em http://localhost:8000 (no servidor fica sempre ligado, com HTTPS). Palavra-passe em `DASHBOARD_PASSWORD`.
+
+- **Visão**: o que está para aprovar, as próximas publicações e o desempenho de cada conta.
+- **Agenda**: calendário do mês com todas as publicações, coloridas por estado.
+- **Aprovar**: pré-visualização de cada vídeo ou imagem, com Aprovar, Editar e Rejeitar.
+- **Criar**: vídeo do zero a partir de um tema, edição de um vídeo teu, montagem de vários vídeos ou imagem com uma frase.
+- **Assistente**: escreves em português ("passa o post de quarta para as 20h", "cria 3 vídeos sobre liderança") e ele faz.
+
+Para instalar num servidor Ubuntu: `deploy/setup_servidor.sh`. Guias: `docs/GUIA_INSTAGRAM.md` e `docs/TESTE_KLING.md`.
+
+## Montagem de vários vídeos
+
+`carretos montage v1.mp4 v2.mp4 v3.mp4 --account ig_davidcarreto --seconds 45`: a IA escolhe os melhores trechos e a ordem, e encaixa fotos ou vídeos da biblioteca enquanto a voz continua. Junta legendas karaoke, música e capa.
+
 ## Criar vídeos do zero (sem gravar nada)
 
 ```bash
@@ -160,7 +176,7 @@ carretos status | sync | import-csv | report [--ai]
 carretos plan [--start AAAA-MM-DD --days 7] | generate [--context ...] | show <id> | calendar
 carretos edit-video <ficheiro> --account <conta> [--post id | --schedule data] [--seconds 45]
 carretos create-video --account <conta> --topic "..." | --post <id> | --storyboard f.json
-carretos produce [--days 7]
+carretos produce [--days 7] | montage <vídeos> | web | avatar-video (pago)
 carretos voice-setup <gravação> | voice-test "texto" [--narrator david|generica]
 carretos repurpose <ficheiro> | cover | image quote|photo|carousel | attach <id> <ficheiros>
 carretos edit <id> | schedule <id> <data> | approve <ids> | reject <ids> [--regenerate]

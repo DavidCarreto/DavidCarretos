@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block body %}
+<h1>Tarefas</h1><p class="muted">Vídeos e planos em criação. <a class="gold" href="/tarefas">Atualizar</a></p>
+{% for j in jobs %}<div class="card" style="margin-bottom:10px">
+<div class="row" style="justify-content:space-between"><b>#{{ j.id }} {{ j.label }}</b>
+<span class="pill" style="color:{{ {'queued':'#7d8590','running':'#d29922','done':'#3fb950','failed':'#f85149'}[j.status] }};border-color:currentColor">{{ {'queued':'Na fila','running':'A criar…','done':'Pronto','failed':'Falhou'}[j.status] }}</span></div>
+<p class="muted" style="margin:4px 0">{{ j.created_at[5:16].replace('T',' ') }}{% if j.post_id %} · <a class="gold" href="/post/{{ j.post_id }}">ver publicação #{{ j.post_id }}</a>{% endif %}</p>
+{% if j.status in ('done','failed') and j.log %}<details><summary class="muted">detalhes</summary><pre class="log">{{ j.log }}</pre></details>{% endif %}
+</div>{% endfor %}
+{% if jobs|selectattr('status','in',['queued','running'])|list %}<script>setTimeout(()=>location.reload(),8000)</script>{% endif %}
+{% endblock %}

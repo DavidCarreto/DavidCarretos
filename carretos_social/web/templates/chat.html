@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block body %}
+<h1>Assistente</h1>
+<div class="chat" id="chat">
+{% if not msgs %}<div class="msg assistant">Olá David! Posso planear a semana, criar vídeos, mudar datas, editar legendas ou dizer-te como estão as redes. O que precisas?</div>{% endif %}
+{% for m in msgs %}<div class="msg {{ m.role }}" data-md>{{ m.content }}</div>{% endfor %}
+</div>
+<div class="composer"><form id="cf"><textarea name="mensagem" placeholder="Escreve aqui…" required></textarea><button class="btn gold">➤</button></form></div>
+<script>
+const c=document.getElementById('chat'),f=document.getElementById('cf');window.scrollTo(0,document.body.scrollHeight);
+function md(el){const e=el.textContent.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));el.innerHTML=e.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/^#+ (.*)$/gm,'<b>$1</b>')}
+document.querySelectorAll('[data-md]').forEach(md);
+function add(r,t){const d=document.createElement('div');d.className='msg '+r;d.textContent=t;md(d);c.appendChild(d);window.scrollTo(0,document.body.scrollHeight);return d}
+f.onsubmit=async e=>{e.preventDefault();const t=f.mensagem.value.trim();if(!t)return;add('user',t);f.mensagem.value='';
+const w=add('assistant','…');try{const r=await fetch('/assistente',{method:'POST',body:new URLSearchParams({mensagem:t})});w.textContent=(await r.json()).reply;md(w)}catch(err){w.textContent='Erro de ligação.'}};
+f.mensagem.addEventListener('keydown',e=>{if(e.key=='Enter'&&!e.shiftKey){e.preventDefault();f.requestSubmit()}});
+</script>{% endblock %}

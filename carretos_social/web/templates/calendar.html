@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block body %}
+<div class="row" style="justify-content:space-between"><h1>{{ titulo }}</h1>
+<div class="row"><a class="btn" href="/calendario?mes={{ prev_m }}">‹</a><a class="btn" href="/calendario">Hoje</a><a class="btn" href="/calendario?mes={{ next_m }}">›</a></div></div>
+<div class="cal">{% for d in ['seg','ter','qua','qui','sex','sáb','dom'] %}<div class="h">{{ d }}</div>{% endfor %}
+{% for w in weeks %}{% for d in w %}{% set key = d.isoformat() %}
+<div class="day {{ 'out' if d.month != first.month }} {{ 'today' if d == today }}"><div class="n">{{ d.day }}</div>
+{% for p in by_day.get(key, []) %}<a class="chip" href="/post/{{ p.id }}" style="border-color:{{ STATUS[p.status][1] }}" title="{{ p.title }}">{{ p.scheduled_at[11:16] }} {{ ICON[p.account.platform] }}<span class="t"> {{ p.title or tema(p.pillar) }}</span></a>{% endfor %}
+</div>{% endfor %}{% endfor %}</div>
+<p class="row" style="margin-top:12px;font-size:12px">{% for k,v in STATUS.items() %}<span class="pill" style="color:{{ v[1] }};border-color:{{ v[1] }}">{{ v[0] }}</span>{% endfor %}</p>
+{% endblock %}

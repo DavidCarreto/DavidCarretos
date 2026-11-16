@@ -613,6 +613,13 @@ def cmd_avatar_video(a):
     print(f"Vídeo: {res['video']}\nCapa:  {cover}\n⚠️  Vídeo feito com IA: marca 'conteúdo gerado por IA' ao publicar.")
 
 
+
+def cmd_web(a):
+    """Arranca o dashboard (e a fila de tarefas)."""
+    import uvicorn
+    uvicorn.run("carretos_social.web.app:app", host=a.host, port=a.port, log_level="warning")
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="carretos", description="Gestão automática das redes sociais Carretos")
@@ -702,6 +709,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("avatar-video", cmd_avatar_video, "vídeo com o teu avatar a falar (HeyGen, pago)")
     s.add_argument("--account", required=True); s.add_argument("--text"); s.add_argument("--topic", default="")
     s.add_argument("--seconds", type=int, default=30); s.add_argument("--cover-text")
+    s = add("web", cmd_web, "arranca o dashboard no browser (http://localhost:8000)")
+    s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8000)
     s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
     s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=10)
     s = add("voice-collect", cmd_voice_collect, "extrai de uma pasta de vídeos só os trechos com a tua voz")

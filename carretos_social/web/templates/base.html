@@ -1,0 +1,12 @@
+<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>{% block title %}David Carreto · Redes{% endblock %}</title><link rel="stylesheet" href="/static/style.css">
+<meta name="theme-color" content="#000000"></head><body>
+<header class="top"><a class="brand" href="/">DAVID CARRETO</a><a class="muted" href="/tarefas" style="font-size:13px">Tarefas</a></header>
+<nav class="tabs">
+ <a href="/" class="{{ 'on' if page=='home' }}"><span>◉</span>Visão</a>
+ <a href="/calendario" class="{{ 'on' if page=='cal' }}"><span>▦</span>Agenda</a>
+ <a href="/aprovar" class="{{ 'on' if page=='approve' }}"><span>✓</span>Aprovar</a>
+ <a href="/criar" class="{{ 'on' if page=='create' }}"><span>＋</span>Criar</a>
+ <a href="/assistente" class="{{ 'on' if page=='chat' }}"><span>✦</span>Assistente</a>
+</nav>
+<main class="wrap">{% block body %}{% endblock %}</main></body></html>

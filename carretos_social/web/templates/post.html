@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block body %}
+<p><a class="muted" href="javascript:history.back()">‹ voltar</a></p>
+<h1>#{{ p.id }} · {{ p.title or tema(p.pillar) }}</h1>
+<p class="muted">{{ p.account.name }} · <span class="pill" style="color:{{ STATUS[p.status][1] }};border-color:{{ STATUS[p.status][1] }}">{{ STATUS[p.status][0] }}</span>{% if p.remote_url %} · <a class="gold" href="{{ p.remote_url }}" target="_blank">ver publicado</a>{% endif %}</p>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+<div>{% for m in p.media %}{% if m.video %}<video class="media-big" src="/media/{{ m.id }}" controls playsinline></video>{% else %}<img class="media-big" src="/media/{{ m.id }}">{% endif %}{% endfor %}
+{% if not p.media %}<div class="card muted">Ainda sem vídeo/imagem.</div>{% endif %}</div>
+<form method="post" class="card">
+ <label>Data e hora</label><input type="datetime-local" name="quando" value="{{ p.when.strftime('%Y-%m-%dT%H:%M') if p.when else '' }}">
+ <label>Legenda</label><textarea name="caption" rows="9">{{ p.caption or '' }}</textarea>
+ <p class="muted" style="font-size:13px">{{ p.tags }}</p>
+ {% if p.error %}<p style="color:#ff8f8f">⚠ {{ p.error }}</p>{% endif %}
+ <div class="row"><button class="btn gold" name="action" value="aprovar">✓ Guardar e aprovar</button>
+ <button class="btn" name="action" value="guardar">Guardar</button>
+ <button class="btn" name="action" value="refazer">↻ Refazer vídeo</button>
+ <button class="btn red" name="action" value="rejeitar">Rejeitar</button></div>
+ {% if extra.script %}<h2>Guião</h2>{% for s in extra.script %}<p style="font-size:14px"><b class="gold">{{ s.seconds }}</b> {{ s.voice_or_text }}<br><span class="muted">{{ s.visual }}</span></p>{% endfor %}{% endif %}
+</form></div>{% endblock %}

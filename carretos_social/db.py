@@ -61,6 +61,25 @@ CREATE TABLE IF NOT EXISTS metrics (
     UNIQUE(account_id, remote_id)
 );
 
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,                 -- comando carretos (create-video, montage, ...)
+    args TEXT NOT NULL,                 -- JSON (lista de argumentos)
+    label TEXT,
+    status TEXT NOT NULL DEFAULT 'queued',  -- queued | running | done | failed
+    log TEXT DEFAULT '',
+    post_id INTEGER,
+    created_at TEXT NOT NULL,
+    finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS chat (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL,                 -- user | assistant
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS account_stats (
     account_id TEXT NOT NULL,
     day TEXT NOT NULL,

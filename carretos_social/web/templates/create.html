@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block body %}
+<h1>Criar conteúdo</h1>
+<form method="post" enctype="multipart/form-data" class="card" id="f">
+ <div class="tabsel">
+  <label><input type="radio" name="tipo" value="zero" checked><span>✦ Vídeo do zero</span></label>
+  <label><input type="radio" name="tipo" value="editar"><span>✂ Editar vídeo meu</span></label>
+  <label><input type="radio" name="tipo" value="montagem"><span>⧉ Juntar vídeos</span></label>
+  <label><input type="radio" name="tipo" value="imagem"><span>▢ Imagem com frase</span></label>
+ </div>
+ <label>Conta</label><select name="conta">{% for a in accounts().values() %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select>
+ <label id="lt">Tema ou mensagem</label><textarea name="tema" rows="3" placeholder="Ex.: uma lição sobre falhar e voltar a tentar"></textarea>
+ <div id="up" style="display:none"><label>Vídeo(s)</label><input type="file" name="ficheiros" accept="video/*" multiple></div>
+ <div class="row"><div style="flex:1"><label>Duração (s)</label><input type="number" name="segundos" value="35" min="10" max="90"></div>
+ <div style="flex:2"><label>Agendar para (opcional)</label><input type="datetime-local" name="quando"></div></div>
+ <p><button class="btn gold" style="width:100%">Criar</button></p>
+ <p class="muted" style="font-size:13px">A criação corre em segundo plano (alguns minutos). Depois aparece em "Aprovar".</p>
+</form>
+<script>
+const f=document.getElementById('f');function upd(){const t=f.tipo.value;document.getElementById('up').style.display=(t=='editar'||t=='montagem')?'block':'none';
+document.getElementById('lt').textContent=t=='imagem'?'Frase':t=='zero'?'Tema ou mensagem':'Objetivo (opcional)';}
+f.querySelectorAll('input[name=tipo]').forEach(r=>r.onchange=upd);
+</script>{% endblock %}
