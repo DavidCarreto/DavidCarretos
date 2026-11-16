@@ -11,5 +11,11 @@ regista o que existe e para que serve.
 | YouTube "POLÉMICA!! Como ganhar +€'s…" | Drive | 14,5 min | Por confirmar | Reserva |
 | YouTube "Pacotes de Revisão Carreto's" | Drive | 19,7 min (tem convidados e música) | Misturado | Reserva (pior) |
 
+## ⛔ Regra sobre o CONTEÚDO das gravações
+- As gravações servem **apenas para a voz**: timbre, ritmo, entoação e forma de falar do David.
+- O que é dito nelas (datas, história, acontecimentos) **não é verdade confirmada** e **não pode ser usado**:
+  não extrair factos, não acrescentar a `config/factos.yaml`, não usar em guiões nem legendas.
+- Factos sobre o David só vêm de `config/factos.yaml`, confirmados por ele.
+
 Testes gratuitos (Chatterbox e Piper com conversão): o timbre não ficou parecido e os L e os R saíram fracos,
 por isso estão abandonados. Solução escolhida: o clone profissional da ElevenLabs.
