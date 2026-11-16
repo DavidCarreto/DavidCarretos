@@ -97,7 +97,7 @@ def _logo(img: Image.Image, width_ratio: float = 0.18, pos: str = "top-right") -
         tw = d.textlength(text, font=f)
         if brand().get("themes", {}).get("pessoal", {}).get("signature") == brand().get("signature"):
             # assinatura pessoal: sempre discreta no canto inferior direito, a dourado
-            d.text((W - tw - m, H - m - f.size), text, font=f, fill=_hex(_v()["colors"]["accent"], 235))
+            d.text((W - tw - m, H - int(W * 0.03) - f.size), text, font=f, fill=_hex(_v()["colors"]["accent"], 235))
             return
         xy = (W - tw - m, m) if pos == "top-right" else (m, H - m - f.size)
         d.text(xy, text, font=f, fill=_hex(_v()["colors"]["text"], 230))
@@ -223,8 +223,9 @@ def photo_post(photo: str | Path | None, title: str, out: str | Path, size=(1080
 
 # ------------------------------------------------------------------ carrossel
 def carousel(slides: list[str], out_dir: str | Path, size=(1080, 1350), cover_photo: str | Path | None = None,
-             cta: str = "Guarda e partilha com quem tem um Mercedes", handle: str = "") -> list[Path]:
+             cta: str | None = None, handle: str = "") -> list[Path]:
     """slides[0] = título de capa; restantes = conteúdo; acrescenta slide final com CTA."""
+    cta = cta or _v().get("carousel_cta") or "Guarda e partilha com quem tem um Mercedes"
     out_dir = Path(out_dir)
     paths = []
     total = len(slides) + 1

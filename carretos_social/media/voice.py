@@ -41,6 +41,9 @@ DEFAULT_NARRATOR = {"engine": "piper", "voice": PIPER_VOICE}
 def narrator(name: str | None) -> dict:
     narrators = brand().get("narrators", {})
     cfg = dict(narrators.get(name or "", {}) or DEFAULT_NARRATOR)
+    if cfg.get("engine") == "elevenlabs" and not os.environ.get("ELEVENLABS_API_KEY"):
+        print(f"⚠️  Narrador '{name}' (ElevenLabs) sem chave; a usar a voz genérica.")
+        return dict(narrators.get("generica", DEFAULT_NARRATOR))
     if cfg.get("engine") in ("chatterbox", "conversion"):
         problem = clone_problem(cfg)
         if problem:
@@ -177,6 +180,30 @@ def _speak_conversion(text: str, out: Path, speed: float, cfg: dict) -> None:
     base.unlink(missing_ok=True)
 
 
+# ------------------------------------------------------------------ ElevenLabs (pago, opcional)
+def _speak_elevenlabs(text: str, out: Path, speed: float, cfg: dict) -> None:
+    """Voz clonada na ElevenLabs (plano pago). Requer ELEVENLABS_API_KEY e o voice_id do clone."""
+    key = os.environ.get("ELEVENLABS_API_KEY")
+    voice_id = cfg.get("voice_id") or os.environ.get("ELEVENLABS_VOICE_ID")
+    if not key or not voice_id:
+        raise RuntimeError("ElevenLabs não configurado: falta ELEVENLABS_API_KEY ou voice_id")
+    from ..http import request
+    resp = request("POST", f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                   params={"output_format": "mp3_44100_128"},
+                   headers={"xi-api-key": key, "Content-Type": "application/json"},
+                   json={"text": text, "model_id": cfg.get("model", "eleven_multilingual_v2"),
+                         "voice_settings": {"stability": float(cfg.get("stability", 0.5)),
+                                            "similarity_boost": float(cfg.get("similarity", 0.85)),
+                                            "style": float(cfg.get("style", 0.2)),
+                                            "use_speaker_boost": True}}, timeout=180)
+    mp3 = out.with_suffix(".mp3")
+    mp3.write_bytes(resp.content)
+    tempo = max(0.5, min(2.0, speed))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(mp3), "-af", f"atempo={tempo}", "-ar", "44100",
+                    str(out)], check=True)
+    mp3.unlink(missing_ok=True)
+
+
 # ------------------------------------------------------------------ API
 def duration(path: str | Path) -> float:
     with wave.open(str(path), "rb") as w:
@@ -195,6 +222,8 @@ def speak(text: str, out: str | Path, speed: float = 1.0, narrator_name: str | N
             _speak_chatterbox(text, cache, speed, cfg)
         elif cfg.get("engine") == "conversion":
             _speak_conversion(text, cache, speed, cfg)
+        elif cfg.get("engine") == "elevenlabs":
+            _speak_elevenlabs(text, cache, speed, cfg)
         else:
             _speak_piper(text, cache, speed, cfg.get("voice", PIPER_VOICE))
     shutil.copy(cache, out)

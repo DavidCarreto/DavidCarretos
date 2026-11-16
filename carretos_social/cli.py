@@ -277,6 +277,8 @@ def cmd_cover(a):
 
 def cmd_image(a):
     from .media import image_gen
+    if a.account:
+        account(a.account)  # aplica a identidade visual da conta (ex.: preto e dourado nas pessoais)
     w, h = map(int, a.size.split("x"))
     out_dir = _out_dir("images")
     stamp = f"{datetime.now():%Y%m%d_%H%M%S}"
@@ -588,6 +590,29 @@ def cmd_montage(a):
     print(f"Vídeo: {res['video']} ({res['duration']} s)\nCapa:  {cover}\nPublicação #{pid}")
 
 
+
+def cmd_avatar_video(a):
+    """Vídeo com o teu avatar a falar (HeyGen, pago) + acabamento do sistema (legendas, música, capa)."""
+    from .media import avatar, image_gen
+    from .media.video_editor import auto_edit
+    acc = account(a.account)
+    if not avatar.configured():
+        raise SystemExit("O avatar usa o HeyGen (pago) e ainda não está configurado. "
+                         "Preenche HEYGEN_API_KEY, HEYGEN_AVATAR_ID e HEYGEN_VOICE_ID no .env depois de aprovares o plano.")
+    script = a.text
+    if not script:
+        from .content.ai import storyboard
+        sb = storyboard(acc, a.topic, a.seconds)
+        script = " ".join(s["voiceover"] for s in sb["scenes"])
+    w, h = _render_size(acc)
+    out_dir = _out_dir(acc.id, "avatar")
+    raw = avatar.generate(script, out_dir / f"avatar_{datetime.now():%Y%m%d_%H%M%S}.mp4", w, h)
+    res = auto_edit(raw, out_dir, width=w, height=h, target_seconds=None, use_ai=False, fill="crop")
+    cover = image_gen.cover(res["cover_frame"], a.cover_text or (a.topic or script)[:40], out_dir / f"{raw.stem}_capa.jpg",
+                            size=(w, h))
+    print(f"Vídeo: {res['video']}\nCapa:  {cover}\n⚠️  Vídeo feito com IA: marca 'conteúdo gerado por IA' ao publicar.")
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="carretos", description="Gestão automática das redes sociais Carretos")
@@ -674,6 +699,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--fill", choices=["blur", "crop"], default="crop")
     s.add_argument("--no-ai", action="store_true"); s.add_argument("--no-broll", action="store_true")
     s.add_argument("--no-music", action="store_true")
+    s = add("avatar-video", cmd_avatar_video, "vídeo com o teu avatar a falar (HeyGen, pago)")
+    s.add_argument("--account", required=True); s.add_argument("--text"); s.add_argument("--topic", default="")
+    s.add_argument("--seconds", type=int, default=30); s.add_argument("--cover-text")
     s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
     s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=10)
     s = add("voice-collect", cmd_voice_collect, "extrai de uma pasta de vídeos só os trechos com a tua voz")

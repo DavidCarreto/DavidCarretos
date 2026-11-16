@@ -78,6 +78,7 @@ themes:
       accent: "#D4AF37"                      # dourado
       text: "#FFFFFF"
     logo: ""                                 # sem logótipo da empresa: assinatura em texto
+    carousel_cta: "Guarda e partilha com quem precisa de ler isto"
     intro_video: ""
     outro_video: ""
 
@@ -95,6 +96,12 @@ narrators:
     engine: chatterbox
     sample: assets/voz/david_referencia.wav
     language: pt
+  david_elevenlabs:                          # PAGO: clone profissional na ElevenLabs (inativo sem chave)
+    engine: elevenlabs
+    voice_id: ""                             # ou ELEVENLABS_VOICE_ID no .env
+    model: eleven_multilingual_v2
+    stability: 0.5
+    similarity: 0.85
   generica:
     engine: piper
     voice: pt_PT-tugão-medium
