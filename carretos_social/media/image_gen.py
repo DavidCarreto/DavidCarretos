@@ -95,6 +95,10 @@ def _logo(img: Image.Image, width_ratio: float = 0.18, pos: str = "top-right") -
         f = _font(True, int(W * 0.032))
         text = (brand().get("signature") or brand()["company"]).upper()
         tw = d.textlength(text, font=f)
+        if brand().get("themes", {}).get("pessoal", {}).get("signature") == brand().get("signature"):
+            # assinatura pessoal: sempre discreta no canto inferior direito, a dourado
+            d.text((W - tw - m, H - m - f.size), text, font=f, fill=_hex(_v()["colors"]["accent"], 235))
+            return
         xy = (W - tw - m, m) if pos == "top-right" else (m, H - m - f.size)
         d.text(xy, text, font=f, fill=_hex(_v()["colors"]["text"], 230))
 

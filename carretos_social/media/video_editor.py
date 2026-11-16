@@ -222,20 +222,16 @@ def build_ass(segments: list[dict], width: int, height: int, hook_text: str = ""
         f"{max(4, size // 12)},2,2,60,60,{margin_v},1",
         f"Style: Hook,{font},{hook_size},&H00FFFFFF,&H00FFFFFF,&H00000000,{accent.replace('&H00', '&H20')},"
         f"-1,0,0,0,100,100,0,0,3,{max(10, hook_size // 4)},0,8,80,80,{int(height * 0.12)},1",
-        f"Style: Sign,{font},{int(width * 0.03)},{accent},{accent},&H00000000,&H00000000,-1,0,0,0,100,100,"
-        f"{int(width * 0.006)},0,1,0,0,8,0,0,{int(height * 0.035)},1",
+        f"Style: Sign,{font},{int(width * 0.03)},{accent},{accent},&H00000000,&H64000000,-1,0,0,0,100,100,"
+        f"{int(width * 0.004)},0,1,0,1,3,0,{int(width * 0.06)},{int(height * 0.03)},1",
         f"Style: Line,{font},10,{accent},{accent},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     signature = brand().get("signature")
     if duration and signature and not v.get("logo"):
-        # assinatura + linhas finas douradas (identidade pessoal)
+        # assinatura discreta no canto inferior direito, sem riscas (pedido do David)
         end = _ass_time(duration + 1)
         lines.append(f"Dialogue: 2,{_ass_time(0)},{end},Sign,,0,0,0,,{_ass_escape(signature.upper())}")
-        m, y1, y2, th = int(width * 0.06), int(height * 0.028), int(height * 0.972), max(2, height // 900)
-        for y in (y1, y2):
-            lines.append(f"Dialogue: 2,{_ass_time(0)},{end},Line,,0,0,0,,"
-                         f"{{\\pos(0,0)\\p1}}m {m} {y} l {width - m} {y} {width - m} {y + th} {m} {y + th}{{\\p0}}")
     if hook_text:
         lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(hook_seconds)},Hook,,0,0,0,,"
                      f"{{\\fad(150,250)}}{_ass_escape(hook_text.upper())}")
