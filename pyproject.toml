@@ -15,6 +15,8 @@ dependencies = [
   "numpy>=1.26",
   "piper-tts>=1.2",
   "faster-whisper>=1.0",
+  "opencv-python-headless>=4.8,<5",   # deteção de rosto (texto fora da cara)
+  "soundfile>=0.12",
 ]
 
 [project.optional-dependencies]

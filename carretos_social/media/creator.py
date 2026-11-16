@@ -49,8 +49,12 @@ def ease_back(t: float) -> float:
 class Overlay:
     """Desenha a camada de texto animado de uma cena, frame a frame."""
 
-    def __init__(self, scene: dict, W: int, H: int, duration: float, handle: str, has_media: bool):
+    def __init__(self, scene: dict, W: int, H: int, duration: float, handle: str, has_media: bool,
+                 face_low: bool = False):
         self.s, self.W, self.H, self.d = scene, W, H, duration
+        # rosto na metade de cima do fundo → texto vai para a parte de baixo e fica mais pequeno
+        self.low = face_low
+        self.k = 0.8 if face_low else 1.0
         self.handle = handle
         v = brand()["visual"]["colors"]
         self.white, self.accent = _hex(v["text"]), _hex(v["accent"])
@@ -58,13 +62,20 @@ class Overlay:
         self.margin = int(W * 0.08)
         self.base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         if has_media:  # escurece o fundo para o texto se ler bem
-            shade = 0 if scene["type"] == "media" else 110
+            shade = 0 if scene["type"] == "media" else (35 if face_low else 110)
             self.base.alpha_composite(Image.new("RGBA", (W, H), (*self.dark[:3], shade)))
-            self.base.alpha_composite(_gradient((W, H), start=0.5, bottom_alpha=200))
+            self.base.alpha_composite(_gradient((W, H), start=0.42 if face_low else 0.5,
+                                                bottom_alpha=240 if face_low else 200))
         self.static_after = {"list": duration, "stat": 1.4}.get(scene["type"], 1.0)
         self._cache_static: bytes | None = None
 
     # -- utilitários
+    def y(self, f: float) -> int:
+        """Posição vertical: normal, ou comprimida para a zona de baixo (0,58–0,86) se houver rosto em cima."""
+        if not self.low:
+            return int(self.H * f)
+        return int(self.H * (0.58 + (min(max(f, 0.12), 0.6) - 0.12) * 0.58))
+
     def _text_block(self, d, text, size, y, color=None, bold=True, max_h=None, center=True, alpha=255):
         font, lines, fs = _fit_text(d, text, bold, self.W - 2 * self.margin, max_h or int(self.H * 0.3), size)
         for line in lines:
@@ -93,11 +104,11 @@ class Overlay:
     # -- tipos de cena
     def _hook(self, d, t, layer):
         text = (self.s.get("title") or self.s.get("voiceover", "")).upper()
-        font, lines, fs = _fit_text(d, text, True, self.W - 2 * self.margin, int(self.H * 0.32), int(self.W * 0.13))
+        font, lines, fs = _fit_text(d, text, True, self.W - 2 * self.margin, int(self.H * 0.32 * self.k), int(self.W * 0.13 * self.k))
         words_total = sum(len(l.split()) for l in lines)
         shown = t / 0.08  # palavras por segundo ≈ 12
         highlight = {w.lower().strip(".,!?") for w in (self.s.get("highlight") or [text.split()[-1]])}
-        y = int(self.H * 0.40) - len(lines) * int(fs * 1.1) // 2
+        y = self.y(0.40) - len(lines) * int(fs * 1.1) // 2
         idx = 0
         for line in lines:
             words = line.split()
@@ -130,9 +141,9 @@ class Overlay:
         p = ease_out(t / 0.6)
         dy = int((1 - p) * self.H * 0.04)
         a = int(255 * p)
-        y = int(self.H * 0.22) + dy
+        y = self.y(0.22) + dy
         if self.s.get("kicker"):
-            kf = _font(True, int(self.W * 0.035))
+            kf = _font(True, int(self.W * 0.035 * self.k))
             label = self.s["kicker"].upper()
             tw = d.textlength(label, font=kf)
             pad = int(kf.size * 0.5)
@@ -141,20 +152,20 @@ class Overlay:
                                 fill=(*self.accent[:3], a))
             d.text((x + pad, y + pad * 0.8), label, font=kf, fill=(255, 255, 255, a))
             y += kf.size + 3 * pad
-        y = self._text_block(d, self.s.get("title", ""), int(self.W * 0.095), y, alpha=a)
+        y = self._text_block(d, self.s.get("title", ""), int(self.W * 0.095 * self.k), y, alpha=a)
         if self.s.get("body"):
-            self._text_block(d, self.s["body"], int(self.W * 0.06), y + int(self.H * 0.02), self.silver,
+            self._text_block(d, self.s["body"], int(self.W * 0.06 * self.k), y + int(self.H * 0.02), self.silver,
                              bold=False, alpha=a)
 
     def _list(self, d, t, layer):
         items = self.s.get("items") or []
-        y = int(self.H * 0.17)
+        y = self.y(0.17)
         if self.s.get("title"):
             pt = ease_out(t / 0.5)
-            y = self._text_block(d, self.s["title"], int(self.W * 0.095), y, alpha=int(255 * pt)) + int(self.H * 0.03)
+            y = self._text_block(d, self.s["title"], int(self.W * 0.095 * self.k), y, alpha=int(255 * pt)) + int(self.H * 0.03)
         n = max(1, len(items))
         span = max(0.5, self.d * 0.75 - 0.4)
-        f = _font(True, int(self.W * 0.07) if len(items) <= 4 else int(self.W * 0.058))
+        f = _font(True, int(self.W * 0.07 * self.k) if len(items) <= 4 else int(self.W * 0.058 * self.k))
         for i, item in enumerate(items):
             start = 0.4 + i * span / n
             p = ease_out((t - start) / 0.4)
@@ -187,27 +198,27 @@ class Overlay:
         else:
             shown = raw
         sc = 0.85 + 0.15 * ease_back(t / 0.5)
-        size = int(self.W * 0.30 * sc)
+        size = int(self.W * 0.30 * sc * self.k)
         font = _font(True, size)
         while d.textlength(shown, font=font) > self.W - 2 * self.margin and size > 40:
             size -= 8
             font = _font(True, size)
-        y = int(self.H * 0.28)
+        y = self.y(0.28)
         w = d.textlength(shown, font=font)
         d.text(((self.W - w) / 2 + 4, y + 6), shown, font=font, fill=(0, 0, 0, 120))
         d.text(((self.W - w) / 2, y), shown, font=font, fill=self.accent)
         a = int(255 * ease_out((t - 0.3) / 0.5))
-        self._text_block(d, self.s.get("title", ""), int(self.W * 0.085), y + int(size * 1.15), alpha=a)
+        self._text_block(d, self.s.get("title", ""), int(self.W * 0.085 * self.k), y + int(size * 1.15), alpha=a)
 
     def _quote(self, d, t, layer):
         p = ease_out(t / 0.7)
         a = int(255 * p)
-        qf = _font(True, int(self.W * 0.3))
-        d.text((self.margin, int(self.H * 0.12)), "“", font=qf, fill=(*self.accent[:3], a))
-        y = self._text_block(d, self.s.get("title", ""), int(self.W * 0.08), int(self.H * 0.28), center=False,
+        qf = _font(True, int(self.W * 0.3 * self.k))
+        d.text((self.margin, self.y(0.12) - (int(self.H * 0.1) if self.low else 0)), "“", font=qf, fill=(*self.accent[:3], a))
+        y = self._text_block(d, self.s.get("title", ""), int(self.W * 0.08 * self.k), self.y(0.28), center=False,
                              alpha=a)
         if self.s.get("body"):
-            af = _font(False, int(self.W * 0.04))
+            af = _font(False, int(self.W * 0.04 * self.k))
             d.text((self.margin, y + int(self.H * 0.02)), "— " + self.s["body"], font=af,
                    fill=(*self.silver[:3], a))
 
@@ -215,11 +226,11 @@ class Overlay:
         if not self.s.get("title"):
             return
         p = ease_out(t / 0.5)
-        f = _font(True, int(self.W * 0.045))
+        f = _font(True, int(self.W * 0.045 * self.k))
         text = self.s["title"]
         lines = _wrap(d, text, f, self.W - 2 * self.margin - 40)
         h = len(lines) * int(f.size * 1.2) + 30
-        y = int(self.H * 0.16) - int((1 - p) * 40)
+        y = self.y(0.16) - int((1 - p) * 40)
         w = max(d.textlength(l, font=f) for l in lines) + 40
         d.rounded_rectangle((self.margin, y, self.margin + w, y + h), radius=18,
                             fill=(*self.dark[:3], int(200 * p)))
@@ -232,11 +243,12 @@ class Overlay:
     def _cta(self, d, t, layer):
         p = ease_out(t / 0.6)
         a = int(255 * p)
-        y = self._text_block(d, self.s.get("title") or "Segue para mais", int(self.W * 0.10), int(self.H * 0.30),
+        y = self._text_block(d, self.s.get("title") or "Segue para mais", int(self.W * 0.10 * self.k), self.y(0.30),
                              alpha=a)
+        body_y = self.y(0.58)
         if self.handle:
             pulse = 1 + 0.04 * math.sin(t * 6) if t > 0.6 else ease_back(t / 0.6)
-            hf = _font(True, max(10, int(self.W * 0.065 * pulse)))
+            hf = _font(True, max(10, int(self.W * 0.065 * pulse * self.k)))
             label = f"@{self.handle}"
             tw = d.textlength(label, font=hf)
             pad = int(hf.size * 0.45)
@@ -245,12 +257,48 @@ class Overlay:
             d.rounded_rectangle((x - 2 * pad, yy - pad, x + tw + 2 * pad, yy + hf.size + pad * 1.6),
                                 radius=hf.size, fill=(*self.accent[:3], a))
             d.text((x, yy), label, font=hf, fill=(255, 255, 255, a))
+            body_y = max(body_y, int(yy + hf.size + pad * 3.5))  # nunca por baixo do @
         if self.s.get("body"):
-            self._text_block(d, self.s["body"], int(self.W * 0.055), int(self.H * 0.58), self.silver, bold=False,
+            self._text_block(d, self.s["body"], int(self.W * 0.055 * self.k), body_y, self.silver, bold=False,
                              alpha=a)
 
 
 # ------------------------------------------------------------------ cenas
+def face_in_upper_half(bg: Path, W: int, H: int) -> bool:
+    """Deteta um rosto no fundo (foto ou 1.º segundo do vídeo), já enquadrado em W×H, e diz se está
+    na zona onde normalmente vai o texto (acima de 60% da altura). Requer opencv; sem ele devolve False."""
+    try:
+        import cv2  # type: ignore
+        import numpy as np
+    except ImportError:
+        return False
+    try:
+        if bg.suffix.lower() in stock.VIDEO_EXT:
+            raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", "0.5", "-i", str(bg), "-frames:v", "1",
+                                  "-f", "image2pipe", "-vcodec", "png", "-"], capture_output=True).stdout
+            img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        else:
+            from PIL import ImageOps
+            pil = ImageOps.exif_transpose(Image.open(bg)).convert("RGB")
+            img = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+        if img is None:
+            return False
+        h, w = img.shape[:2]
+        scale = max(W / w, H / h)  # mesmo enquadramento do vídeo (cobre e corta ao centro)
+        small = cv2.resize(img, (int(w * scale / 3), int(h * scale / 3)))
+        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+        casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = casc.detectMultiScale(gray, 1.1, 5, minSize=(24, 24))
+        off_y = (h * scale - H) / 2 / 3
+        for (x, y, fw, fh) in faces:
+            cy = (y + fh / 2 - off_y) * 3
+            if 0 <= cy <= H * 0.6:
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
+
+
 def _run_scene(scene: dict, bg: Path, wav: Path, duration: float, W: int, H: int, out: Path, handle: str,
                has_media: bool) -> Path:
     frames = int(round(duration * FPS))
@@ -276,7 +324,8 @@ def _run_scene(scene: dict, bg: Path, wav: Path, duration: float, W: int, H: int
            "-map", "[v]", "-map", "[a]", "-t", f"{duration:.3f}", "-r", str(FPS),
            "-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-b:a", "192k", "-ac", "2", str(out)]
-    ov = Overlay(scene, W, H, duration, handle, has_media)
+    face_low = has_media and scene["type"] != "media" and face_in_upper_half(bg, W, H)
+    ov = Overlay(scene, W, H, duration, handle, has_media, face_low)
     with tempfile.TemporaryFile() as err:
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=err)
         try:
@@ -320,6 +369,7 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
     tmp = Path(tempfile.mkdtemp(prefix="create_"))
     used: set[str] = set()
     parts, subs, offset, log = [], [], 0.0, []
+    total_speech = 0.0
     from .video_editor import _EMOJI
     for i, scene in enumerate(storyboard["scenes"]):
         scene.setdefault("type", "text")
@@ -332,6 +382,7 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
         wav = tmp / f"s{i:02d}.wav"
         text = scene.get("voiceover", "").strip()
         speech = voice.speak(text, wav, voice_speed, narrator) if (narration and text) else 0.0
+        total_speech += speech
         if not speech:
             # sem narração: tempo de leitura do texto no ecrã (~2,5 palavras/s, mínimo 2,5 s)
             on_screen = " ".join([scene.get("title", ""), scene.get("body", ""), *scene.get("items", [])])
@@ -365,7 +416,9 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
 
     final = out_dir / f"{slug}_{W}x{H}.mp4"
     render(joined, final, EditOptions(width=W, height=H, fill="crop", subtitles=subs if subtitles else None,
-                                      music=music, music_volume=0.12, max_seconds=max_seconds,
+                                      music=music, max_seconds=max_seconds,
+                                      # com narração a música fica por baixo da voz; sem narração é o som principal
+                                      music_volume=0.12 if total_speech else 0.9,
                                       intro_outro=True))
     # capa: frame da cena com mais impacto (gancho) sem legendas
     frame = out_dir / f"{slug}_frame.jpg"

@@ -315,8 +315,14 @@ def _pick_music(opt: EditOptions) -> Path | None:
     if opt.music != "auto":
         return Path(opt.music)
     d = _brand_path("music_dir")
-    tracks = sorted(d.glob("*.mp3")) + sorted(d.glob("*.m4a")) if d else []
-    return random.choice(tracks) if tracks else None
+    tracks = sorted(d.glob("*.mp3")) + sorted(d.glob("*.m4a")) + sorted(d.glob("*.wav")) if d else []
+    if tracks:
+        return random.choice(tracks)
+    # sem faixas próprias: música original gerada localmente (nunca sai um vídeo mudo)
+    from ..config import DATA_DIR
+    from .music import generate
+    cached = DATA_DIR / "cache" / "musica_inspirador.m4a"
+    return cached if cached.exists() else generate(cached, 120, "inspirador")
 
 
 def render(src: str | Path, out: str | Path, opt: EditOptions) -> Path:
