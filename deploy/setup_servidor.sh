@@ -104,16 +104,25 @@ chmod 440 /etc/sudoers.d/carretos
 visudo -cf /etc/sudoers.d/carretos >/dev/null
 
 log "HTTPS (Caddy)"
-if [ -z "$DOMINIO" ]; then
-  IP=$(curl -4 -fsS https://api.ipify.org || hostname -I | awk '{print $1}')
-  DOMINIO="$(echo "$IP" | tr . -).sslip.io"                   # 2.29.177.117 → 2-29-177-117.sslip.io
+IP=$(curl -4 -fsS https://api.ipify.org || hostname -I | awk '{print $1}')
+SSLIP="$(echo "$IP" | tr . -).sslip.io"                         # 2.29.177.117 → 2-29-177-117.sslip.io
+# domínio próprio: o que vier em DOMINIO, ou o guardado por deploy/mudar_endereco.sh
+[ -z "$DOMINIO" ] && [ -f "$APP/DOMINIO.txt" ] && DOMINIO=$(tr -d ' \n' < "$APP/DOMINIO.txt")
+if [ -n "$DOMINIO" ]; then
+  echo "$DOMINIO" > "$APP/DOMINIO.txt"
+  SITES="$DOMINIO, $SSLIP"                                       # o endereço antigo continua a funcionar
+  PRINCIPAL="$DOMINIO"
+else
+  SITES="$SSLIP"
+  PRINCIPAL="$SSLIP"
 fi
-NOVO_CADDY=$(printf '%s {\n  reverse_proxy 127.0.0.1:8000\n}\n' "$DOMINIO")
+NOVO_CADDY=$(printf '%s {\n  reverse_proxy 127.0.0.1:8000\n}\n' "$SITES")
 if [ "$(cat /etc/caddy/Caddyfile 2>/dev/null)" != "$NOVO_CADDY" ]; then
   echo "$NOVO_CADDY" > /etc/caddy/Caddyfile
   systemctl reload caddy || systemctl restart caddy
 fi
-echo "https://$DOMINIO" > "$APP/ENDERECO_DASHBOARD.txt"
+echo "https://$PRINCIPAL" > "$APP/ENDERECO_DASHBOARD.txt"
+DOMINIO="$PRINCIPAL"
 
 log "Fotos e músicas do Drive (se houver CSV em config/drive/)"
 for d in fotos musicas; do

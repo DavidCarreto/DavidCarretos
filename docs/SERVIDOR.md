@@ -38,6 +38,14 @@ Pode correr como `carretos` (por SSH) ou como root (na consola); como root volta
 `deploy/setup_servidor.sh` também pode voltar a correr-se (é idempotente): faz `git pull` se `/opt/carretos`
 já existir, não duplica o `SETUP_CODE` e só mexe no Caddy se o endereço mudar.
 
+## Endereço próprio (ex.: studio.carretos.pt)
+1. No DNS do domínio carretos.pt, criar um registo **A**: nome `studio`, valor `2.29.177.117`.
+2. Quando o registo estiver ativo (minutos a algumas horas), no servidor, como root:
+   `bash /opt/carretos/deploy/mudar_endereco.sh studio.carretos.pt`
+   O script confirma primeiro que o DNS já aponta para o servidor (se não apontar, não muda nada), configura o
+   HTTPS automático e mantém o endereço antigo (sslip.io) a funcionar. Os emails passam a usar o endereço novo.
+   O domínio fica guardado em `/opt/carretos/DOMINIO.txt` e mantém-se nas atualizações.
+
 ## Consola da Hetzner com teclado português
 A consola web assume um teclado americano. Na consola, escreve primeiro (uma vez por sessão):
 ```
