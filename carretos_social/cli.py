@@ -424,6 +424,49 @@ def cmd_fit_format(a):
         print(f"#{a.post}: {format_report(conn, get_post(conn, a.post)).verdict_label}")
 
 
+def make_quote_carousel(conn, acc_id: str, frases: list[str], *, title: str = "", caption: str = "",
+                        scheduled_at: str | None = None, auto_date: bool = True) -> int:
+    """Uma imagem de frase por linha (estilo da 'Imagem com frase') e UM post do tipo carrossel, 'Para aprovar'."""
+    from .media import image_gen
+    from .media.formats import spec_for
+    frases = [f.strip() for f in frases if f.strip()]
+    acc = account(acc_id)                      # aplica a identidade visual da conta (preto e dourado nas pessoais)
+    mn, mx = spec_for(acc.platform, "carousel").get("count", (2, 10))
+    if not mn <= len(frases) <= mx:
+        raise SystemExit(f"Um carrossel em {acc.name} leva {mn} a {mx} frases (recebi {len(frases)}).")
+    size = _render_size(acc, "image")
+    out = _out_dir("images", f"carrossel_frases_{datetime.now():%Y%m%d_%H%M%S}")
+    paths = [image_gen.quote_card(f, out / f"{i:02d}.jpg", size=size) for i, f in enumerate(frases, 1)]
+    ids = [add_media(conn, "image", str(p), None, {"frase": f}) for p, f in zip(paths, frases)]
+    when = scheduled_at if scheduled_at is not None else (_when(conn, acc_id, None) if auto_date else None)
+    return add_post(conn, account_id=acc_id, format="carousel", title=(title or frases[0])[:80],
+                    caption=caption, media_ids=ids, scheduled_at=when, status="draft")
+
+
+def cmd_quote_carousel(a):
+    frases = list(a.frase or [])
+    if a.ficheiro:
+        frases += Path(a.ficheiro).read_text(encoding="utf-8").splitlines()
+    with connect() as conn:
+        pid = make_quote_carousel(conn, a.account, frases, caption=a.legenda or "",
+                                  scheduled_at=_aware(a.schedule) if a.schedule else None)
+    print(f"Criada publicação #{pid} (carrossel com {len([f for f in frases if f.strip()])} imagens, Para aprovar)")
+
+
+EXEMPLO_FRASES = ["A consistência vence o talento quando o talento não aparece.",
+                  "Cada carro que sai bem reparado é a melhor publicidade.",
+                  "Não vendemos peças. Vendemos confiança."]
+
+
+def cmd_example_carousel(a):
+    """Post de TESTE (Instagram pessoal), carrossel de 3 frases, Para aprovar e SEM data (nunca sai sozinho)."""
+    with connect() as conn:
+        pid = make_quote_carousel(conn, "ig_davidcarreto", EXEMPLO_FRASES,
+                                  title="[TESTE] Carrossel de exemplo (não publicar)",
+                                  caption="[TESTE] Carrossel de exemplo: não publicar.", auto_date=False)
+    print(f"Criada publicação de teste #{pid}: carrossel com 3 imagens, Para aprovar, sem data.")
+
+
 def cmd_restore(a):
     """Repõe a imagem/vídeo de uma publicação: um ficheiro indicado, ou a última versão do histórico."""
     from .db import post_history
@@ -854,6 +897,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("ids", nargs="+", type=int); s.add_argument("--force", action="store_true")
     s = add("ajustar-formato", cmd_fit_format, "ajusta imagens/vídeos ao tamanho da rede, sem cortar")
     s.add_argument("post", type=int)
+    s = add("carrossel-frases", cmd_quote_carousel, "uma imagem por frase → um post carrossel (Para aprovar)")
+    s.add_argument("--account", required=True); s.add_argument("--frase", action="append")
+    s.add_argument("--ficheiro", help="ficheiro de texto com uma frase por linha")
+    s.add_argument("--legenda"); s.add_argument("--schedule")
+    add("exemplo-carrossel", cmd_example_carousel, "cria um carrossel de TESTE (sem data) para experimentar")
     s = add("repor", cmd_restore, "repõe a imagem/vídeo de uma publicação (ficheiro ou histórico)")
     s.add_argument("post", type=int); s.add_argument("--ficheiro")
     s.add_argument("--estado", choices=["idea", "draft", "approved"], help="por defeito: 'draft' (Para aprovar)")

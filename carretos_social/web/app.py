@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from ..config import DATA_DIR, ROOT, accounts, accounts_by_group, group_of, groups, load_env
-from ..db import connect, get_post, media_paths, update_post
+from ..db import add_media, connect, get_post, media_paths, update_post
 from . import jobs, mailer, users
 
 load_env()
@@ -224,6 +224,8 @@ def _post_view(conn, r) -> dict:
     else:
         p["kind"] = ("none", "Ainda sem vídeo/imagem")
     p["is_video"] = p["type"] == "video"
+    from ..media.formats import spec_for
+    p["carousel_max"] = spec_for(platform, "carousel").get("count", (2, 10))[1]
     p["account"] = accounts().get(p["account_id"])
     p["group"] = group_of(p["account_id"])
     p["when"] = datetime.fromisoformat(p["scheduled_at"][:19]) if p.get("scheduled_at") else None
@@ -351,7 +353,8 @@ def _history_view(conn, pid: int, p: dict) -> list[dict]:
 
 @app.post("/post/{pid}")
 def post_action(request: Request, pid: int, action: str = Form(...), caption: str = Form(""),
-                quando: str = Form(""), tipo: str = Form(""), hist: int = Form(0)):
+                quando: str = Form(""), tipo: str = Form(""), hist: int = Form(0), idx: int = Form(-1),
+                dir: int = Form(0)):
     from ..media.formats import format_for, kind_of, kinds_for
     from ..scheduler import all_problems, parse_dt
     me = request.state.user
@@ -380,6 +383,23 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             fields["format"] = format_for(tipo, platform)
         if fields:
             update_post(conn, pid, _by=me.id, **fields)
+        if action in ("mover", "retirar"):   # gerir as imagens do carrossel (não aprova nada)
+            ids = json.loads(get_post(conn, pid)["media_ids"] or "[]")
+            if not 0 <= idx < len(ids):
+                return _forbidden("Essa imagem já não existe nesta publicação.")
+            if action == "mover":
+                new = idx + (1 if dir > 0 else -1)
+                if 0 <= new < len(ids):
+                    ids[idx], ids[new] = ids[new], ids[idx]
+                    update_post(conn, pid, _by=me.id, media_ids=ids)
+                    idx = new
+            else:
+                if len(ids) == 1:
+                    return _forbidden("É a única imagem: acrescente outra antes de retirar esta.")
+                ids.pop(idx)                       # sai do post; o ficheiro fica guardado (e no histórico)
+                update_post(conn, pid, _by=me.id, media_ids=ids)
+                idx = min(idx, len(ids) - 1)
+            return RedirectResponse(f"/post/{pid}#img={idx + 1}", 303)
         if action == "repor":   # repõe a imagem/vídeo de uma versão anterior (histórico)
             h = conn.execute("SELECT * FROM post_history WHERE id=? AND post_id=? AND field='media_ids'",
                              (hist, pid)).fetchone()
@@ -410,6 +430,48 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
                          user_id=me.id)
             return RedirectResponse("/tarefas", 303)
     return RedirectResponse(f"/post/{pid}" if action == "guardar" else "/aprovar", 303)
+
+
+MAX_IMAGE_BYTES = 30 * 1024 * 1024
+
+
+@app.post("/post/{pid}/imagens")
+def post_add_images(request: Request, pid: int, imagens: list[UploadFile] = File(default=[])):
+    """Acrescenta imagens ao carrossel (do computador/telemóvel), até ao máximo da rede."""
+    from PIL import Image, ImageOps
+    from ..media.formats import spec_for
+    me = request.state.user
+    with connect() as conn:
+        row = get_post(conn, pid)
+        acc = row["account_id"]
+        if not me.can_create(acc):
+            return _forbidden("Nesta conta só tens acesso para ver.")
+        platform = accounts()[acc].platform if acc in accounts() else ""
+        mx = spec_for(platform, "carousel").get("count", (2, 10))[1]
+        ids = json.loads(row["media_ids"] or "[]")
+        folder = DATA_DIR / "media" / "uploads" / f"post{pid}"
+        folder.mkdir(parents=True, exist_ok=True)
+        added = 0
+        for f in imagens:
+            if not f.filename:
+                continue
+            if len(ids) >= mx:
+                return _forbidden(f"O carrossel já tem o máximo desta rede ({mx} imagens).")
+            data = f.file.read(MAX_IMAGE_BYTES + 1)
+            if len(data) > MAX_IMAGE_BYTES:
+                return _forbidden("Imagem demasiado grande (máx. 30 MB).")
+            dest = folder / f"{datetime.now():%Y%m%d_%H%M%S}_{len(ids) + 1:02d}.jpg"
+            try:
+                import io
+                with Image.open(io.BytesIO(data)) as im:
+                    ImageOps.exif_transpose(im).convert("RGB").save(dest, quality=95)
+            except Exception:  # noqa: BLE001
+                return _forbidden(f"'{f.filename}' não é uma imagem que eu consiga abrir (JPG, PNG ou WEBP).")
+            ids.append(add_media(conn, "image", str(dest), None, {"upload": f.filename}))
+            added += 1
+        if added:
+            update_post(conn, pid, _by=me.id, media_ids=ids)
+    return RedirectResponse(f"/post/{pid}#img={len(ids)}", 303)
 
 
 @app.get("/media/{mid}")
@@ -474,6 +536,12 @@ def create(request: Request, tipo: str = Form(...), conta: str = Form(...), tema
             jobs.enqueue("montage", [*paths, "--account", conta, "--seconds", str(segundos),
                                      *(["--goal", tema] if tema else []), *sched],
                          f"Montagem de {len(paths)} vídeos", user_id=me.id)
+    elif tipo == "carrossel":
+        frases = [x.strip() for x in (texto or tema).splitlines() if x.strip()]
+        if not 2 <= len(frases) <= 10:
+            return RedirectResponse("/criar?erro=frases", 303)
+        args = ["--account", conta, *sum((["--frase", x] for x in frases), []), *sched]
+        jobs.enqueue("carrossel-frases", args, f"Carrossel de {len(frases)} frases", user_id=me.id)
     elif tipo == "imagem":
         jobs.enqueue("image", ["quote", "--account", conta, "--text", texto or tema], "Imagem com frase",
                      user_id=me.id)

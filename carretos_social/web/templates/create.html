@@ -1,11 +1,12 @@
 {% extends "base.html" %}{% block body %}
-<h1>Criar conteúdo</h1>{% if not contas %}<p class="muted">Ainda não tens contas onde possas criar. Pede ao administrador.</p>{% endif %}
+<h1>Criar conteúdo</h1>{% if request.query_params.get('erro') == 'frases' %}<div class="card" style="border-color:#8b2b25;color:#ff9b93;margin-bottom:12px">Um carrossel de frases leva 2 a 10 frases, uma por linha.</div>{% endif %}{% if not contas %}<p class="muted">Ainda não tens contas onde possas criar. Pede ao administrador.</p>{% endif %}
 <form method="post" enctype="multipart/form-data" class="card" id="f">
  <div class="tabsel">
   <label><input type="radio" name="tipo" value="zero" checked><span>✦ Vídeo do zero</span></label>
   <label><input type="radio" name="tipo" value="editar"><span>✂ Editar vídeo meu</span></label>
   <label><input type="radio" name="tipo" value="montagem"><span>⧉ Juntar vídeos</span></label>
   <label><input type="radio" name="tipo" value="imagem"><span>▢ Imagem com frase</span></label>
+  <label><input type="radio" name="tipo" value="carrossel"><span>❐ Carrossel de frases</span></label>
  </div>
  <label>Conta</label><select name="conta">{% for g, cs in contas_grupos %}<optgroup label="{{ g.name }}">{% for a in cs %}<option value="{{ a.id }}">{{ a.label }}</option>{% endfor %}</optgroup>{% endfor %}</select>
  <label id="lt">Tema ou mensagem</label><textarea name="tema" rows="3" placeholder="Ex.: uma lição sobre falhar e voltar a tentar — ou toca no 🎤 e fala" data-mic></textarea>
@@ -17,6 +18,8 @@
 </form>
 <script>
 const f=document.getElementById('f');function upd(){const t=f.tipo.value;document.getElementById('up').style.display=(t=='editar'||t=='montagem')?'block':'none';
-document.getElementById('lt').textContent=t=='imagem'?'Frase':t=='zero'?'Tema ou mensagem':'Objetivo (opcional)';}
+document.getElementById('lt').textContent=t=='imagem'?'Frase':t=='carrossel'?'Frases (2 a 10, uma por linha: cada linha dá uma imagem)':t=='zero'?'Tema ou mensagem':'Objetivo (opcional)';
+const ta=f.tema;ta.rows=t=='carrossel'?7:3;ta.placeholder=t=='carrossel'?'Uma frase por linha. Ex.:\nA consistência vence o talento.\nNão vendemos peças. Vendemos confiança.':'Ex.: uma lição sobre falhar e voltar a tentar — ou toca no 🎤 e fala';
+document.querySelector('input[name=segundos]').closest('div').style.display=(t=='imagem'||t=='carrossel')?'none':'';}
 f.querySelectorAll('input[name=tipo]').forEach(r=>r.onchange=upd);
 </script><script src="/static/mic.js"></script>{% endblock %}

@@ -4,7 +4,8 @@
 {% for g, gposts in post_groups %}<div class="ghead"><span class="gtag {{ g.id }}">{{ g.short }}</span></div>
 {% for p in gposts %}
 <div class="card" style="margin-bottom:12px"><div class="post">
- {% if p.media and p.media[0].video %}<video src="/media/{{ p.media[0].id }}" controls playsinline preload="metadata"></video>
+ {% if p.type == 'carousel' and p.media|length > 1 %}<div class="cv mini" data-cv="ap{{ p.id }}"><div class="cv-track">{% for m in p.media %}<div class="cv-slide">{% if m.video %}<video src="/media/{{ m.id }}" preload="metadata" muted></video>{% else %}<img src="/media/{{ m.id }}" alt="" loading="lazy">{% endif %}</div>{% endfor %}</div><button class="cv-prev" aria-label="Anterior">‹</button><button class="cv-next" aria-label="Seguinte">›</button><span class="cv-count">1 / {{ p.media|length }}</span></div>
+ {% elif p.media and p.media[0].video %}<video src="/media/{{ p.media[0].id }}" controls playsinline preload="metadata"></video>
  {% elif p.media %}<img src="/media/{{ p.media[0].id }}">{% else %}<div style="width:120px;aspect-ratio:9/16;border-radius:12px;background:#1b1b1f;display:grid;place-items:center" class="muted">sem media</div>{% endif %}
  <div><div class="meta">#{{ p.id }} · {{ ICON.get(p.account.platform,'') }} {{ p.account.handle or p.account.name }} · {{ p.when|quando if p.when else 'sem data' }}</div>
  <b>{{ p.title or tema(p.pillar) }}</b> <span class="kind {{ p.kind[0] }}">{{ p.kind[1] }}</span> <span class="fmtdot {{ p.fmt.verdict }}" title="{{ p.fmt.verdict_label }}">{{ {'ok':'✓ formato','ajustar':'⚠ ajustar','editar':'✕ editar'}[p.fmt.verdict] }}</span><div class="cap">{{ p.caption or "Ainda sem legenda — a IA escreve-a ao criar o conteúdo." }}</div>
@@ -14,4 +15,4 @@
   {% if me.can_approve(p.account_id) %}<button class="btn gold" name="action" value="aprovar">✓ Aprovar</button>{% endif %}
   <a class="btn" href="/post/{{ p.id }}">{{ '✎ Editar' if me.can_create(p.account_id) else 'Ver' }}</a>
   {% if me.can_approve(p.account_id) %}<button class="btn red" name="action" value="rejeitar">✕</button>{% endif %}</form></div></div></div>
-{% endfor %}{% endfor %}{% endblock %}
+{% endfor %}{% endfor %}<script src="/static/carousel.js"></script>{% endblock %}

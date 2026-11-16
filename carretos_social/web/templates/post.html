@@ -4,8 +4,16 @@
 <p class="muted"><span class="gtag {{ p.group.id }}">{{ p.group.short }}</span> {{ p.account.label }} · <span class="pill" style="color:{{ STATUS[p.status][1] }};border-color:{{ STATUS[p.status][1] }}">{{ STATUS[p.status][0] }}</span>{% if p.remote_url %} · <a class="gold" href="{{ p.remote_url }}" target="_blank">ver publicado</a>{% endif %}</p>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
 <div><p style="margin:0 0 8px"><span class="kind {{ p.kind[0] }}">{{ p.kind[1] }}</span></p>
+{% if p.type == 'carousel' and p.media %}{% include "_carousel.html" %}
+{% else %}
 <div class="{{ 'gallery' if p.media|length > 1 }}">{% for m in p.media %}{% if m.video %}<video class="media-big" src="/media/{{ m.id }}" controls playsinline preload="metadata"></video>{% else %}<img class="media-big" src="/media/{{ m.id }}" alt="">{% endif %}{% endfor %}</div>
 {% if not p.media %}<div class="card muted">Ainda sem vídeo/imagem.</div>{% endif %}
+{% endif %}
+{% if p.type == 'carousel' and can_create and p.media|length < p.carousel_max %}
+<form method="post" action="/post/{{ p.id }}/imagens" enctype="multipart/form-data" class="cv-add">
+ <label class="btn">＋ Acrescentar imagem<input type="file" name="imagens" accept="image/*" multiple hidden onchange="this.form.submit()"></label>
+ <span class="muted" style="font-size:12px">{{ p.media|length }} de {{ p.carousel_max }} imagens no máximo nesta rede</span>
+</form>{% endif %}
 
 {% if p.stock_sources %}<p class="muted" style="font-size:12px;margin-top:8px">Imagens de stock:
 {% for src in p.stock_sources %}{% if src.pagina %}<a class="gold" href="{{ src.pagina }}" target="_blank" rel="noopener">{{ src.fonte }}{% if src.autor %} · {{ src.autor }}{% endif %}</a>{% else %}{{ src.fonte }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
@@ -18,7 +26,9 @@
  {% for x in f.problems %}<p class="fmt-line editar">✕ {{ x }}</p>{% endfor %}
  {% for x in f.warnings %}<p class="fmt-line ajustar">⚠ {{ x }}</p>{% endfor %}
  {% for x in f.info %}<p class="muted" style="margin:2px 0;font-size:13px">ℹ {{ x }}</p>{% endfor %}
- {% for i in f.items %}<div class="fmt-item">
+ {% if p.type == 'carousel' and f.items %}{% set vs = f.items|map(attribute='verdict')|list %}
+ <p class="fmt-line" style="margin-top:6px">{{ f.items|length }} imagens: {{ vs.count('ok') }} ✓ · {{ vs.count('ajustar') }} ⚠ · {{ vs.count('editar') }} ✕ <span class="muted">(o detalhe de cada uma aparece por baixo dela)</span></p>{% endif %}
+ {% for i in (f.items if p.type != 'carousel' else []) %}<div class="fmt-item">
   <b>{{ '🎬' if i.video else '📷' }} {{ loop.index if f.items|length > 1 }}{{ ' · ' if f.items|length > 1 }}{{ i.size }} · {{ i.ratio }}{% if i.duration %} · {{ i.duration }}{% endif %}</b>
   {% for n in i.notes %}<p class="fmt-line {{ i.verdict }}">{{ {'ok':'✓','ajustar':'⚠','editar':'✕'}[i.verdict] }} {{ n }}</p>{% endfor %}
   {% if i.screen %}<p class="muted" style="margin:2px 0 0;font-size:13px">📱 {{ i.screen }}</p>{% endif %}
@@ -49,4 +59,4 @@
 {% for h in history %}<div class="hist"><span class="muted">{{ h.at }} · {{ h.who }}</span><br><b>{{ h.field }}</b>: {{ h.old }} → {{ h.new }}
 {% if h.restorable and can_create %}<form method="post" style="display:inline"><input type="hidden" name="hist" value="{{ h.id }}"><button class="btn" name="action" value="repor" style="padding:4px 10px;font-size:12px;margin-left:6px">↶ Repor esta imagem/vídeo</button></form>{% endif %}</div>{% endfor %}
 </details>{% endif %}
-</div></div>{% endblock %}
+</div></div><script src="/static/carousel.js"></script>{% endblock %}

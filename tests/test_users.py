@@ -287,3 +287,58 @@ def test_refazer_keeps_media_and_history_restore(client, tmp_path):
     client.post(f"/post/{pid}", data={"action": "repor", "hist": hist}, follow_redirects=False)
     with connect() as conn:
         assert json.loads(get_post(conn, pid)["media_ids"]) == [mid]
+
+
+def test_carousel_example_viewer_and_management(client, tmp_path):
+    import io
+    import re
+    from PIL import Image
+    from carretos_social.cli import main
+    from carretos_social.db import connect, get_post, post_history
+    from carretos_social.scheduler import all_problems
+    from carretos_social.web import jobs
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    main(["exemplo-carrossel"])
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM posts ORDER BY id DESC LIMIT 1").fetchone()
+        pid, ids = row["id"], json.loads(row["media_ids"])
+        assert row["title"].startswith("[TESTE]") and row["status"] == "draft" and row["scheduled_at"] is None
+        assert row["format"] == "carousel" and len(ids) == 3
+        assert "sem data/hora" in all_problems(conn, row)                 # nunca sai sozinho
+        sizes = {Image.open(p).size for p in
+                 [conn.execute("SELECT path FROM media WHERE id=?", (i,)).fetchone()[0] for i in ids]}
+        assert sizes == {(1080, 1350)}
+    page = client.get(f"/post/{pid}").text
+    assert 'data-cv="post' in page and "1 / 3" in page and "1080×1350 · 4:5" in page and "Acrescentar imagem" in page
+    assert 'class="cv mini"' in client.get("/aprovar").text                # passar imagens sem abrir o post
+    # mover a 1.ª para a direita
+    client.post(f"/post/{pid}", data={"action": "mover", "idx": "0", "dir": "1"}, follow_redirects=False)
+    with connect() as conn:
+        assert json.loads(get_post(conn, pid)["media_ids"]) == [ids[1], ids[0], ids[2]]
+    # retirar a última (o ficheiro fica)
+    r = client.post(f"/post/{pid}", data={"action": "retirar", "idx": "2"}, follow_redirects=False)
+    assert r.headers["location"].endswith("#img=2")
+    # acrescentar duas imagens do "telemóvel"
+    buf = io.BytesIO(); Image.new("RGB", (1080, 1350), (200, 0, 0)).save(buf, "PNG")
+    files = [("imagens", ("a.png", buf.getvalue(), "image/png")), ("imagens", ("b.png", buf.getvalue(), "image/png"))]
+    client.post(f"/post/{pid}/imagens", files=files, follow_redirects=False)
+    bad = client.post(f"/post/{pid}/imagens", files=[("imagens", ("x.png", b"nao-e-imagem", "image/png"))])
+    assert bad.status_code == 403
+    with connect() as conn:
+        now_ids = json.loads(get_post(conn, pid)["media_ids"])
+        assert len(now_ids) == 4 and now_ids[:2] == [ids[1], ids[0]]
+        assert sum(1 for h in post_history(conn, pid) if h["field"] == "media_ids") == 3
+        assert get_post(conn, pid)["status"] == "draft"                    # nada foi aprovado
+    # não deixa retirar a única imagem
+    for _ in range(3):
+        client.post(f"/post/{pid}", data={"action": "retirar", "idx": "0"}, follow_redirects=False)
+    assert client.post(f"/post/{pid}", data={"action": "retirar", "idx": "0"}).status_code == 403
+    # Criar → Carrossel de frases
+    client.post("/criar", data={"tipo": "carrossel", "conta": "ig_davidcarreto", "tema": "Frase um\nFrase dois"},
+                follow_redirects=False)
+    with connect() as conn:
+        job = conn.execute("SELECT kind, args FROM jobs ORDER BY id DESC LIMIT 1").fetchone()
+    assert job["kind"] == "carrossel-frases" and json.loads(job["args"]).count("--frase") == 2
+    assert "erro=frases" in client.post("/criar", data={"tipo": "carrossel", "conta": "ig_davidcarreto",
+                                                        "tema": "só uma"}, follow_redirects=False).headers["location"]

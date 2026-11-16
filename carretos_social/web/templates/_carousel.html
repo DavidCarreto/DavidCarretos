@@ -1,0 +1,27 @@
+{# Visualizador do carrossel: uma imagem de cada vez, como vai aparecer na rede #}
+{% set items = p.fmt.items %}{% set first = items[0] if items else None %}
+<div class="cv" data-cv="post{{ p.id }}" data-cv-keys>
+ <div class="cv-track" style="{% if first and first.width %}aspect-ratio:{{ first.width }}/{{ first.height }}{% endif %}">
+  {% for m in p.media %}<div class="cv-slide">{% if m.video %}<video src="/media/{{ m.id }}" controls playsinline preload="metadata"></video>{% else %}<img src="/media/{{ m.id }}" alt="Imagem {{ loop.index }}" loading="{{ 'eager' if loop.first else 'lazy' }}">{% endif %}</div>{% endfor %}
+ </div>
+ {% if p.media|length > 1 %}<button class="cv-prev" aria-label="Anterior">‹</button><button class="cv-next" aria-label="Seguinte">›</button>{% endif %}
+ <span class="cv-count">1 / {{ p.media|length }}</span>
+</div>
+{% if p.media|length > 1 %}<div class="cv-dots" data-cv-dots="post{{ p.id }}">{% for m in p.media %}<i></i>{% endfor %}</div>{% endif %}
+<div class="cv-info" data-cv-info="post{{ p.id }}">
+ {% for m in p.media %}{% set it = items[loop.index0] if loop.index0 < items|length else None %}
+ <div data-i="{{ loop.index0 }}" {{ 'hidden' if not loop.first }}>
+  <div class="row" style="align-items:center;justify-content:space-between;gap:8px">
+   <span><b>{{ '🎬' if m.video else '📷' }} {{ loop.index }}/{{ p.media|length }}</b>{% if it %} · {{ it.size }} · {{ it.ratio }}{% if it.duration %} · {{ it.duration }}{% endif %}
+   <span class="fmtdot {{ it.verdict }}">{{ {'ok':'✓','ajustar':'⚠','editar':'✕'}[it.verdict] }}</span>{% endif %}</span>
+   {% if can_create %}<form method="post" class="cv-tools"><input type="hidden" name="idx" value="{{ loop.index0 }}">
+    <button class="btn" name="action" value="mover" onclick="this.form.dir.value=-1" {{ 'disabled' if loop.first }} title="Mover para a esquerda">◀</button>
+    <button class="btn" name="action" value="mover" onclick="this.form.dir.value=1" {{ 'disabled' if loop.last }} title="Mover para a direita">▶</button>
+    <input type="hidden" name="dir" value="0">
+    <button class="btn red" name="action" value="retirar" title="Retirar do carrossel (o ficheiro fica guardado)" onclick="return confirm('Retirar esta imagem do carrossel? O ficheiro fica guardado e pode ser reposto no Histórico.')">🗑</button>
+   </form>{% endif %}
+  </div>
+  {% if it %}{% for n in it.notes %}<p class="fmt-line {{ it.verdict }}">{{ n }}</p>{% endfor %}{% endif %}
+ </div>{% endfor %}
+</div>
+{% if p.media|length > 1 %}<div class="cv-thumbs" data-cv-thumbs="post{{ p.id }}">{% for m in p.media %}<button type="button" title="Imagem {{ loop.index }}">{% if m.video %}<video src="/media/{{ m.id }}" preload="metadata" muted></video>{% else %}<img src="/media/{{ m.id }}" alt="" loading="lazy">{% endif %}<span>{{ loop.index }}</span></button>{% endfor %}</div>{% endif %}
