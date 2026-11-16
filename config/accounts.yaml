@@ -11,9 +11,10 @@ accounts:
   - id: ig_davidcarreto
     platform: instagram
     name: "David Carreto (Instagram pessoal)"
-    handle: "davidcarreto"
+    handle: "davidcarretos"
     voice: pessoal          # pessoal | marca | empresa
-    narrator: david           # voz da narração: david | generica
+    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     publish_mode: auto
     auto_approve: false     # true = publica sem pedir a tua aprovação
     credentials:
@@ -37,7 +38,8 @@ accounts:
     name: "David Carreto (Facebook pessoal)"
     handle: "davidcarreto"
     voice: pessoal
-    narrator: david           # voz da narração: david | generica
+    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     # A Meta não permite publicar em perfis pessoais por API desde 2018.
     publish_mode: assist
     auto_approve: false
@@ -48,7 +50,8 @@ accounts:
     name: "David Carreto (TikTok pessoal)"
     handle: "davidcarreto"
     voice: pessoal
-    narrator: david           # voz da narração: david | generica
+    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     publish_mode: auto
     auto_approve: false
     credentials:
@@ -70,7 +73,8 @@ accounts:
     name: "David Carreto (LinkedIn pessoal)"
     handle: "davidcarreto"
     voice: pessoal
-    narrator: david           # voz da narração: david | generica
+    narrator: nenhum        # voz: david | generica | nenhum (sem narração até haver uma voz que soe a ti)
+    theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)
     publish_mode: auto
     auto_approve: false
     credentials:
@@ -82,7 +86,8 @@ accounts:
     name: "Carretos Group (LinkedIn empresa)"
     handle: "carretos-group"
     voice: empresa
-    narrator: david           # voz da narração: david | generica
+    narrator: generica      # voz: david | generica | nenhum
+    theme: carretos         # identidade: pessoal (preto e dourado) | carretos (azul)
     publish_mode: auto
     auto_approve: false
     credentials:

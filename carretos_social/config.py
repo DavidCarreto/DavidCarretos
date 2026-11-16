@@ -40,6 +40,7 @@ class Account:
     publish_mode: str = "auto"
     auto_approve: bool = False
     narrator: str = "generica"
+    theme: str = "carretos"
     credentials: dict = field(default_factory=dict)
 
     def secret(self, key: str) -> str | None:
@@ -53,8 +54,30 @@ def accounts() -> dict[str, Account]:
 
 
 @lru_cache
-def brand() -> dict:
+def _brand_base() -> dict:
     return _yaml("brand.yaml")
+
+
+_ACTIVE_THEME: str | None = None
+
+
+def set_theme(name: str | None) -> None:
+    """Ativa a identidade visual de uma conta (ex.: 'pessoal' = preto e dourado, 'DAVID CARRETO')."""
+    global _ACTIVE_THEME
+    _ACTIVE_THEME = name
+
+
+def brand() -> dict:
+    """Configuração da marca com o tema visual ativo aplicado por cima (cores, fontes, assinatura)."""
+    base = _brand_base()
+    theme = (base.get("themes") or {}).get(_ACTIVE_THEME or "")
+    if not theme:
+        return base
+    merged = dict(base)
+    merged["visual"] = {**base["visual"], **{k: v for k, v in theme.items() if k != "colors"},
+                        "colors": {**base["visual"]["colors"], **theme.get("colors", {})}}
+    merged["signature"] = theme.get("signature") or base.get("company")
+    return merged
 
 
 @lru_cache
@@ -64,6 +87,8 @@ def strategy() -> dict:
 
 def account(account_id: str) -> Account:
     try:
-        return accounts()[account_id]
+        acc = accounts()[account_id]
+        set_theme(acc.theme)  # imagens e vídeos seguintes usam a identidade visual desta conta
+        return acc
     except KeyError:
         raise SystemExit(f"Conta desconhecida: {account_id}. Opções: {', '.join(accounts())}")

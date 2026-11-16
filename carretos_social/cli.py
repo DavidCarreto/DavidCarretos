@@ -434,7 +434,8 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
     w, h = _render_size(acc)
     out_dir = _out_dir(acc.id, "criados")
     (out_dir / "storyboards").mkdir(exist_ok=True)
-    res = create_video(sb, out_dir, size=(w, h), handle=acc.handle, narration=narration, narrator=acc.narrator,
+    res = create_video(sb, out_dir, size=(w, h), handle=acc.handle,
+                       narration=narration and acc.narrator != "nenhum", narrator=acc.narrator,
                        music="auto" if music else None,
                        max_seconds=strategy()["render"].get(acc.platform, {}).get("max_seconds"))
     stem = Path(res["video"]).stem

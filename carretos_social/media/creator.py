@@ -326,8 +326,10 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
         text = scene.get("voiceover", "").strip()
         speech = voice.speak(text, wav, voice_speed, narrator) if (narration and text) else 0.0
         if not speech:
-            voice.silence(float(scene.get("seconds", 2.5)), wav)
-        duration = max(speech + 0.35, float(scene.get("seconds", 0) or 0), 1.6)
+            # sem narração: tempo de leitura do texto no ecrã (~2,5 palavras/s, mínimo 2,5 s)
+            on_screen = " ".join([scene.get("title", ""), scene.get("body", ""), *scene.get("items", [])])
+            voice.silence(float(scene.get("seconds") or max(2.5, len(on_screen.split()) / 2.5 + 1.0)), wav)
+        duration = max(speech + 0.35, float(scene.get("seconds", 0) or 0), 1.6 if speech else voice.duration(wav))
 
         bg, has_media = None, False
         query = scene.get("visual") or scene.get("footage_query") or ""

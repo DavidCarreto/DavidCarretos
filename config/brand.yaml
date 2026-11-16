@@ -58,6 +58,29 @@ visual:
   outro_video: "assets/brand/outro.mp4"      # opcional
   music_dir: "assets/music"                  # músicas livres de direitos (opcional)
 
+# Correções automáticas de erros do reconhecimento de voz nas legendas (palavra inteira, sem maiúsculas)
+transcription_fixes:
+  carreta: "Carreto"
+  carretas: "Carretos"
+  "carreto desgrupo": "Carretos Group"
+  "carretos grupo": "Carretos Group"
+  maceto: "Mercedes"
+  mercedez: "Mercedes"
+
+# Temas visuais por conta (accounts.yaml → theme). Sobrepõem-se a "visual".
+themes:
+  carretos: {}                               # azul da Carretos Group (o "visual" acima)
+  pessoal:                                   # redes pessoais do David: preto e dourado
+    signature: "DAVID CARRETO"
+    colors:
+      primary: "#000000"
+      secondary: "#CFCFCF"
+      accent: "#D4AF37"                      # dourado
+      text: "#FFFFFF"
+    logo: ""                                 # sem logótipo da empresa: assinatura em texto
+    intro_video: ""
+    outro_video: ""
+
 # Vozes da narração dos vídeos criados do zero. Cada conta escolhe a sua em accounts.yaml (narrator).
 narrators:
   david:

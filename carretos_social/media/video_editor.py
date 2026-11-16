@@ -105,11 +105,19 @@ def transcribe(path: str | Path, language: str = "pt", model_size: str | None = 
     out = []
     for s in segments:
         out.append({
-            "start": round(float(s.start), 2), "end": round(float(s.end), 2), "text": s.text.strip(),
-            "words": [{"start": float(w.start), "end": float(w.end), "word": w.word.strip()}
+            "start": round(float(s.start), 2), "end": round(float(s.end), 2), "text": fix_words(s.text.strip()),
+            "words": [{"start": float(w.start), "end": float(w.end), "word": fix_words(w.word.strip())}
                       for w in (s.words or [])],
         })
     return out
+
+
+def fix_words(text: str) -> str:
+    """Corrige erros típicos do reconhecimento de voz em nomes próprios (brand.yaml → transcription_fixes)."""
+    fixes = brand().get("transcription_fixes") or {}
+    for wrong, right in fixes.items():
+        text = re.sub(rf"(?i)\b{re.escape(wrong)}\b", right, text)
+    return text
 
 
 # ------------------------------------------------------------------ silêncios / cortes
@@ -196,7 +204,7 @@ def _ass_color(hex_color: str) -> str:
 
 
 def build_ass(segments: list[dict], width: int, height: int, hook_text: str = "",
-              hook_seconds: float = 3.0, words_per_line: int = 3) -> str:
+              hook_seconds: float = 3.0, words_per_line: int = 3, duration: float = 0.0) -> str:
     v = brand()["visual"]
     font = Path(v["font_bold"]).stem.split("-")[0] or "Inter"
     accent = _ass_color(v["colors"]["accent"])
@@ -214,8 +222,20 @@ def build_ass(segments: list[dict], width: int, height: int, hook_text: str = ""
         f"{max(4, size // 12)},2,2,60,60,{margin_v},1",
         f"Style: Hook,{font},{hook_size},&H00FFFFFF,&H00FFFFFF,&H00000000,{accent.replace('&H00', '&H20')},"
         f"-1,0,0,0,100,100,0,0,3,{max(10, hook_size // 4)},0,8,80,80,{int(height * 0.12)},1",
+        f"Style: Sign,{font},{int(width * 0.03)},{accent},{accent},&H00000000,&H00000000,-1,0,0,0,100,100,"
+        f"{int(width * 0.006)},0,1,0,0,8,0,0,{int(height * 0.035)},1",
+        f"Style: Line,{font},10,{accent},{accent},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
+    signature = brand().get("signature")
+    if duration and signature and not v.get("logo"):
+        # assinatura + linhas finas douradas (identidade pessoal)
+        end = _ass_time(duration + 1)
+        lines.append(f"Dialogue: 2,{_ass_time(0)},{end},Sign,,0,0,0,,{_ass_escape(signature.upper())}")
+        m, y1, y2, th = int(width * 0.06), int(height * 0.028), int(height * 0.972), max(2, height // 900)
+        for y in (y1, y2):
+            lines.append(f"Dialogue: 2,{_ass_time(0)},{end},Line,,0,0,0,,"
+                         f"{{\\pos(0,0)\\p1}}m {m} {y} l {width - m} {y} {width - m} {y + th} {m} {y + th}{{\\p0}}")
     if hook_text:
         lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(hook_seconds)},Hook,,0,0,0,,"
                      f"{{\\fad(150,250)}}{_ass_escape(hook_text.upper())}")
@@ -244,8 +264,13 @@ def _fake_words(seg: dict) -> list[dict]:
             for i, t in enumerate(toks)]
 
 
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿️‍]+")
+
+
 def _ass_escape(s: str) -> str:
-    return s.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ")
+    # o libass desenha emojis como quadrados: remove-os
+    s = _EMOJI.sub("", s)
+    return s.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ").strip()
 
 
 def write_srt(segments: list[dict], out: str | Path) -> Path:
@@ -313,14 +338,16 @@ def render(src: str | Path, out: str | Path, opt: EditOptions) -> Path:
         vchain += f",setpts=PTS/{opt.speed}"
     vchain += ",fps=30"
 
-    if opt.subtitles is not None or opt.hook_text:
+    themed_frame = bool(brand().get("signature")) and not _brand_path("logo")
+    if opt.subtitles is not None or opt.hook_text or themed_frame:
         segs = opt.subtitles or []
         if opt.speed != 1.0:
             segs = [{**s, "start": s["start"] / opt.speed, "end": s["end"] / opt.speed,
                      "words": [{**w, "start": w["start"] / opt.speed, "end": w["end"] / opt.speed}
                                for w in s.get("words", [])]} for s in segs]
         ass = tmp / "subs.ass"
-        ass.write_text(build_ass(segs, W, H, opt.hook_text), encoding="utf-8")
+        ass.write_text(build_ass(segs, W, H, opt.hook_text, duration=info.duration / opt.speed),
+                       encoding="utf-8")
         fontsdir = str(Path(brand()["visual"]["font_bold"]).parent)
         vchain += f",subtitles='{_ff_path(ass)}':fontsdir='{_ff_path(fontsdir)}'"
     vchain += "[base]"

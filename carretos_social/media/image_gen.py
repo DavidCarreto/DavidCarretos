@@ -93,7 +93,7 @@ def _logo(img: Image.Image, width_ratio: float = 0.18, pos: str = "top-right") -
     else:  # sem logótipo: marca em texto
         d = ImageDraw.Draw(img)
         f = _font(True, int(W * 0.032))
-        text = brand()["company"].upper()
+        text = (brand().get("signature") or brand()["company"]).upper()
         tw = d.textlength(text, font=f)
         xy = (W - tw - m, m) if pos == "top-right" else (m, H - m - f.size)
         d.text(xy, text, font=f, fill=_hex(_v()["colors"]["text"], 230))
