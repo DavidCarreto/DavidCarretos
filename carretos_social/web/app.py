@@ -202,11 +202,40 @@ def _post_view(conn, r) -> dict:
                 if src and src not in sources:
                     sources.append(src)
     p["stock_sources"] = sources
+    # tipo de publicação, bem visível: vídeo (com duração), carrossel ou imagem
+    videos = [m for m in p["media"] if m["video"]]
+    images = [m for m in p["media"] if not m["video"]]
+    if videos:
+        secs = _duration(media_paths(conn, [videos[0]["id"]])[0])
+        p["kind"] = ("video", f"🎬 Vídeo · {int(secs // 60)}:{int(secs % 60):02d}" if secs else "🎬 Vídeo")
+    elif len(images) > 1:
+        p["kind"] = ("carousel", f"🖼 Carrossel · {len(images)} imagens")
+    elif images:
+        p["kind"] = ("image", "🖼 Imagem")
+    else:
+        p["kind"] = ("none", "Ainda sem vídeo/imagem")
+    p["is_video"] = bool(videos) or p.get("format") in ("reel", "video")
     p["account"] = accounts().get(p["account_id"])
     p["group"] = group_of(p["account_id"])
     p["when"] = datetime.fromisoformat(p["scheduled_at"][:19]) if p.get("scheduled_at") else None
     p["tags"] = " ".join(json.loads(p.get("hashtags") or "[]"))
     return p
+
+
+@__import__("functools").lru_cache(maxsize=512)
+def _duration_cached(path: str, mtime: float) -> float:
+    from ..media.video_editor import probe
+    try:
+        return probe(path).duration
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _duration(path: str) -> float:
+    try:
+        return _duration_cached(path, Path(path).stat().st_mtime)
+    except OSError:
+        return 0.0
 
 
 def _group_posts(posts: list[dict]) -> list[tuple[dict, list[dict]]]:

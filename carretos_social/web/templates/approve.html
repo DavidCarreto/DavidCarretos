@@ -7,7 +7,7 @@
  {% if p.media and p.media[0].video %}<video src="/media/{{ p.media[0].id }}" controls playsinline preload="metadata"></video>
  {% elif p.media %}<img src="/media/{{ p.media[0].id }}">{% else %}<div style="width:120px;aspect-ratio:9/16;border-radius:12px;background:#1b1b1f;display:grid;place-items:center" class="muted">sem media</div>{% endif %}
  <div><div class="meta">#{{ p.id }} · {{ ICON.get(p.account.platform,'') }} {{ p.account.handle or p.account.name }} · {{ p.when|quando if p.when else 'sem data' }}</div>
- <b>{{ p.title or tema(p.pillar) }}</b><div class="cap">{{ p.caption or "Ainda sem legenda — a IA escreve-a ao criar o conteúdo." }}</div>
+ <b>{{ p.title or tema(p.pillar) }}</b> <span class="kind {{ p.kind[0] }}">{{ p.kind[1] }}</span><div class="cap">{{ p.caption or "Ainda sem legenda — a IA escreve-a ao criar o conteúdo." }}</div>
  {% if p.error %}<p style="color:#ff8f8f;font-size:13px">⚠ {{ p.error }}</p>{% endif %}
  {% if p.stock_sources %}<p class="muted" style="font-size:11px;margin:4px 0">Imagens de stock: {{ p.stock_sources|map(attribute='fonte')|unique|join(', ') }}</p>{% endif %}
  <form method="post" action="/post/{{ p.id }}" class="row" style="margin-top:8px">

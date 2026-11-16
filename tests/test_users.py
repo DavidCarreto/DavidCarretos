@@ -218,3 +218,22 @@ def test_send_test_email(client, monkeypatch):
     monkeypatch.setattr(mailer, "send", boom)
     loc = client.post("/configurar/testar-email", follow_redirects=False).headers["location"]
     assert "teste=erro" in loc and "falhou" in client.get(loc).text
+
+
+def test_post_shows_media_kind_and_whole_image(client, tmp_path):
+    from PIL import Image
+    from carretos_social.db import add_media, add_post, connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    img = tmp_path / "frase.png"
+    Image.new("RGB", (1080, 1350), (212, 175, 55)).save(img)        # 4:5, não 9:16
+    with connect() as conn:
+        mid = add_media(conn, "image", str(img))
+        one = add_post(conn, account_id="ig_davidcarreto", format="image", caption="x", status="draft",
+                       media_ids=[mid], scheduled_at="2030-01-01T10:00:00+00:00")
+        car = add_post(conn, account_id="ig_davidcarreto", format="carousel", caption="x", status="draft",
+                       media_ids=[mid, mid, mid], scheduled_at="2030-01-02T10:00:00+00:00")
+    page = client.get(f"/post/{one}").text
+    assert "🖼 Imagem" in page and "Refazer vídeo" not in page
+    assert "🖼 Carrossel · 3 imagens" in client.get(f"/post/{car}").text
+    assert "🖼 Imagem" in client.get("/aprovar").text
