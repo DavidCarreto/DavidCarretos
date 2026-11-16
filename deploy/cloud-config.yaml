@@ -1,0 +1,7 @@
+#cloud-config
+# Cola isto na Hetzner, em "Cloud config", ao criar o servidor (Ubuntu 24.04).
+# Troca ESCOLHE_UM_CODIGO por um código só teu (ex.: 6+ letras e números). Serve só para a 1.ª
+# configuração no dashboard; depois escolhes lá a palavra-passe definitiva.
+runcmd:
+  - curl -fsSL https://raw.githubusercontent.com/DavidCarreto/DavidCarretos/claude/social-media-management-system-goj30w/deploy/setup_servidor.sh -o /root/setup.sh
+  - SETUP_CODE=ESCOLHE_UM_CODIGO bash /root/setup.sh > /root/instalacao.log 2>&1

@@ -60,13 +60,67 @@ def _token() -> str:
 
 @app.middleware("http")
 async def auth(request: Request, call_next):
-    open_paths = ("/login", "/static")
+    open_paths = ("/login", "/static", "/configurar")
     if not os.environ.get("DASHBOARD_PASSWORD"):
         if not request.url.path.startswith(open_paths):
-            return HTMLResponse("<h3>Define DASHBOARD_PASSWORD no .env para usar o dashboard.</h3>", 503)
+            return RedirectResponse("/configurar", 303)  # 1.ª configuração
     elif not request.url.path.startswith(open_paths) and request.cookies.get("cs") != _token():
         return RedirectResponse("/login", 303)
     return await call_next(request)
+
+
+CONFIG_FIELDS = [  # (variável, rótulo, secreta)
+    ("DASHBOARD_PASSWORD", "Palavra-passe do dashboard", True),
+    ("SOCIAL_ANTHROPIC_API_KEY", "Chave da IA (carretos-redes-sociais)", True),
+    ("ELEVENLABS_API_KEY", "Chave da ElevenLabs", True),
+    ("ELEVENLABS_VOICE_ID", "Voice ID da voz 'David Carreto'", False),
+    ("PEXELS_API_KEY", "Chave do Pexels", True),
+]
+
+
+def _config_allowed(request: Request, code: str = "") -> bool:
+    if os.environ.get("DASHBOARD_PASSWORD"):
+        return request.cookies.get("cs") == _token()        # já configurado: só com sessão iniciada
+    expected = os.environ.get("SETUP_CODE", "")
+    return bool(expected) and hmac.compare_digest(code, expected)  # 1.ª vez: código escolhido na instalação
+
+
+@app.get("/configurar", response_class=HTMLResponse)
+def config_page(request: Request, ok: str = ""):
+    first = not os.environ.get("DASHBOARD_PASSWORD")
+    if not first and request.cookies.get("cs") != _token():
+        return RedirectResponse("/login", 303)
+    fields = [(k, label, secret, bool(os.environ.get(k))) for k, label, secret in CONFIG_FIELDS]
+    return tpl.TemplateResponse(request, "config.html", {"fields": fields, "first": first, "ok": ok,
+                                                         "page": ""})
+
+
+@app.post("/configurar")
+async def config_save(request: Request):
+    form = await request.form()
+    if not _config_allowed(request, str(form.get("codigo", ""))):
+        return HTMLResponse("Código de configuração errado.", 403)
+    from ..config import ROOT
+    env = ROOT / ".env"
+    lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
+    for key, _, _ in CONFIG_FIELDS:
+        value = str(form.get(key, "")).strip()
+        if not value:
+            continue                                         # vazio = manter o valor atual
+        os.environ[key] = value
+        replaced = False
+        for i, line in enumerate(lines):
+            if line.split("=", 1)[0].strip() == key and not line.startswith("#"):
+                lines[i] = f"{key}={value}"
+                replaced = True
+        if not replaced:
+            lines.append(f"{key}={value}")
+    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env.chmod(0o600)
+    r = RedirectResponse("/configurar?ok=1", 303)
+    if os.environ.get("DASHBOARD_PASSWORD"):
+        r.set_cookie("cs", _token(), max_age=60 * 60 * 24 * 60, httponly=True, samesite="lax")
+    return r
 
 
 @app.get("/login", response_class=HTMLResponse)

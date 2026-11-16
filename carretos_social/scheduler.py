@@ -100,6 +100,9 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     from .analytics.analyzer import sync
 
     print(f"Agendador ativo (verifica a cada {interval}s). Ctrl+C para parar.")
+    from .config import ROOT
+    env_file = ROOT / ".env"
+    env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
     last_sync = last_reminder = 0.0
     while True:
         for line in tick():
@@ -113,4 +116,7 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
             with connect() as conn:
                 remind_pending(conn)
             last_reminder = time.time()
+        if env_file.exists() and env_file.stat().st_mtime != env_mtime:
+            print("Configuração alterada: a reiniciar para carregar as chaves novas.")
+            raise SystemExit(0)  # o systemd volta a arrancar o serviço
         time.sleep(interval)

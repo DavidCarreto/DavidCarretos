@@ -7,6 +7,7 @@ REPO_HTTPS="https://github.com/DavidCarreto/DavidCarretos.git"
 REPO_SSH="git@github.com:DavidCarreto/DavidCarretos.git"
 BRANCH="claude/social-media-management-system-goj30w"
 DOMINIO="${DOMINIO:-}"   # opcional: ex. redes.davidcarreto.pt (aponta o DNS para o IP do servidor)
+SETUP_CODE="${SETUP_CODE:-}"  # código escolhido pelo David para a 1.ª configuração no dashboard
 
 apt-get update -y
 apt-get install -y git ffmpeg python3-venv python3-pip fonts-inter caddy
@@ -30,6 +31,10 @@ fi
 chown -R carretos:carretos /opt/carretos
 sudo -u carretos bash -c "cd /opt/carretos && python3 -m venv .venv && .venv/bin/pip install -q -U pip && .venv/bin/pip install -q -e . chatterbox-tts fastapi 'uvicorn[standard]' python-multipart jinja2"
 [ -f /opt/carretos/.env ] || sudo -u carretos cp /opt/carretos/.env.example /opt/carretos/.env
+if [ -n "$SETUP_CODE" ] && ! grep -q '^SETUP_CODE=' /opt/carretos/.env; then
+  echo "SETUP_CODE=$SETUP_CODE" >> /opt/carretos/.env
+fi
+chmod 600 /opt/carretos/.env && chown carretos:carretos /opt/carretos/.env
 
 cat > /etc/systemd/system/carretos-web.service <<UNIT
 [Unit]
@@ -57,12 +62,13 @@ Restart=always
 WantedBy=multi-user.target
 UNIT
 
-# HTTPS automático (com domínio) ou acesso pelo IP
-if [ -n "$DOMINIO" ]; then
-  printf '%s {\n  reverse_proxy 127.0.0.1:8000\n}\n' "$DOMINIO" > /etc/caddy/Caddyfile
-else
-  printf ':80 {\n  reverse_proxy 127.0.0.1:8000\n}\n' > /etc/caddy/Caddyfile
+# HTTPS automático: domínio próprio ou, sem domínio, <ip-com-traços>.sslip.io (certificado grátis)
+if [ -z "$DOMINIO" ]; then
+  IP=$(curl -fsS https://api.ipify.org || hostname -I | awk '{print $1}')
+  DOMINIO="$(echo "$IP" | tr . -).sslip.io"
 fi
+printf '%s {\n  reverse_proxy 127.0.0.1:8000\n}\n' "$DOMINIO" > /etc/caddy/Caddyfile
+echo "https://$DOMINIO" > /opt/carretos/ENDERECO_DASHBOARD.txt
 systemctl daemon-reload
 systemctl enable --now carretos-web carretos-agendador
 systemctl restart caddy
@@ -70,6 +76,7 @@ systemctl restart caddy
 for d in fotos musicas; do
   [ -f /opt/carretos/config/drive/$d.csv ] && sudo -u carretos /opt/carretos/.venv/bin/carretos importar-drive $d /opt/carretos/config/drive/$d.csv || true
 done
-echo "Pronto. Último passo: guardar as chaves (pergunta uma a uma, sem as mostrar):"
+echo "Dashboard: https://$DOMINIO  (1.ª vez: página de configuração com o código escolhido)"
+echo "Alternativa no terminal para guardar as chaves (pergunta uma a uma, sem as mostrar):"
 echo "  cd /opt/carretos && sudo -u carretos .venv/bin/carretos configurar"
 echo "  systemctl restart carretos-web carretos-agendador"
