@@ -24,6 +24,10 @@ Aplica-se aos vídeos do YouTube (2020/2021, com datas desatualizadas) e à grav
 - É permitido **propor** um uso ("este trecho podia dar um vídeo sobre X"); só se avança depois de ele aprovar.
 - O uso para treinar o clone profissional na ElevenLabs também precisa de aprovação dele, e o David
   faz esse passo por si.
+- **Autorizado (16/11/2026):** `voz_david_youtube_35min.m4a` pode ser usado **só para treinar o timbre**
+  do clone na ElevenLabs (o clone não reproduz o conteúdo do vídeo).
+- **A mesma regra aplica-se aos 45 vídeos curtos** partilhados (`videos_david_partilhados.csv`): não se
+  usam em novos conteúdos sem perguntar primeiro.
 
 Testes gratuitos (Chatterbox e Piper com conversão): o timbre não ficou parecido e os L e os R saíram fracos,
 por isso estão abandonados. Solução escolhida: o clone profissional da ElevenLabs.

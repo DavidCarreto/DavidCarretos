@@ -39,7 +39,7 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
 
 ## Voz e gravações do David
 Ler `docs/VOZ.md` antes de usar qualquer áudio ou vídeo de voz. As gravações servem só para a voz;
-o conteúdo não é factual. Os vídeos do YouTube e a gravação do telemóvel **não se usam sem
+o conteúdo não é factual. Os vídeos do YouTube, a gravação do telemóvel e os 45 vídeos curtos partilhados **não se usam sem
 autorização explícita do David**: propor primeiro e esperar pela aprovação.
 
 ## Não inventar factos
