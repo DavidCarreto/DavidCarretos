@@ -405,6 +405,31 @@ def create(request: Request, tipo: str = Form(...), conta: str = Form(...), tema
     return RedirectResponse("/tarefas", 303)
 
 
+MAX_AUDIO_BYTES = 25 * 1024 * 1024  # ~3 minutos de voz chegam e sobram
+
+
+@app.post("/transcrever")
+def transcribe_audio(request: Request, audio: UploadFile = File(...)):
+    """Ditado por microfone (Assistente e Criar): o áudio é transcrito NO SERVIDOR (faster-whisper),
+    não é enviado a serviços externos e é apagado logo a seguir."""
+    import tempfile
+    from ..media.video_editor import dictate
+    data = audio.file.read(MAX_AUDIO_BYTES + 1)
+    if not data:
+        return JSONResponse({"erro": "Não recebi áudio."}, 400)
+    if len(data) > MAX_AUDIO_BYTES:
+        return JSONResponse({"erro": "Gravação demasiado longa (máx. ~3 minutos)."}, 413)
+    suffix = Path(audio.filename or "voz.webm").suffix or ".webm"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
+        tmp.write(data)
+        tmp.flush()
+        try:
+            texto = dictate(tmp.name)
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse({"erro": f"Não consegui transcrever: {exc}"}, 500)
+    return JSONResponse({"texto": texto})
+
+
 @app.get("/tarefas", response_class=HTMLResponse)
 def jobs_page(request: Request):
     me = request.state.user

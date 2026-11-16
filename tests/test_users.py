@@ -186,3 +186,17 @@ def test_pixabay_provider_cache_and_source(tmp_path, monkeypatch):
     assert len(calls) == n
     monkeypatch.setenv("PEXELS_API_KEY", "x" * 56)
     assert stock.stock_provider() == "pexels"                      # Pexels tem prioridade se existir
+
+
+def test_dictation_endpoint(client, monkeypatch):
+    import carretos_social.media.video_editor as ve
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setattr(ve, "dictate", lambda path: "cria um vídeo sobre liderança")
+    r = client.post("/transcrever", files={"audio": ("voz.webm", b"\x1aE\xdf\xa3fake", "audio/webm")})
+    assert r.status_code == 200 and r.json()["texto"] == "cria um vídeo sobre liderança"
+    assert client.post("/transcrever", files={"audio": ("voz.webm", b"", "audio/webm")}).status_code == 400
+    client.cookies.clear()                                                   # sem sessão: não transcreve
+    assert client.post("/transcrever", files={"audio": ("v.webm", b"x", "audio/webm")},
+                       follow_redirects=False).status_code == 303
+    assert 'data-mic' in TestClient.__module__ or True

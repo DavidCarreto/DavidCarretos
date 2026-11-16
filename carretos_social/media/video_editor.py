@@ -91,6 +91,21 @@ def load_audio(path: str | Path, sr: int = 16000):
     return np.frombuffer(raw, np.int16).astype(np.float32) / 32768.0
 
 
+_WHISPER_LOCK = __import__("threading").Lock()
+
+
+@__import__("functools").lru_cache(maxsize=2)
+def _whisper(size: str):
+    """Modelo de reconhecimento de voz carregado uma só vez por processo (fica em memória)."""
+    from faster_whisper import WhisperModel  # type: ignore
+    return WhisperModel(size, device="auto", compute_type="int8")
+
+
+def dictate(path: str | Path, language: str = "pt") -> str:
+    """Ditado: transforma uma gravação curta (microfone do dashboard) em texto corrido."""
+    return " ".join(s["text"] for s in transcribe(path, language)).strip()
+
+
 def transcribe(path: str | Path, language: str = "pt", model_size: str | None = None) -> list[dict]:
     """Transcrição com tempos por palavra (faster-whisper, gratuito e local)."""
     import os
@@ -99,9 +114,11 @@ def transcribe(path: str | Path, language: str = "pt", model_size: str | None = 
         from faster_whisper import WhisperModel  # type: ignore
     except ImportError as exc:
         raise VideoError("Para legendas automáticas instala: pip install faster-whisper") from exc
-    model = WhisperModel(model_size or os.environ.get("WHISPER_MODEL", "small"), device="auto", compute_type="int8")
-    segments, _ = model.transcribe(load_audio(path), language=language, word_timestamps=True, vad_filter=True,
-                                   initial_prompt=VOCAB)
+    model = _whisper(model_size or os.environ.get("WHISPER_MODEL", "small"))
+    with _WHISPER_LOCK:  # um pedido de cada vez (o modelo usa todos os processadores)
+        segments, _ = model.transcribe(load_audio(path), language=language, word_timestamps=True, vad_filter=True,
+                                       initial_prompt=VOCAB)
+        segments = list(segments)
     out = []
     for s in segments:
         out.append({

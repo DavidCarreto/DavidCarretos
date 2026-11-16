@@ -44,3 +44,9 @@ select.lvl-nenhum{color:var(--muted)}select.lvl-ver{color:#7cc4ff}select.lvl-cri
 .gtag.david{background:var(--gold);color:#000}.gtag.carretos{background:#00A3E0;color:#000}
 .ghead{display:flex;align-items:center;gap:8px;margin:22px 0 10px;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
 .ghead .gtag{font-size:11px;padding:2px 6px}
+.mic-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.btn.mic{padding:9px 12px;font-size:17px;line-height:1}
+.btn.mic.rec{background:#5c1d1d;border-color:#f85149;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(248,81,73,.15)}}
+.mic-status{font-size:12px}.mic-status.inline{position:absolute;left:16px;bottom:-16px;max-width:90%}
+.composer form{position:relative}

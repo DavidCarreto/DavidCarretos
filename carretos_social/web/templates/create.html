@@ -8,7 +8,7 @@
   <label><input type="radio" name="tipo" value="imagem"><span>▢ Imagem com frase</span></label>
  </div>
  <label>Conta</label><select name="conta">{% for g, cs in contas_grupos %}<optgroup label="{{ g.name }}">{% for a in cs %}<option value="{{ a.id }}">{{ a.label }}</option>{% endfor %}</optgroup>{% endfor %}</select>
- <label id="lt">Tema ou mensagem</label><textarea name="tema" rows="3" placeholder="Ex.: uma lição sobre falhar e voltar a tentar"></textarea>
+ <label id="lt">Tema ou mensagem</label><textarea name="tema" rows="3" placeholder="Ex.: uma lição sobre falhar e voltar a tentar — ou toca no 🎤 e fala" data-mic></textarea>
  <div id="up" style="display:none"><label>Vídeo(s)</label><input type="file" name="ficheiros" accept="video/*" multiple></div>
  <div class="row"><div style="flex:1"><label>Duração (s)</label><input type="number" name="segundos" value="35" min="10" max="90"></div>
  <div style="flex:2"><label>Agendar para (opcional)</label><input type="datetime-local" name="quando"></div></div>
@@ -19,4 +19,4 @@
 const f=document.getElementById('f');function upd(){const t=f.tipo.value;document.getElementById('up').style.display=(t=='editar'||t=='montagem')?'block':'none';
 document.getElementById('lt').textContent=t=='imagem'?'Frase':t=='zero'?'Tema ou mensagem':'Objetivo (opcional)';}
 f.querySelectorAll('input[name=tipo]').forEach(r=>r.onchange=upd);
-</script>{% endblock %}
+</script><script src="/static/mic.js"></script>{% endblock %}
