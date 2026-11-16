@@ -140,6 +140,14 @@ def _post_view(conn, r) -> dict:
     ids = json.loads(p.get("media_ids") or "[]")
     p["media"] = [{"id": i, "video": path.lower().endswith((".mp4", ".mov"))}
                   for i, path in zip(ids, media_paths(conn, ids))]
+    # origem das imagens/vídeos de stock (a Pixabay pede que se mostre a origem)
+    sources: list[dict] = []
+    if ids:
+        for m in conn.execute(f"SELECT meta FROM media WHERE id IN ({','.join('?' * len(ids))})", ids):
+            for src in (json.loads(m["meta"] or "{}").get("stock") or []):
+                if src and src not in sources:
+                    sources.append(src)
+    p["stock_sources"] = sources
     p["account"] = accounts().get(p["account_id"])
     p["when"] = datetime.fromisoformat(p["scheduled_at"][:19]) if p.get("scheduled_at") else None
     p["tags"] = " ".join(json.loads(p.get("hashtags") or "[]"))
@@ -414,22 +422,44 @@ def my_account_save(request: Request, atual: str = Form(...), nova: str = Form(.
 
 # ------------------------------------------------------------------ configuração (chaves)
 CONFIG_FIELDS = [  # (variável, rótulo, secreta)
-    ("SOCIAL_ANTHROPIC_API_KEY", "Chave da IA (carretos-redes-sociais)", True),
+    ("SOCIAL_ANTHROPIC_API_KEY", "Chave da IA", True),
     ("ELEVENLABS_API_KEY", "Chave da ElevenLabs", True),
     ("ELEVENLABS_VOICE_ID", "Voice ID da voz 'David Carreto'", False),
-    ("PEXELS_API_KEY", "Chave do Pexels", True),
+    ("PIXABAY_API_KEY", "Chave da Pixabay", True),
+    ("PEXELS_API_KEY", "Chave do Pexels (opcional; se existir, tem prioridade sobre a Pixabay)", True),
 ]
 
 
+import re as _re
+
+# formato esperado de cada chave: evita guardar por engano um utilizador/palavra-passe preenchido pelo browser
+KEY_FORMATS = {
+    "SOCIAL_ANTHROPIC_API_KEY": (_re.compile(r"^sk-ant-[A-Za-z0-9_\-]{20,}$"), "começa por sk-ant-"),
+    "ELEVENLABS_API_KEY": (_re.compile(r"^(sk_)?[0-9a-fA-F]{32,64}$"), "começa por sk_ seguido de letras/números"),
+    "ELEVENLABS_VOICE_ID": (_re.compile(r"^[A-Za-z0-9]{15,40}$"), "só letras e números, sem espaços (~20)"),
+    "PIXABAY_API_KEY": (_re.compile(r"^\d+-[0-9a-fA-F]{20,}$"), "números, um hífen e letras/números"),
+    "PEXELS_API_KEY": (_re.compile(r"^[A-Za-z0-9]{40,64}$"), "~56 letras e números"),
+}
+
+
+def _bad_key(key: str, value: str) -> str | None:
+    fmt = KEY_FORMATS.get(key)
+    if fmt and not fmt[0].match(value):
+        return fmt[1]
+    return None
+
+
 @app.get("/configurar", response_class=HTMLResponse)
-def config_page(request: Request, ok: str = ""):
+def config_page(request: Request, ok: str = "", erro: str = ""):
     first = users.count() == 0
     me = _current_user(request) if not first else None
     if not first and not (me and me.is_admin):
         return RedirectResponse("/login", 303)
     request.state.user = me
     fields = [(k, label, secret, bool(os.environ.get(k))) for k, label, secret in CONFIG_FIELDS]
-    return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok})
+    labels = {k: label for k, label, _ in CONFIG_FIELDS}
+    erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
+    return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok, "erros": erros})
 
 
 @app.post("/configurar")
@@ -451,10 +481,14 @@ async def config_save(request: Request):
         admin_id = me.id
     env = ROOT / ".env"
     lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
+    rejected = []
     for key, _, _ in CONFIG_FIELDS:
         value = str(form.get(key, "")).strip()
         if not value:
             continue                                         # vazio = manter o valor atual
+        if _bad_key(key, value):
+            rejected.append(key)                              # formato errado: não guarda
+            continue
         os.environ[key] = value
         replaced = False
         for i, line in enumerate(lines):
@@ -465,7 +499,7 @@ async def config_save(request: Request):
             lines.append(f"{key}={value}")
     env.write_text("\n".join(lines) + "\n", encoding="utf-8")
     env.chmod(0o600)
-    r = RedirectResponse("/configurar?ok=1", 303)
+    r = RedirectResponse("/configurar?ok=1" + (f"&erro={','.join(rejected)}" if rejected else ""), 303)
     _set_session(r, admin_id)
     return r
 

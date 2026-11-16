@@ -131,6 +131,9 @@ def montage(files: list[str | Path], out_dir: str | Path, *, acc=None, width: in
                 continue
             used.add(str(vis))
             inserts.append((at, secs, _broll_clip(vis, secs, tmp / f"b{len(inserts)}.mp4", W, H), vis.name))
+            src = stock.source_of(vis)
+            if src and src not in result.setdefault("stock_sources", []):
+                result["stock_sources"].append(src)
     if inserts:
         inputs, graph, last = ["-i", str(timeline)], [], "[0:v]"
         for n, (at, secs, clip, _) in enumerate(inserts, 1):

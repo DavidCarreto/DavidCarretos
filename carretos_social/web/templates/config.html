@@ -1,15 +1,20 @@
 {% extends "base.html" %}{% block body %}
 <h1>Configuração</h1>
-{% if ok %}<div class="card" style="border-color:#3fb950;margin-bottom:12px">✓ Guardado. As alterações já estão ativas.
+{% if erros %}<div class="card" style="border-color:#f85149;margin-bottom:12px">⚠ Não guardei estes campos porque o valor não parece certo
+(o browser pode ter preenchido um utilizador ou uma palavra-passe guardada):
+<ul style="margin:6px 0 0">{% for nome, dica in erros %}<li><b>{{ nome }}</b>: devia ter o formato "{{ dica }}"</li>{% endfor %}</ul>
+Os outros campos foram guardados.</div>{% endif %}
+{% if ok and not erros %}<div class="card" style="border-color:#3fb950;margin-bottom:12px">✓ Guardado. As alterações já estão ativas.
 {% if first %}<br><a class="gold" href="/">Abrir o dashboard</a>{% endif %}</div>{% endif %}
 <form method="post" class="card" autocomplete="off">
  {% if first %}<p class="muted">Primeira configuração. Introduz o código que escolheste ao criar o servidor e define a
  tua palavra-passe de administrador. As chaves nunca são mostradas depois de guardadas.</p>
- <label>Código de configuração</label><input type="password" name="codigo" required>
- <label>Palavra-passe do administrador (utilizador: <b>david</b>)</label><input type="password" name="admin_password" minlength="8" required>{% endif %}
+ <label>Código de configuração</label><input type="password" name="codigo" autocomplete="new-password" required>
+ <label>Palavra-passe do administrador (utilizador: <b>david</b>)</label><input type="password" name="admin_password" autocomplete="new-password" minlength="8" required>{% endif %}
  {% for k, label, secret, has in fields %}
  <label>{{ label }} {% if has %}<span class="gold">✓ definida</span>{% else %}<span class="muted">(vazia)</span>{% endif %}</label>
  <input type="{{ 'password' if secret else 'text' }}" name="{{ k }}" placeholder="{{ 'deixa vazio para manter' if has else '' }}"
+  autocomplete="{{ 'new-password' if secret else 'off' }}" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore
 >
  {% endfor %}
  <p><button class="btn gold" style="width:100%">Guardar</button></p>

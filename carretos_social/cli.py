@@ -481,7 +481,8 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
                                                           encoding="utf-8")
     cover = image_gen.cover(res["cover_frame"], res.get("cover_text") or sb.get("title") or acc.name,
                             out_dir / f"{stem}_capa.jpg", size=(w, h))
-    vid_id = add_media(conn, "video", res["video"], None, {"account": acc.id, "created_from_zero": True})
+    vid_id = add_media(conn, "video", res["video"], None, {"account": acc.id, "created_from_zero": True,
+                                                         "stock": res.get("stock_sources", [])})
     cov_id = add_media(conn, "cover", cover, vid_id)
     res["cover"] = str(cover)
     if post_id:
@@ -540,6 +541,7 @@ def cmd_produce(a):
                     size = _render_size(acc, "image")
                     out = _out_dir(acc.id, "criados")
                     title = extra.get("cover_text") or r["hook"] or r["title"] or r["pillar"]
+                    photo_src = None
                     if r["format"] == "carousel" and extra.get("slides"):
                         paths = image_gen.carousel(extra["slides"], out / f"carrossel_{r['id']}", size=size,
                                                    handle=acc.handle)
@@ -547,10 +549,13 @@ def cmd_produce(a):
                         paths = [image_gen.quote_card(r["hook"], out / f"frase_{r['id']}.jpg", size=size)]
                     else:
                         from .media.stock import find_visual
+                        from .media.stock import source_of
                         photo = find_visual(r["title"] or r["pillar"] or "mercedes workshop", "image")
+                        photo_src = source_of(photo) if photo else None
                         paths = [image_gen.photo_post(photo, title, out / f"imagem_{r['id']}.jpg", size=size,
                                                       tag=(r["pillar"] or "").replace("_", " "))]
-                    ids = [add_media(conn, "image", p) for p in paths]
+                    meta = {"stock": [photo_src]} if photo_src else None
+                    ids = [add_media(conn, "image", p, None, meta) for p in paths]
                     update_post(conn, r["id"], media_ids=ids, status="draft" if r["status"] == "idea" else r["status"])
                     print(f"{label} → 🖼  {len(paths)} imagem(ns)")
             except Exception as exc:  # noqa: BLE001
@@ -609,7 +614,8 @@ def cmd_montage(a):
     cover = image_gen.cover(res["cover_frame"], res.get("cover_text") or res.get("hook_text") or acc.name,
                             out_dir / f"{stem}_capa.jpg", size=(w, h))
     with connect() as conn:
-        vid_id = add_media(conn, "video", res["video"], None, {"account": acc.id, "montage": res.get("pieces")})
+        vid_id = add_media(conn, "video", res["video"], None, {"account": acc.id, "montage": res.get("pieces"),
+                                                         "stock": res.get("stock_sources", [])})
         cov_id = add_media(conn, "cover", cover, vid_id)
         pid = add_post(conn, account_id=acc.id, format="reel" if acc.platform == "instagram" else "video",
                        title=res.get("title") or stem, hook=res.get("hook_text") or "",
@@ -653,10 +659,11 @@ def cmd_web(a):
 
 CONFIG_KEYS = [
     ("DASHBOARD_PASSWORD", "Palavra-passe para entrar no dashboard (escolhe uma forte)", True),
-    ("SOCIAL_ANTHROPIC_API_KEY", "Chave da IA 'carretos-redes-sociais' (Claude Console)", True),
+    ("SOCIAL_ANTHROPIC_API_KEY", "Chave da IA (Claude Console)", True),
     ("ELEVENLABS_API_KEY", "Chave da ElevenLabs", True),
     ("ELEVENLABS_VOICE_ID", "Voice ID da voz 'David Carreto' na ElevenLabs (não é secreto)", False),
-    ("PEXELS_API_KEY", "Chave do Pexels (imagens de stock)", True),
+    ("PIXABAY_API_KEY", "Chave da Pixabay (imagens e vídeos de stock)", True),
+    ("PEXELS_API_KEY", "Chave do Pexels (opcional; tem prioridade sobre a Pixabay)", True),
 ]
 
 

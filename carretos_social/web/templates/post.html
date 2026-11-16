@@ -4,7 +4,9 @@
 <p class="muted">{{ p.account.name }} · <span class="pill" style="color:{{ STATUS[p.status][1] }};border-color:{{ STATUS[p.status][1] }}">{{ STATUS[p.status][0] }}</span>{% if p.remote_url %} · <a class="gold" href="{{ p.remote_url }}" target="_blank">ver publicado</a>{% endif %}</p>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
 <div>{% for m in p.media %}{% if m.video %}<video class="media-big" src="/media/{{ m.id }}" controls playsinline></video>{% else %}<img class="media-big" src="/media/{{ m.id }}">{% endif %}{% endfor %}
-{% if not p.media %}<div class="card muted">Ainda sem vídeo/imagem.</div>{% endif %}</div>
+{% if not p.media %}<div class="card muted">Ainda sem vídeo/imagem.</div>{% endif %}
+{% if p.stock_sources %}<p class="muted" style="font-size:12px;margin-top:8px">Imagens de stock:
+{% for src in p.stock_sources %}{% if src.pagina %}<a class="gold" href="{{ src.pagina }}" target="_blank" rel="noopener">{{ src.fonte }}{% if src.autor %} · {{ src.autor }}{% endif %}</a>{% else %}{{ src.fonte }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
 <form method="post" class="card">
  <label>Data e hora</label><input type="datetime-local" name="quando" value="{{ p.when.strftime('%Y-%m-%dT%H:%M') if p.when else '' }}">
  <label>Legenda</label><textarea name="caption" rows="9">{{ p.caption or '' }}</textarea>

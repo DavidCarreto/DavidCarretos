@@ -8,6 +8,7 @@
  <div><div class="meta">#{{ p.id }} · {{ ICON[p.account.platform] }} {{ p.account.handle }} · {{ p.when|quando if p.when else 'sem data' }}</div>
  <b>{{ p.title or tema(p.pillar) }}</b><div class="cap">{{ p.caption or "Ainda sem legenda — a IA escreve-a ao criar o conteúdo." }}</div>
  {% if p.error %}<p style="color:#ff8f8f;font-size:13px">⚠ {{ p.error }}</p>{% endif %}
+ {% if p.stock_sources %}<p class="muted" style="font-size:11px;margin:4px 0">Imagens de stock: {{ p.stock_sources|map(attribute='fonte')|unique|join(', ') }}</p>{% endif %}
  <form method="post" action="/post/{{ p.id }}" class="row" style="margin-top:8px">
   <button class="btn gold" name="action" value="aprovar">✓ Aprovar</button>
   <a class="btn" href="/post/{{ p.id }}">✎ Editar</a>

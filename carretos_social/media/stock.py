@@ -4,14 +4,19 @@ Prioridade:
   1. A tua biblioteca (assets/library/): fotos e vídeos reais das oficinas, equipa, carros.
      O nome do ficheiro serve de etiqueta, ex.: "oficina_elevador_classe-c.jpg",
      "equipa_mecanicos_sorriso.mp4". Também podes usar assets/library/etiquetas.yaml.
-  2. Pexels (vídeos e fotos de stock gratuitos, uso comercial permitido): requer PEXELS_API_KEY
-     (grátis em https://www.pexels.com/api/).
+  2. Banco de stock gratuito (uso comercial permitido):
+       - Pexels, se PEXELS_API_KEY existir;
+       - senão Pixabay, com PIXABAY_API_KEY (https://pixabay.com/api/docs/).
+     Regras da Pixabay respeitadas: respostas da API em cache 24 h, ficheiros descarregados para o
+     servidor (sem hotlink) e origem registada para aparecer no dashboard ("Imagens: Pixabay").
   3. Fundo animado com as cores da marca.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import time
 import re
 import unicodedata
 from pathlib import Path
@@ -123,15 +128,130 @@ def pexels_photo(query: str) -> Path | None:
     return path
 
 
+# ------------------------------------------------------------------ Pixabay
+PIXABAY_IMG = "https://pixabay.com/api/"
+PIXABAY_VID = "https://pixabay.com/api/videos/"
+CACHE_TTL = 24 * 3600  # a Pixabay pede cache de 24 h das respostas da API
+
+
+def _stock_dir() -> Path:
+    d = DATA_DIR / "stock"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _cached_api(url: str, params: dict) -> dict:
+    """Pedido à API com cache em disco durante 24 h (a chave não entra no nome do ficheiro)."""
+    public = {k: v for k, v in params.items() if k != "key"}
+    name = hashlib.sha1((url + json.dumps(public, sort_keys=True)).encode()).hexdigest()[:20]
+    cache = _stock_dir() / "api_cache" / f"{name}.json"
+    if cache.exists() and time.time() - cache.stat().st_mtime < CACHE_TTL:
+        return json.loads(cache.read_text(encoding="utf-8"))
+    data = request("GET", url, params=params, retries=2, timeout=30).json()
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(data), encoding="utf-8")
+    return data
+
+
+def _remember_source(path: Path, info: dict) -> None:
+    path.with_suffix(path.suffix + ".json").write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
+
+
+def source_of(path: str | Path) -> dict | None:
+    """Origem de um ficheiro de stock (ex.: {"fonte": "Pixabay", "pagina": ..., "autor": ...}) ou None."""
+    side = Path(str(path) + ".json")
+    if side.exists():
+        try:
+            return json.loads(side.read_text(encoding="utf-8"))
+        except ValueError:
+            return None
+    name = Path(path).name
+    if name.startswith("pexels_"):
+        return {"fonte": "Pexels"}
+    return None
+
+
+def pixabay_video(query: str, min_height: int = 1280, used: set[str] | None = None) -> Path | None:
+    key = os.environ.get("PIXABAY_API_KEY")
+    if not key or not query:
+        return None
+    try:
+        data = _cached_api(PIXABAY_VID, {"key": key, "q": query[:100], "safesearch": "true", "per_page": 20,
+                                         "video_type": "film"})
+    except Exception:  # noqa: BLE001 — sem stock, usa fundo da marca
+        return None
+    hits = sorted(data.get("hits", []),  # vertical primeiro (9:16), depois por qualidade
+                  key=lambda h: (-(h["videos"].get("large", {}).get("height", 0) >=
+                                   h["videos"].get("large", {}).get("width", 1)), -h.get("downloads", 0)))
+    for h in hits:
+        if not 4 <= h.get("duration", 0) <= 60:
+            continue
+        variants = [v for v in (h["videos"].get(k) for k in ("large", "medium", "small")) if v and v.get("url")]
+        good = [v for v in variants if min(v["width"], v["height"]) >= 720] or variants
+        if not good:
+            continue
+        v = good[0]
+        path = _stock_dir() / f"pixabay_video_{h['id']}_{v['height']}.mp4"
+        if used and str(path) in used:
+            continue
+        if not path.exists():  # sem hotlink: o ficheiro fica no servidor
+            path.write_bytes(request("GET", v["url"], timeout=300).content)
+            _remember_source(path, {"fonte": "Pixabay", "pagina": h.get("pageURL"), "autor": h.get("user"),
+                                    "id": h["id"], "tipo": "video"})
+        return path
+    return None
+
+
+def pixabay_photo(query: str, used: set[str] | None = None) -> Path | None:
+    key = os.environ.get("PIXABAY_API_KEY")
+    if not key or not query:
+        return None
+    try:
+        data = _cached_api(PIXABAY_IMG, {"key": key, "q": query[:100], "image_type": "photo",
+                                         "orientation": "vertical", "safesearch": "true", "per_page": 20,
+                                         "min_height": 1600})
+    except Exception:  # noqa: BLE001
+        return None
+    for h in data.get("hits", []):
+        url = h.get("largeImageURL") or h.get("webformatURL")
+        if not url:
+            continue
+        path = _stock_dir() / f"pixabay_photo_{h['id']}.jpg"
+        if used and str(path) in used:
+            continue
+        if not path.exists():
+            path.write_bytes(request("GET", url, timeout=120).content)
+            _remember_source(path, {"fonte": "Pixabay", "pagina": h.get("pageURL"), "autor": h.get("user"),
+                                    "id": h["id"], "tipo": "foto"})
+        return path
+    return None
+
+
+def stock_provider() -> str | None:
+    """Pexels se houver chave; senão Pixabay; senão nenhum (fundo da marca)."""
+    if os.environ.get("PEXELS_API_KEY"):
+        return "pexels"
+    if os.environ.get("PIXABAY_API_KEY"):
+        return "pixabay"
+    return None
+
+
 def find_visual(query: str, kind: str = "any", used: set[str] | None = None) -> Path | None:
-    """Encontra o melhor fundo para uma cena: biblioteca → Pexels → None (fundo da marca)."""
+    """Encontra o melhor fundo para uma cena: biblioteca → Pexels (se configurado) ou Pixabay → None."""
     found = library_match(query, kind, used)
     if found:
         return found
-    if kind in ("any", "video"):
-        found = pexels_video(query, used=used)
-    if not found and kind in ("any", "image"):
-        found = pexels_photo(query)
+    provider = stock_provider()
+    if provider == "pexels":
+        if kind in ("any", "video"):
+            found = pexels_video(query, used=used)
+        if not found and kind in ("any", "image"):
+            found = pexels_photo(query)
+    elif provider == "pixabay":
+        if kind in ("any", "video"):
+            found = pixabay_video(query, used=used)
+        if not found and kind in ("any", "image"):
+            found = pixabay_photo(query, used=used)
     return found
 
 

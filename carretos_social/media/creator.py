@@ -370,6 +370,7 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
     used: set[str] = set()
     parts, subs, offset, log = [], [], 0.0, []
     total_speech = 0.0
+    stock_sources: list[dict] = []
     from .video_editor import _EMOJI
     for i, scene in enumerate(storyboard["scenes"]):
         scene.setdefault("type", "text")
@@ -398,7 +399,10 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
         if bg:
             used.add(str(bg))
             has_media = True
-            log.append(f"cena {i + 1} ({scene['type']}): fundo {bg.name}")
+            src = stock.source_of(bg)
+            if src and src not in stock_sources:
+                stock_sources.append(src)
+            log.append(f"cena {i + 1} ({scene['type']}): fundo {bg.name}" + (f" ({src['fonte']})" if src else ""))
         else:
             bg = stock.brand_background(size)
             log.append(f"cena {i + 1} ({scene['type']}): fundo da marca")
@@ -429,7 +433,8 @@ def create_video(storyboard: dict, out_dir: str | Path, *, size: tuple[int, int]
     shutil.rmtree(tmp, ignore_errors=True)
     return {"video": str(final), "cover_frame": str(frame) if frame else None, "duration": round(probe(final).duration, 2),
             "title": storyboard.get("title"), "caption": storyboard.get("caption"),
-            "hashtags": storyboard.get("hashtags", []), "cover_text": storyboard.get("cover_text"), "steps": log}
+            "hashtags": storyboard.get("hashtags", []), "cover_text": storyboard.get("cover_text"), "steps": log,
+            "stock_sources": stock_sources}
 
 
 def storyboard_from_post(post: dict, extra: dict) -> dict:

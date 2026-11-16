@@ -85,7 +85,7 @@ carretos produce --days 7                                          # piloto auto
 
 1. **A IA escreve o storyboard**: 5 a 8 cenas com gancho, listas, números, frases de liderança e uma chamada à ação final, mais a narração, os textos no ecrã, a legenda, os hashtags e o texto da capa.
 2. **Narração em português de Portugal**, gerada localmente com o [Piper](https://github.com/rhasspy/piper) (gratuito; a voz descarrega-se sozinha na primeira utilização).
-3. **Fundos de cada cena**, por esta ordem: os teus ficheiros reais em `assets/library/` (ver o LEIA-ME dessa pasta), depois vídeos de stock gratuitos do Pexels (com `PEXELS_API_KEY`) e, se não houver nenhum, o fundo animado da marca.
+3. **Fundos de cada cena**, por esta ordem: os teus ficheiros reais em `assets/library/` (ver o LEIA-ME dessa pasta), depois vídeos e fotos de stock gratuitos da **Pixabay** (com `PIXABAY_API_KEY`; ou da Pexels, se houver `PEXELS_API_KEY`, que tem prioridade) e, se não houver nenhum, o fundo animado da marca. Da Pixabay, as pesquisas ficam em cache 24 h, os ficheiros são descarregados para o servidor (sem hotlink) e a origem aparece no dashboard em cada publicação.
 4. **Grafismo animado**: palavras que aparecem uma a uma no gancho, listas que entram ponto a ponto, números que contam, *zoom* lento nas fotos e um CTA com o teu @.
 5. **Acabamento** igual ao dos vídeos editados: legendas sincronizadas com a narração, logótipo, música, áudio normalizado, intro/outro e **capa automática**.
 
