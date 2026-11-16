@@ -12,3 +12,4 @@ models/
 assets/library/*
 !assets/library/LEIA-ME.md
 assets/voz/
+config/drive/

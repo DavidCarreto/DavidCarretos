@@ -620,6 +620,69 @@ def cmd_web(a):
     uvicorn.run("carretos_social.web.app:app", host=a.host, port=a.port, log_level="warning")
 
 
+
+CONFIG_KEYS = [
+    ("DASHBOARD_PASSWORD", "Palavra-passe para entrar no dashboard (escolhe uma forte)", True),
+    ("SOCIAL_ANTHROPIC_API_KEY", "Chave da IA 'carretos-redes-sociais' (Claude Console)", True),
+    ("ELEVENLABS_API_KEY", "Chave da ElevenLabs", True),
+    ("ELEVENLABS_VOICE_ID", "Voice ID da voz 'David Carreto' na ElevenLabs (não é secreto)", False),
+    ("PEXELS_API_KEY", "Chave do Pexels (imagens de stock)", True),
+]
+
+
+def cmd_configurar(a):
+    """Pergunta as chaves uma a uma (sem as mostrar) e grava-as no .env. Enter = manter o valor atual."""
+    import getpass
+    env = config.ROOT / ".env"
+    if not env.exists() and (config.ROOT / ".env.example").exists():
+        env.write_text((config.ROOT / ".env.example").read_text(encoding="utf-8"), encoding="utf-8")
+    lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
+    current = {l.split("=", 1)[0].strip(): l.split("=", 1)[1] for l in lines if "=" in l and not l.startswith("#")}
+    for key, label, secret in CONFIG_KEYS:
+        has = "já definida" if current.get(key) else "vazia"
+        prompt = f"{label} [{has}]: "
+        value = (getpass.getpass(prompt) if secret else input(prompt)).strip()
+        if not value:
+            continue
+        found = False
+        for i, l in enumerate(lines):
+            if l.split("=", 1)[0].strip() == key and not l.startswith("#"):
+                lines[i] = f"{key}={value}"
+                found = True
+        if not found:
+            lines.append(f"{key}={value}")
+    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env.chmod(0o600)
+    print("Guardado. Reinicia os serviços: sudo systemctl restart carretos-web carretos-agendador")
+
+
+def cmd_importar_drive(a):
+    """Descarrega ficheiros públicos do Google Drive a partir de um CSV (nome,...,download)."""
+    import csv
+    import io
+    import requests as rq
+    dest = {"fotos": config.ROOT / "assets" / "library" / "david", "musicas": config.ROOT / "assets" / "music",
+            "voz": config.ROOT / "assets" / "voz" / "elevenlabs"}[a.destino]
+    dest.mkdir(parents=True, exist_ok=True)
+    text = Path(a.csv).read_text(encoding="utf-8-sig") if Path(a.csv).exists() else rq.get(a.csv, timeout=60).text
+    ok = 0
+    for row in csv.DictReader(io.StringIO(text)):
+        name, url = (row.get("nome") or "").strip(), (row.get("download") or "").strip()
+        if not name or not url:
+            continue
+        target = dest / Path(name).name
+        if target.exists() and target.stat().st_size > 0:
+            continue
+        r = rq.get(url, timeout=600)
+        if r.ok and not r.content[:200].lstrip().lower().startswith(b"<!doctype html"):
+            target.write_bytes(r.content)
+            ok += 1
+            print(f"✔ {name}")
+        else:
+            print(f"✘ {name} (não está partilhado com 'Qualquer pessoa com o link'?)")
+    print(f"{ok} ficheiro(s) novos em {dest}")
+
+
 # ------------------------------------------------------------------ parser
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="carretos", description="Gestão automática das redes sociais Carretos")
@@ -711,6 +774,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--seconds", type=int, default=30); s.add_argument("--cover-text")
     s = add("web", cmd_web, "arranca o dashboard no browser (http://localhost:8000)")
     s.add_argument("--host", default="127.0.0.1"); s.add_argument("--port", type=int, default=8000)
+    add("configurar", cmd_configurar, "pede as chaves (sem as mostrar) e grava-as no .env")
+    s = add("importar-drive", cmd_importar_drive, "descarrega fotos/músicas/voz do Drive a partir de um CSV")
+    s.add_argument("destino", choices=["fotos", "musicas", "voz"]); s.add_argument("csv")
     s = add("voice-setup", cmd_voice_setup, "prepara a tua gravação para o clone de voz")
     s.add_argument("file"); s.add_argument("--narrator", default="david"); s.add_argument("--seconds", type=float, default=10)
     s = add("voice-collect", cmd_voice_collect, "extrai de uma pasta de vídeos só os trechos com a tua voz")
