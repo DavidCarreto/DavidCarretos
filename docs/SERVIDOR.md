@@ -13,6 +13,15 @@
 | Serviços | `carretos-web` (dashboard, porta 8000 local) · `carretos-agendador` (publicação, métricas, lembretes) · `caddy` (HTTPS → 127.0.0.1:8000) |
 | Instalação | cloud-init (`deploy/cloud-config.yaml`) → `deploy/setup_servidor.sh` |
 
+### Configuração atual (dashboard ⚙, valores nunca mostrados)
+| Chave | Estado |
+|---|---|
+| Chave da IA | ✓ definida (assistente testado) |
+| Chave da Pixabay | ✓ definida |
+| Chave da ElevenLabs / Voice ID | por definir (depois da verificação do clone) |
+| Chave do Pexels | não usada (a Pexels suspendeu as chaves novas) |
+| Palavra-passe de root | ⚠ mudar quando possível (comando `passwd` na consola) |
+
 ### Problemas da 1.ª instalação (corrigidos no repositório)
 1. `chatterbox-tts` puxava `pkuseg`, que falha a compilar no Ubuntu 24.04 e parava a instalação.
    Passou a extra opcional `voz-local`, que **não** se instala no servidor (a voz vem da ElevenLabs).
