@@ -44,5 +44,6 @@ o conteúdo não é factual. Os vídeos do YouTube, a gravação do telemóvel e
 autorização explícita do David**: propor primeiro e esperar pela aprovação.
 
 ## Não inventar factos
-A IA só afirma factos concretos que estejam em `config/factos.yaml`; o resto sai como
+A IA só afirma factos concretos que estejam em `config/factos.yaml` (ou na versão editada no dashboard
+→ Factos, guardada em `data/factos.yaml`, que tem prioridade); o resto sai como
 `[PREENCHER: ...]` e a publicação fica bloqueada até ser completada.

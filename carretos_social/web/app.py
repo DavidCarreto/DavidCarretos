@@ -226,6 +226,8 @@ def _post_view(conn, r) -> dict:
     if not n and p["type"] != "text":
         p["kind"] = (p["kind"][0], p["kind"][1].split(" ·")[0].replace(" ✕", "") + " · sem ficheiro ✕")
     p["is_video"] = p["type"] == "video"
+    import re as _re
+    p["placeholders"] = _re.findall(r"\[PREENCHER[^\]]*\]?", p.get("caption") or "")
     from ..media.formats import spec_for
     p["carousel_max"] = spec_for(platform, "carousel").get("count", (2, 10))[1]
     p["account"] = accounts().get(p["account_id"])
@@ -315,9 +317,9 @@ def post_page(request: Request, pid: int):
         history = _history_view(conn, pid, p)
         suggested = None
         if not p["when"] and p["status"] in ("idea", "draft"):
-            from ..content.planner import next_free_slot
+            from ..content.planner import suggested_slot
             try:
-                s = next_free_slot(conn, p["account_id"])
+                s = suggested_slot(conn, pid, p["account_id"])
                 suggested = datetime.fromisoformat(s[:19]) if s else None
             except Exception:  # noqa: BLE001
                 suggested = None
@@ -387,7 +389,7 @@ def _history_view(conn, pid: int, p: dict) -> list[dict]:
 @app.post("/post/{pid}")
 def post_action(request: Request, pid: int, action: str = Form(...), caption: str = Form(""),
                 quando: str = Form(""), tipo: str = Form(""), hist: int = Form(0), idx: int = Form(-1),
-                dir: int = Form(0)):
+                dir: int = Form(0), img: str = Form("")):
     from ..media.formats import format_for, kind_of, kinds_for
     from ..scheduler import all_problems, parse_dt
     me = request.state.user
@@ -445,7 +447,9 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             update_post(conn, pid, _by=me.id, _note="Reposta uma versão anterior das imagens", **restore)
             return RedirectResponse(f"/post/{pid}", 303)
         if action == "legenda_ia":
-            jobs.enqueue("legenda-ia", [str(pid)], f"Legenda pela IA #{pid}", user_id=me.id)
+            refazer = bool((get_post(conn, pid)["caption"] or "").strip())
+            jobs.enqueue("legenda-ia", [str(pid)], f"{'Refazer legenda' if refazer else 'Legenda pela IA'} #{pid}",
+                         user_id=me.id)
             return RedirectResponse("/tarefas", 303)
         if action == "ajustar":
             jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id)
@@ -454,7 +458,7 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             problems = all_problems(conn, get_post(conn, pid))
             if problems:   # fica (ou vai) para a página da publicação, com o erro em cima
                 update_post(conn, pid, error="; ".join(problems))
-                return RedirectResponse(f"/post/{pid}?erro=aprovar", 303)
+                return RedirectResponse(f"/post/{pid}?erro=aprovar" + (f"#img={img}" if img.isdigit() else ""), 303)
             else:
                 update_post(conn, pid, _by=me.id, status="approved", error=None, approved_by=me.id)
         elif action == "rejeitar":
@@ -514,6 +518,23 @@ def post_add_images(request: Request, pid: int, imagens: list[UploadFile] = File
         if added:
             update_post(conn, pid, _by=me.id, media_ids=ids, _note="; ".join(notes))
     return RedirectResponse(f"/post/{pid}#img={len(ids)}", 303)
+
+
+@app.get("/factos", response_class=HTMLResponse)
+def facts_page(request: Request, ok: int = 0):
+    from ..content.ai import verified_facts
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador edita os factos.")
+    return _render(request, "facts.html", {"factos": verified_facts(), "ok": ok})
+
+
+@app.post("/factos")
+def facts_save(request: Request, factos: str = Form("")):
+    from ..content.ai import save_facts
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador edita os factos.")
+    save_facts(factos.splitlines())
+    return RedirectResponse("/factos?ok=1", 303)
 
 
 @app.get("/media/{mid}")

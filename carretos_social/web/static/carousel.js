@@ -21,6 +21,7 @@
       dots.forEach((d, k) => d.classList.toggle('on', k === i));
       thumbs.forEach((t, k) => t.classList.toggle('on', k === i));
       infos.forEach(el => { el.hidden = Number(el.dataset.i) !== i; });
+      if (root.hasAttribute('data-cv-keys')) document.querySelectorAll('input[name=img]').forEach(x => { x.value = i + 1; });
       if (prev) prev.disabled = i === 0;
       if (next) next.disabled = i === n - 1;
     }

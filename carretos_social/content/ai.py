@@ -33,8 +33,8 @@ def _system() -> str:
     voices = "\n".join(f"- {k}: {v}" for k, v in b["voices"].items())
     rules = "\n".join(f"- {r}" for r in b["rules"])
     facts = "\n".join(f"- {f}" for f in verified_facts()) or "- (nenhum ainda)"
-    return f"""És o diretor de conteúdo e social media de {b['owner']}, dono da {b['company']} \
-({b['workshops_count']} oficinas: {', '.join(b.get('workshops', []))}). Especialidade: {b['specialty']}.
+    # dados da empresa (n.º de oficinas, localidades, serviços…) SÓ da lista de factos confirmados
+    return f"""És o diretor de conteúdo e social media de {b['owner']} e da {b['company']}.
 Escreves sempre em {b['language']} (português de Portugal).
 
 Pilares de conteúdo:
@@ -59,13 +59,28 @@ segundos, legendas no ecrã, 15–45 s, ritmo rápido, loop no fim), carrosséis
 história → lição → pergunta), Facebook (comunidade, emoção, histórias mais longas)."""
 
 
+def facts_path():
+    """Factos editados no dashboard (data/factos.yaml, não é apagado nas atualizações); senão config/factos.yaml."""
+    from ..config import CONFIG_DIR, DATA_DIR
+    edited = DATA_DIR / "factos.yaml"
+    return edited if edited.exists() else CONFIG_DIR / "factos.yaml"
+
+
 def verified_facts() -> list[str]:
-    from ..config import CONFIG_DIR
     import yaml
-    path = CONFIG_DIR / "factos.yaml"
+    path = facts_path()
     if not path.exists():
         return []
     return [str(f) for f in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("factos", [])]
+
+
+def save_facts(facts: list[str]) -> None:
+    import yaml
+    from ..config import DATA_DIR
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    body = yaml.safe_dump({"factos": [f.strip() for f in facts if f.strip()]}, allow_unicode=True, sort_keys=False)
+    (DATA_DIR / "factos.yaml").write_text("# Factos confirmados (editados no dashboard → Factos)\n" + body,
+                                          encoding="utf-8")
 
 
 def _ask(prompt: str, schema: dict, max_tokens: int = 16000, effort: str = "medium") -> dict:
@@ -289,5 +304,8 @@ Escreve:
 - caption: legenda pronta a publicar, adaptada à plataforma, que acompanha este conteúdo
   (primeira linha forte; termina com uma pergunta ou chamada à ação simples). Sem factos novos:
   se precisares de um facto concreto que não está nos FACTOS CONFIRMADOS, usa [PREENCHER: ...].
+  Não acrescentes dados da empresa (n.º de oficinas, localidades, serviços, números) se o conteúdo
+  não falar disso: uma legenda curta e pessoal é melhor do que uma com dados a mais.
+  Evita [PREENCHER] sempre que a legenda funcione sem esse facto.
 - hashtags: 3 a 8, relevantes."""
     return _ask(prompt, schema, max_tokens=4000, effort="low")

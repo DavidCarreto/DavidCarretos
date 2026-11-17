@@ -377,3 +377,35 @@ def test_kind_follows_type_and_fix_count(client, tmp_path):
     ap = client.get("/aprovar").text
     assert "📷 Carrossel · 1 imagem ✕" in ap and "Rejeitar #" in ap                   # confirmação ao rejeitar
     assert "Ajustar 1 imagem com ⚠" in client.get(f"/post/{mix}").text
+
+
+def test_placeholders_block_suggestions_distinct_and_facts(client, tmp_path):
+    import re
+    from PIL import Image
+    from carretos_social.db import add_media, add_post, connect, get_post
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    a = tmp_path / "a.jpg"; Image.new("RGB", (1080, 1350)).save(a)
+    with connect() as conn:
+        ma = add_media(conn, "image", str(a))
+        pid = add_post(conn, account_id="ig_davidcarreto", format="image", status="draft", media_ids=[ma],
+                       caption="Olá [PREENCHER: contexto pessoal] fim", scheduled_at="2030-01-01T10:00:00+00:00")
+        u1 = add_post(conn, account_id="ig_davidcarreto", format="image", status="draft", media_ids=[ma], caption="x")
+        u2 = add_post(conn, account_id="ig_davidcarreto", format="image", status="draft", media_ids=[ma], caption="x")
+    page = client.get(f"/post/{pid}").text
+    assert "A legenda tem partes por preencher" in page and "<mark>[PREENCHER: contexto pessoal]</mark>" in page
+    assert "Refazer legenda com a IA" in page
+    r = client.post(f"/post/{pid}", data={"action": "aprovar", "img": "2"}, follow_redirects=False)
+    assert r.headers["location"] == f"/post/{pid}?erro=aprovar#img=2"
+    assert "legenda por preencher" in client.get(f"/post/{pid}?erro=aprovar").text
+    with connect() as conn:
+        assert get_post(conn, pid)["status"] == "draft"
+    assert "✕ legenda por preencher" in client.get("/aprovar").text
+    # horas sugeridas diferentes para publicações sem data da mesma conta
+    hora = lambda t: re.search(r'Hora sugerida: <b class="gold">([^<]+)</b>', t).group(1)
+    assert hora(client.get(f"/post/{u1}").text) != hora(client.get(f"/post/{u2}").text)
+    # factos editáveis no dashboard (data/factos.yaml)
+    client.post("/factos", data={"factos": "O dono é David Carreto.\nA empresa chama-se Carretos Group."})
+    from carretos_social.content.ai import verified_facts
+    assert verified_facts() == ["O dono é David Carreto.", "A empresa chama-se Carretos Group."]
+    assert "Almada" not in client.get("/factos").text

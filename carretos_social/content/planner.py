@@ -92,7 +92,24 @@ def calendar(conn, start: date, days: int = 14) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def next_free_slot(conn, account_id: str, after: datetime | None = None, horizon_days: int = 21) -> str | None:
+def suggested_slot(conn, post_id: int, account_id: str) -> str | None:
+    """Hora sugerida para uma publicação SEM data: a próxima livre da conta, sem repetir as horas já ocupadas
+    nem as sugeridas às outras publicações sem data dessa conta (por ordem de criação)."""
+    pending = [r["id"] for r in conn.execute(
+        "SELECT id FROM posts WHERE account_id=? AND scheduled_at IS NULL AND status IN ('idea','draft') "
+        "ORDER BY id", (account_id,))]
+    skip: set[str] = set()
+    slot = None
+    for pid in pending:
+        slot = next_free_slot(conn, account_id, skip=skip)
+        if not slot or pid == post_id:
+            break
+        skip.add(slot[:16])
+    return slot
+
+
+def next_free_slot(conn, account_id: str, after: datetime | None = None, horizon_days: int = 21,
+                   skip: set[str] | None = None) -> str | None:
     """Próximo horário livre da conta segundo a estrutura acordada (dias e horas; melhores horas se houver
     métricas). Nunca hoje antes de 2 horas a partir de agora. Devolve ISO com fuso horário, ou None."""
     from datetime import timedelta as _td
@@ -113,6 +130,6 @@ def next_free_slot(conn, account_id: str, after: datetime | None = None, horizon
         for hhmm in times:
             h, m = map(int, hhmm.split(":"))
             dt = datetime.combine(day, time(h, m), tzinfo=tz)
-            if dt >= start and dt.isoformat()[:16] not in taken:
+            if dt >= start and dt.isoformat()[:16] not in taken and dt.isoformat()[:16] not in (skip or ()):
                 return dt.isoformat()
     return None

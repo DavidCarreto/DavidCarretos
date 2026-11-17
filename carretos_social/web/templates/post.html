@@ -20,13 +20,16 @@
 {% for src in p.stock_sources %}{% if src.pagina %}<a class="gold" href="{{ src.pagina }}" target="_blank" rel="noopener">{{ src.fonte }}{% if src.autor %} · {{ src.autor }}{% endif %}</a>{% else %}{{ src.fonte }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
 <div>
 {% set f = p.fmt %}
-<div class="card fmt {{ f.verdict }}" style="margin:0 0 12px">
+{% set v = 'editar' if p.placeholders else f.verdict %}
+<div class="card fmt {{ v }}" style="margin:0 0 12px">
  <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em">Formato para publicar</div>
  <p style="margin:4px 0 8px"><b>{{ f.target }}</b></p>
- <p class="verdict">{{ f.verdict_label }}</p>
+ <p class="verdict">{{ '✕ A legenda tem de ser completada antes de publicar' if p.placeholders and f.verdict != 'editar' else f.verdict_label }}</p>
  {% for x in f.problems %}<p class="fmt-line editar">✕ {{ x }}</p>{% endfor %}
  {% for x in f.warnings %}<p class="fmt-line ajustar">⚠ {{ x }}</p>{% endfor %}
  {% for x in f.info %}<p class="muted" style="margin:2px 0;font-size:13px">ℹ {{ x }}</p>{% endfor %}
+ {% if p.placeholders %}<p class="fmt-line editar" style="margin-top:6px">✕ A legenda tem partes por preencher: {{ p.placeholders|join(', ')|truncate(90) }}</p>
+ {% elif not p.caption and p.type != 'text' %}<p class="fmt-line ajustar" style="margin-top:6px">⚠ Sem legenda</p>{% endif %}
  {% if p.type == 'carousel' and f.items %}{% set vs = f.items|map(attribute='verdict')|list %}
  <p class="fmt-line" style="margin-top:6px">{{ f.items|length }} imagens: {{ vs.count('ok') }} ✓ · {{ vs.count('ajustar') }} ⚠ · {{ vs.count('editar') }} ✕ <span class="muted">(o detalhe de cada uma aparece por baixo dela)</span></p>{% endif %}
  {% for i in (f.items if p.type != 'carousel' else []) %}<div class="fmt-item">
@@ -47,8 +50,12 @@
  <label>Data e hora{% if not can_approve %} <span class="muted">(só quem aprova pode mudar)</span>{% endif %}</label>
  <input type="datetime-local" name="quando" id="quando" class="{{ 'need' if approve_error and p.error and 'sem data' in p.error }}" value="{{ p.when.strftime('%Y-%m-%dT%H:%M') if p.when else '' }}" {{ 'disabled' if not can_approve }}>
  {% if not p.when %}<p class="muted" style="font-size:13px;margin:4px 0 0">Sem data: não é publicada.{% if suggested and can_approve %} Hora sugerida: <b class="gold">{{ suggested|quando }}</b> <button type="button" class="btn" style="padding:3px 10px;font-size:12px" onclick="const q=document.getElementById('quando');q.value='{{ suggested.strftime('%Y-%m-%dT%H:%M') }}';q.classList.add('need');q.focus()">Usar esta hora</button> <span style="font-size:12px">(depois carregue em Guardar)</span>{% endif %}</p>{% endif %}
- <label>Legenda</label><textarea name="caption" rows="9" {{ 'readonly' if not can_create }} placeholder="Sem legenda – escreva uma ou peça à IA">{{ p.caption or '' }}</textarea>
- {% if not p.caption and can_create %}<p style="margin:6px 0 0"><button class="btn" name="action" value="legenda_ia" formnovalidate>✦ Pedir legenda à IA</button> <span class="muted" style="font-size:12px">Sem legenda – escreva uma ou peça à IA</span></p>{% endif %}
+ <input type="hidden" name="img" value="">
+ <label>Legenda</label><textarea name="caption" rows="9" class="{{ 'need-fix' if p.placeholders }}" {{ 'readonly' if not can_create }} placeholder="Sem legenda – escreva uma ou peça à IA">{{ p.caption or '' }}</textarea>
+ {% if p.placeholders %}<div class="ph-box">✕ <b>A legenda tem partes por preencher</b> (não pode ser aprovada assim). Substitua estes marcadores pelo texto certo ou apague-os:
+  {% for ph in p.placeholders %}<div><mark>{{ ph }}</mark></div>{% endfor %}</div>{% endif %}
+ {% if can_create %}<p style="margin:6px 0 0">{% if not p.caption %}<button class="btn" name="action" value="legenda_ia" formnovalidate>✦ Pedir legenda à IA</button> <span class="muted" style="font-size:12px">Sem legenda – escreva uma ou peça à IA</span>
+ {% else %}<button class="btn" name="action" value="legenda_ia" formnovalidate onclick="return confirm('Refazer a legenda com a IA? A legenda atual fica guardada no Histórico.')" style="font-size:13px;padding:6px 12px">✦ Refazer legenda com a IA</button>{% endif %}</p>{% endif %}
  <p class="muted" style="font-size:13px">{{ p.tags }}</p>
  {% if p.error %}<p style="color:#ff8f8f">⚠ {{ p.error }}</p>{% endif %}
  {% if can_create %}<div class="row">{% if can_approve %}<button class="btn gold" name="action" value="aprovar">✓ Guardar e aprovar</button>{% endif %}

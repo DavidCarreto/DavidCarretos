@@ -103,3 +103,6 @@ select.lvl-nenhum{color:var(--muted)}select.lvl-ver{color:#7cc4ff}select.lvl-cri
 .post .cv.mini img,.post .cv.mini video{width:100%;max-height:none;border-radius:0}
 .alert{border-color:#8b2b25;color:#ffb3ad;background:#1d0f0f;margin-bottom:12px}
 input.need{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,175,55,.25)}
+textarea.need-fix{border-color:#f85149}
+.ph-box{margin:6px 0 0;padding:8px 10px;border:1px solid #8b2b25;border-radius:10px;background:#1d0f0f;color:#ffb3ad;font-size:13px}
+.ph-box mark{background:#f2cc60;color:#000;border-radius:4px;padding:0 4px;display:inline-block;margin-top:4px}

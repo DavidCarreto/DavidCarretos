@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block body %}
+<h1>Factos confirmados</h1>
+<p class="muted">A IA só pode afirmar factos concretos sobre o David e a Carretos Group que estejam nesta lista
+(n.º de oficinas, localidades, serviços, anos, números, prémios…). Tudo o resto sai como <b>[PREENCHER: …]</b>
+e a publicação fica bloqueada até ser completada. Um facto por linha.</p>
+{% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ Factos guardados. As próximas legendas já usam esta lista.</div>{% endif %}
+<form method="post" class="card">
+ <label>Factos (um por linha)</label>
+ <textarea name="factos" rows="14">{{ factos|join('\n') }}</textarea>
+ <p class="muted" style="font-size:12px">Para a IA deixar de usar um dado (ex.: as localidades das oficinas), apague a linha.</p>
+ <button class="btn gold">Guardar factos</button>
+</form>{% endblock %}

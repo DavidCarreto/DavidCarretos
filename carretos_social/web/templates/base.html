@@ -1,7 +1,7 @@
 <!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{% block title %}Carretos Studio{% endblock %}</title><link rel="stylesheet" href="/static/style.css"><link rel="manifest" href="/static/manifest.webmanifest"><link rel="icon" href="/static/icon-192.png"><link rel="apple-touch-icon" href="/static/icon-180.png"><meta name="apple-mobile-web-app-title" content="Carretos Studio">
 <meta name="theme-color" content="#000000"></head><body>
-<header class="top"><a href="/"><span class="brand">CARRETOS <b>STUDIO</b></span></a><span style="font-size:13px" class="muted">{% if me %}<a href="/conta">{{ me.name.split()[0] }}</a> · <a href="/tarefas">Tarefas</a>{% if me.is_admin %} · <a href="/equipa">Equipa</a> · <a href="/configurar">⚙</a>{% endif %} · <a href="/sair">Sair</a>{% endif %}</span></header>
+<header class="top"><a href="/"><span class="brand">CARRETOS <b>STUDIO</b></span></a><span style="font-size:13px" class="muted">{% if me %}<a href="/conta">{{ me.name.split()[0] }}</a> · <a href="/tarefas">Tarefas</a>{% if me.is_admin %} · <a href="/equipa">Equipa</a> · <a href="/factos">Factos</a> · <a href="/configurar">⚙</a>{% endif %} · <a href="/sair">Sair</a>{% endif %}</span></header>
 <nav class="tabs">
  <a href="/" class="{{ 'on' if page=='home' }}"><span>◉</span>Visão</a>
  <a href="/calendario" class="{{ 'on' if page=='cal' }}"><span>▦</span>Agenda</a>
