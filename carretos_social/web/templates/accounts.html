@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block body %}
+<h1>Contas</h1>
+{% if msg %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ {{ msg }}</div>{% endif %}
+{% if erro %}<div class="card alert">✕ {{ erro }}</div>{% endif %}
+
+<div class="card" style="margin-bottom:14px">
+ <b>Facebook e Instagram (Meta)</b>
+ {% if not configured %}
+  <p class="muted" style="font-size:14px">Para ligar, primeiro crie a app da Meta (uma vez, ~20 min, grátis) e preencha o
+  <b>App ID</b> e o <b>App Secret</b> em <a class="gold" href="/configurar">⚙ Configurar</a>. Guia passo a passo:
+  <code>docs/GUIA_META.md</code>.</p>
+  <p class="muted" style="font-size:13px">Endereço a pôr na app da Meta ("Valid OAuth Redirect URIs"):<br><code>{{ redirect }}</code></p>
+ {% else %}
+  <p class="muted" style="font-size:14px;margin:4px 0 10px">Entre com o Facebook e autorize as Páginas e os Instagrams profissionais.
+  Depois confirme abaixo a que conta corresponde cada um. As chaves ficam guardadas no servidor e nunca são mostradas.</p>
+  <a class="btn gold" href="/contas/meta/ligar">ⓕ Ligar com o Facebook</a>
+  {% if found.at %}<span class="muted" style="font-size:12px;margin-left:8px">Última autorização: {{ found.user }} · {{ found.at.replace('T',' ') }} · {{ found.pages|length }} Página(s)</span>{% endif %}
+  <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno configurado na app: <code>{{ redirect }}</code></p>
+ {% endif %}
+</div>
+
+<form method="post" action="/contas/meta/associar">
+{% for g, items in rows %}<div class="ghead"><span class="gtag {{ g.id }}">{{ g.short }}</span></div>
+{% for it in items %}{% set a = it.a %}
+<div class="card acc-row">
+ <div style="flex:1;min-width:220px">
+  <b>{{ ICON.get(a.platform,'') }} {{ a.name }}</b>{% if a.handle %} <span class="muted">@{{ a.handle }}</span>{% endif %}<br>
+  {% if a.publish_mode == 'assist' or a.platform == 'facebook_profile' %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span>
+   <span class="muted" style="font-size:12px">A Meta não deixa publicar em perfis pessoais: vai para o telemóvel, para publicar à mão.</span>
+  {% elif a.connected %}<span class="pill" style="color:#3fb950;border-color:#3fb950">✓ Ligada</span>{% if it.over.meta_name %} <span class="muted" style="font-size:12px">{{ it.over.meta_name }}{% if it.over.linked_at %} · desde {{ it.over.linked_at.replace('T',' ') }}{% endif %}</span>{% endif %}
+  {% else %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Por ligar</span>
+   {% if not it.meta %}<span class="muted" style="font-size:12px">{{ {'tiktok':'TikTok','linkedin_member':'LinkedIn','linkedin_org':'LinkedIn','youtube':'YouTube'}.get(a.platform, a.platform) }}: ligação numa próxima fase.</span>{% endif %}
+  {% endif %}
+ </div>
+ {% if it.meta and a.platform != 'facebook_profile' %}
+ <div class="acc-actions">
+  {% if not a.connected %}
+   {% if it.options %}<select name="acc_{{ a.id }}"><option value="">— escolher —</option>{% for o in it.options %}<option value="{{ o.value }}" {{ 'selected' if o.value == it.suggest }}>{{ o.label }}</option>{% endfor %}</select>
+   {% elif found.at %}<span class="muted" style="font-size:12px">{{ 'Nenhum Instagram profissional ligado a uma Página autorizada.' if a.platform == 'instagram' else 'Nenhuma Página autorizada.' }}</span>{% endif %}
+  {% else %}
+   <button class="btn" formaction="/contas/{{ a.id }}/testar">Testar</button>
+   <button class="btn red" formaction="/contas/{{ a.id }}/desligar" onclick="return confirm('Desligar {{ a.name }}? Deixa de publicar automaticamente.')">Desligar</button>
+  {% endif %}
+ </div>{% endif %}
+</div>
+{% endfor %}{% endfor %}
+{% if found.at %}<p><button class="btn gold">Guardar ligações</button> <span class="muted" style="font-size:12px">Só liga as contas onde escolheu uma Página/Instagram.</span></p>{% endif %}
+</form>
+{% endblock %}

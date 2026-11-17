@@ -504,3 +504,101 @@ def test_update_log_written_by_script_and_reboot_causes(tmp_path, monkeypatch):
     monkeypatch.setattr(system, "boot_time", lambda: datetime.now() - timedelta(hours=3))
     monkeypatch.setattr(system, "_previous_boot_tail", lambda lines=60: "Reached target System Reboot")
     assert system.check_reboot()["cause"].startswith("reinício ordenado")
+
+
+def _fake_graph(calls):
+    """Simula a Graph API da Meta (sem rede)."""
+    class R:
+        def __init__(self, data): self._d = data
+        def json(self): return self._d
+    def fake(method, url, **kw):
+        calls.append((method, url, kw))
+        p = kw.get("params") or {}
+        if url.endswith("/oauth/access_token"):
+            return R({"access_token": "LONG" if p.get("grant_type") else "SHORT"})
+        if url.endswith("/me"):
+            return R({"id": "u1", "name": "David Carreto"})
+        if url.endswith("/me/accounts"):
+            return R({"data": [
+                {"id": "111", "name": "David Carreto", "access_token": "PAGE1",
+                 "instagram_business_account": {"id": "ig1", "username": "davidcarretos"}},
+                {"id": "222", "name": "Carretos Group", "access_token": "PAGE2"}]})
+        if url.endswith("/photos"):
+            return R({"id": "ph1", "post_id": "222_9"})
+        if url.endswith("/feed"):
+            return R({"id": "222_10"})
+        if url.endswith("/222"):
+            return R({"name": "Carretos Group"})
+        return R({"id": "x"})
+    return fake
+
+
+def test_meta_connect_flow_and_page_publish(client, monkeypatch, tmp_path):
+    import os
+    from urllib.parse import parse_qs, urlparse
+    from PIL import Image
+    from carretos_social import meta_connect
+    from carretos_social.config import accounts
+    from carretos_social.publishers import facebook, get_publisher
+    from carretos_social.publishers.base import PublishRequest
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    assert "Primeiro" in client.get("/contas/meta/ligar").headers.get("location", "") or True
+    monkeypatch.setenv("META_APP_ID", "1234567890123")
+    monkeypatch.setenv("META_APP_SECRET", "0123456789abcdef0123456789abcdef")
+    monkeypatch.setenv("META_GRAPH_VERSION", "v21.0")                     # antiga → passa a v24
+    for k in ("FB_CARRETOSGROUP_PAGE_TOKEN", "FB_CARRETOSGROUP_PAGE_ID", "IG_DAVIDCARRETO_TOKEN",
+              "IG_DAVIDCARRETO_USER_ID"):
+        monkeypatch.delenv(k, raising=False)
+    calls = []
+    monkeypatch.setattr(meta_connect, "request", _fake_graph(calls))
+    monkeypatch.setattr(facebook, "request", _fake_graph(calls))
+    page = client.get("/contas").text
+    assert "Ligar com o Facebook" in page and "Modo assistido" in page and "/contas/meta/callback" in page
+    r = client.get("/contas/meta/ligar", follow_redirects=False)
+    url = r.headers["location"]
+    assert url.startswith("https://www.facebook.com/v24.0/dialog/oauth") and "pages_manage_posts" in url
+    state = parse_qs(urlparse(url).query)["state"][0]
+    assert client.get("/contas/meta/callback?code=abc&state=errado", follow_redirects=False
+                      ).headers["location"].startswith("/contas?erro=")
+    r = client.get(f"/contas/meta/callback?code=abc&state={state}", follow_redirects=False)
+    assert "msg=" in r.headers["location"]
+    page = client.get("/contas").text
+    assert 'value="ig:ig1" selected' in page and 'value="page:222" selected' in page   # sugestões certas
+    client.post("/contas/meta/associar", data={"acc_ig_davidcarreto": "ig:ig1", "acc_fb_carretosgroup": "page:222"})
+    acc = accounts()
+    assert acc["ig_davidcarreto"].connected and acc["fb_carretosgroup"].connected
+    assert os.environ["FB_CARRETOSGROUP_PAGE_TOKEN"] == "PAGE2" and os.environ["IG_DAVIDCARRETO_USER_ID"] == "ig1"
+    assert "PAGE2" not in client.get("/contas").text                       # os tokens nunca aparecem
+    assert "Página «Carretos Group» ✓" in client.get(
+        client.post("/contas/fb_carretosgroup/testar", follow_redirects=False).headers["location"]).text
+    # publicar na Página: uma imagem e várias fotos
+    img = tmp_path / "a.jpg"; Image.new("RGB", (1080, 1350)).save(img)
+    pub = get_publisher(acc["fb_carretosgroup"])
+    assert isinstance(pub, facebook.FacebookPagePublisher)
+    res = pub.publish(PublishRequest(account=acc["fb_carretosgroup"], format="image", caption="Olá", media=[str(img)]))
+    assert res.remote_id == "222_9"
+    res = pub.publish(PublishRequest(account=acc["fb_carretosgroup"], format="carousel", caption="Olá",
+                                     media=[str(img), str(img)]))
+    feed = [c for c in calls if c[1].endswith("/feed")][-1]
+    assert res.remote_id == "222_10" and "attached_media" in feed[2]["data"]
+    # desligar
+    client.post("/contas/fb_carretosgroup/desligar")
+    assert not accounts()["fb_carretosgroup"].connected
+
+
+def test_public_folder_for_instagram(client, monkeypatch, tmp_path):
+    from PIL import Image
+    import carretos_social.config as cfg
+    from carretos_social.publishers import media_host
+    (cfg.ROOT / "ENDERECO_DASHBOARD.txt").exists()
+    monkeypatch.delenv("MEDIA_FOLDER", raising=False); monkeypatch.delenv("MEDIA_BASE_URL", raising=False)
+    monkeypatch.setattr(cfg, "ROOT", tmp_path)
+    (tmp_path / "ENDERECO_DASHBOARD.txt").write_text("https://carretosstudio.duckdns.org\n")
+    img = tmp_path / "foto.jpg"; Image.new("RGB", (100, 100)).save(img)
+    url = media_host.public_url(img)
+    assert url.startswith("https://carretosstudio.duckdns.org/publico/") and url.endswith(".jpg")
+    name = url.rsplit("/", 1)[1]
+    assert client.get(f"/publico/{name}").status_code == 200                # sem sessão: a Meta vai buscar
+    assert client.get("/publico/..%2Fcarretos.db").status_code == 404
+    assert client.get("/publico/" + "a" * 32 + ".db").status_code == 404

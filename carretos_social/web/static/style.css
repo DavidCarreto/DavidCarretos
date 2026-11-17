@@ -112,3 +112,5 @@ textarea.need-fix{border-color:#f85149}
 .topmenu nav a{padding:10px 12px;border-radius:8px;font-size:15px}.topmenu nav a:hover{background:#1f2127}
 @media(max-width:640px){.toplinks{display:none}.topmenu{display:block}}
 .fact-row{display:flex;gap:8px;align-items:baseline;border-top:1px solid var(--line);padding:6px 0;font-size:14px}.fact-row .muted{font-size:12px;white-space:nowrap}
+.acc-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.acc-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.acc-actions select{min-width:240px;max-width:100%}

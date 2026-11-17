@@ -124,7 +124,7 @@ def _render(request: Request, name: str, ctx: dict):
 @app.middleware("http")
 async def auth(request: Request, call_next):
     request.state.user = None
-    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor")
+    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor", "/publico/")
     users.bootstrap_admin()
     if users.count() == 0:  # ainda não há administrador: 1.ª configuração
         if not request.url.path.startswith(open_paths):
@@ -594,6 +594,125 @@ def facts_save(request: Request, factos: str = Form("")):
     return RedirectResponse("/factos?ok=1", 303)
 
 
+# ------------------------------------------------------------------ contas (ligar redes)
+@app.get("/contas", response_class=HTMLResponse)
+def accounts_page(request: Request, msg: str = "", erro: str = ""):
+    from .. import meta_connect as mc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    found = mc.discovered()
+    over = __import__("carretos_social.config", fromlist=["account_overrides"]).account_overrides()
+    rows = []
+    for g, accs in accounts_by_group():
+        items = []
+        for a in accs:
+            meta = a.platform in ("instagram", "facebook_page")
+            items.append({"a": a, "meta": meta, "over": over.get(a.id) or {},
+                          "options": mc.options_for(a, found) if meta else [],
+                          "suggest": mc.suggestion(a, found) if meta and not a.connected else ""})
+        rows.append((g, items))
+    return _render(request, "accounts.html", {"rows": rows, "found": found, "configured": mc.configured(),
+                                              "redirect": _base_url(request) + "/contas/meta/callback",
+                                              "msg": msg, "erro": erro, "page": "contas"})
+
+
+@app.get("/contas/meta/ligar")
+def meta_login(request: Request):
+    from .. import meta_connect as mc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    if not mc.configured():
+        return RedirectResponse("/contas?erro=Primeiro+preencha+o+App+ID+e+o+App+Secret+da+Meta+em+⚙+Configurar", 303)
+    state = secrets.token_urlsafe(24)
+    r = RedirectResponse(mc.login_url(_base_url(request) + "/contas/meta/callback", state), 303)
+    r.set_cookie("meta_state", state, max_age=900, httponly=True, samesite="lax",
+                 secure=os.environ.get("DASHBOARD_HTTPS", "") == "1")
+    return r
+
+
+@app.get("/contas/meta/callback")
+def meta_callback(request: Request, code: str = "", state: str = "", error_description: str = "", error: str = ""):
+    from urllib.parse import quote
+    from .. import meta_connect as mc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    if error or not code:
+        return RedirectResponse(f"/contas?erro={quote('O Facebook não autorizou: ' + (error_description or error or 'cancelado'))}", 303)
+    if not state or not hmac.compare_digest(state, request.cookies.get("meta_state", "")):
+        return RedirectResponse("/contas?erro=Pedido+expirado:+carregue+outra+vez+em+Ligar+com+o+Facebook", 303)
+    try:
+        token = mc.exchange_code(code, _base_url(request) + "/contas/meta/callback")
+        found = mc.discover(token)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("meta callback")
+        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar: ' + str(exc)[:200])}", 303)
+    n = len(found["pages"])
+    n_ig = sum(1 for p in found["pages"] if p.get("ig"))
+    text = (f"Autorizado por {found['user']}: {n} Página(s) e {n_ig} Instagram(s). "
+            "Confirme abaixo a que conta corresponde cada uma.")
+    r = RedirectResponse(f"/contas?msg={quote(text)}", 303)
+    r.delete_cookie("meta_state")
+    return r
+
+
+@app.post("/contas/meta/associar")
+async def meta_associate(request: Request):
+    from urllib.parse import quote
+    from .. import envfile
+    from .. import meta_connect as mc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    form = await request.form()
+    updates: dict[str, str] = {}
+    done, errors = [], []
+    for a in mc.meta_accounts():
+        choice = str(form.get(f"acc_{a.id}", "")).strip()
+        if not choice:
+            continue
+        try:
+            updates.update(mc.link(a, choice))
+            done.append(a.name)
+        except ValueError as exc:
+            errors.append(f"{a.name}: {exc}")
+    if updates:
+        envfile.set_env(updates, root=ROOT)
+    msg = f"Ligadas: {', '.join(done)}." if done else ""
+    return RedirectResponse(f"/contas?msg={quote(msg)}&erro={quote('; '.join(errors))}", 303)
+
+
+@app.post("/contas/{acc_id}/testar")
+def account_test(request: Request, acc_id: str):
+    from urllib.parse import quote
+    from .. import meta_connect as mc
+    if not request.state.user.is_admin or acc_id not in accounts():
+        return _forbidden()
+    ok, text = mc.test(accounts()[acc_id])
+    key = "msg" if ok else "erro"
+    return RedirectResponse(f"/contas?{key}={quote(accounts()[acc_id].name + ': ' + text)}", 303)
+
+
+@app.post("/contas/{acc_id}/desligar")
+def account_unlink(request: Request, acc_id: str):
+    from urllib.parse import quote
+    from .. import envfile
+    from .. import meta_connect as mc
+    if not request.state.user.is_admin or acc_id not in accounts():
+        return _forbidden()
+    envfile.set_env(mc.unlink(accounts()[acc_id]), root=ROOT)
+    return RedirectResponse(f"/contas?msg={quote(accounts()[acc_id].name + ': desligada.')}", 303)
+
+
+@app.get("/publico/{name}")
+def public_file(name: str):
+    """Ficheiros que o Instagram/Facebook vão buscar ao publicar (nomes de 32 carateres impossíveis de adivinhar)."""
+    if not _re.fullmatch(r"[0-9a-f]{32}\.(jpg|jpeg|png|mp4|mov)", name):
+        return HTMLResponse("não encontrado", 404)
+    f = DATA_DIR / "publico" / name
+    if not f.exists():
+        return HTMLResponse("não encontrado", 404)
+    return FileResponse(f)
+
+
 @app.get("/media/{mid}")
 def media(request: Request, mid: int):
     me = request.state.user
@@ -872,6 +991,10 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("SMTP_USER", "Email · utilizador (endereço de envio)", False),
     ("SMTP_PASSWORD", "Email · palavra-passe de aplicação (NÃO usar a 'carretos-avaliacoes')", True),
     ("SMTP_FROM", "Email · remetente (opcional, ex.: Redes Sociais <endereco@…>)", False),
+    # ligação às Páginas de Facebook e aos Instagrams (app da Meta; ver docs/GUIA_META.md)
+    ("META_APP_ID", "Meta · App ID (da app em developers.facebook.com)", False),
+    ("META_APP_SECRET", "Meta · App Secret", True),
+    ("META_LOGIN_CONFIG_ID", "Meta · Configuration ID (só se a app usar 'Facebook Login for Business')", False),
 ]
 
 
@@ -883,6 +1006,9 @@ KEY_FORMATS = {
     "ELEVENLABS_API_KEY": (_re.compile(r"^(sk_)?[0-9a-fA-F]{32,64}$"), "começa por sk_ seguido de letras/números"),
     "ELEVENLABS_VOICE_ID": (_re.compile(r"^[A-Za-z0-9]{15,40}$"), "só letras e números, sem espaços (~20)"),
     "PIXABAY_API_KEY": (_re.compile(r"^\d+-[0-9a-fA-F]{20,}$"), "números, um hífen e letras/números"),
+    "META_APP_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
+    "META_APP_SECRET": (_re.compile(r"^[0-9a-fA-F]{32}$"), "32 letras/números (0-9, a-f)"),
+    "META_LOGIN_CONFIG_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
     "PEXELS_API_KEY": (_re.compile(r"^[A-Za-z0-9]{40,64}$"), "~56 letras e números"),
     "SMTP_HOST": (_re.compile(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"), "um servidor, ex.: smtp.gmail.com"),
     "SMTP_PORT": (_re.compile(r"^(25|465|587|2525)$"), "587 ou 465"),
@@ -932,9 +1058,8 @@ async def config_save(request: Request):
         if not (me and me.is_admin):
             return _forbidden()
         admin_id = me.id
-    env = ROOT / ".env"
-    lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
     rejected = []
+    updates: dict[str, str] = {}
     for key, _, _ in CONFIG_FIELDS:
         value = str(form.get(key, "")).strip()
         if key == "SMTP_PASSWORD":
@@ -944,16 +1069,9 @@ async def config_save(request: Request):
         if _bad_key(key, value):
             rejected.append(key)                              # formato errado: não guarda
             continue
-        os.environ[key] = value
-        replaced = False
-        for i, line in enumerate(lines):
-            if line.split("=", 1)[0].strip() == key and not line.startswith("#"):
-                lines[i] = f"{key}={value}"
-                replaced = True
-        if not replaced:
-            lines.append(f"{key}={value}")
-    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    env.chmod(0o600)
+        updates[key] = value
+    from .. import envfile
+    envfile.set_env(updates, root=ROOT)
     r = RedirectResponse("/configurar?ok=1" + (f"&erro={','.join(rejected)}" if rejected else ""), 303)
     _set_session(r, admin_id)
     return r

@@ -64,8 +64,36 @@ class Account:
 
 
 @lru_cache
+def account_overrides() -> dict:
+    """Dados das contas ligadas no dashboard (data/contas.json): handle e estado vindos da Meta, etc."""
+    import json
+    p = DATA_DIR / "contas.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_account_override(account_id: str, **fields) -> None:
+    import json
+    data = account_overrides()
+    data.setdefault(account_id, {}).update(fields)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR / "contas.json").write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def accounts() -> dict[str, Account]:
-    return {a["id"]: Account(**a) for a in _yaml("accounts.yaml")["accounts"]}
+    over = account_overrides()
+    out = {}
+    for a in _yaml("accounts.yaml")["accounts"]:
+        o = over.get(a["id"]) or {}
+        a = dict(a)
+        if o.get("handle"):
+            a["handle"] = o["handle"]
+        if o.get("status") == "ligada" and a.get("status") == "por_ligar":
+            a["status"] = ""                 # ligada no dashboard: deixa de estar "por ligar"
+        out[a["id"]] = Account(**a)
+    return out
 
 
 @lru_cache

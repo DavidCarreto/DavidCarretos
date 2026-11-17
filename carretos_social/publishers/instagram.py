@@ -11,9 +11,10 @@ from pathlib import Path
 
 from ..http import ApiError, request
 from .base import PublishRequest, PublishResult, Publisher
+from ..meta_connect import graph_version
 from .media_host import public_url
 
-VERSION = os.environ.get("META_GRAPH_VERSION", "v21.0")
+VERSION = graph_version()                 # nunca abaixo da v24 (ver meta_connect.graph_version)
 GRAPH = f"https://graph.facebook.com/{VERSION}"
 
 

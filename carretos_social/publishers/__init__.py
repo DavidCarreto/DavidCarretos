@@ -11,6 +11,9 @@ def get_publisher(acc: Account) -> Publisher:
     if acc.platform == "instagram":
         from .instagram import InstagramPublisher
         return InstagramPublisher()
+    if acc.platform == "facebook_page":
+        from .facebook import FacebookPagePublisher
+        return FacebookPagePublisher()
     if acc.platform == "tiktok":
         from .tiktok import TikTokPublisher
         return TikTokPublisher()

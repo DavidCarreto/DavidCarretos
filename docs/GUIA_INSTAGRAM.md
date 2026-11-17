@@ -1,4 +1,8 @@
-# Ligar o Instagram @davidcarretos (publicação automática + métricas)
+# Ligar o Instagram
+
+> **Atualizado:** a ligação faz-se agora no dashboard → **Contas → "Ligar com o Facebook"**,
+> sem copiar tokens. Ver **docs/GUIA_META.md**. O texto abaixo fica só como referência.
+
 
 Tempo: ~30 min, uma vez. Custo: 0 €.
 
