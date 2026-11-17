@@ -340,5 +340,40 @@ def test_carousel_example_viewer_and_management(client, tmp_path):
     with connect() as conn:
         job = conn.execute("SELECT kind, args FROM jobs ORDER BY id DESC LIMIT 1").fetchone()
     assert job["kind"] == "carrossel-frases" and json.loads(job["args"]).count("--frase") == 2
-    assert "erro=frases" in client.post("/criar", data={"tipo": "carrossel", "conta": "ig_davidcarreto",
-                                                        "tema": "só uma"}, follow_redirects=False).headers["location"]
+    r = client.post("/criar", data={"tipo": "carrossel", "conta": "ig_davidcarreto", "tema": "só uma frase"})
+    assert "leva 2 a 10 frases" in r.text and "só uma frase</textarea>" in r.text     # mantém texto e modo
+    assert 'value="carrossel" checked' in r.text
+    # o carrossel de frases sem data fica SEM data (só sugestão na página)
+    from carretos_social.cli import make_quote_carousel
+    with connect() as conn:
+        pid2 = make_quote_carousel(conn, "ig_davidcarreto", ["Uma", "Duas"], use_ai=False)
+        assert get_post(conn, pid2)["scheduled_at"] is None
+    page = client.get(f"/post/{pid2}").text
+    assert "Hora sugerida" in page and "Pedir legenda à IA" in page
+    # aprovar sem data: fica na página da publicação com o erro em cima
+    r = client.post(f"/post/{pid2}", data={"action": "aprovar", "caption": "Legenda"}, follow_redirects=False)
+    assert r.headers["location"] == f"/post/{pid2}?erro=aprovar"
+    page = client.get(r.headers["location"]).text
+    assert "Não foi aprovada" in page and 'class="need"' in page
+    # histórico com descrições
+    hist = client.get(f"/post/{pid}").text
+    assert "Imagem 1 movida para a posição 2" in hist and "Retirada imagem 3" in hist
+    assert "Acrescentada imagem 3 (1080×1350 · 4:5)" in hist
+
+
+def test_kind_follows_type_and_fix_count(client, tmp_path):
+    from PIL import Image
+    from carretos_social.db import add_media, add_post, connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    a = tmp_path / "a.jpg"; Image.new("RGB", (1080, 1350)).save(a)
+    q = tmp_path / "q.jpg"; Image.new("RGB", (1080, 1080)).save(q)
+    with connect() as conn:
+        ma, mq = add_media(conn, "image", str(a)), add_media(conn, "image", str(q))
+        one = add_post(conn, account_id="ig_davidcarreto", format="carousel", caption="x", status="draft",
+                       media_ids=[ma], scheduled_at="2030-01-01T10:00:00+00:00")
+        mix = add_post(conn, account_id="ig_davidcarreto", format="carousel", caption="x", status="draft",
+                       media_ids=[ma, mq], scheduled_at="2030-01-02T10:00:00+00:00")
+    ap = client.get("/aprovar").text
+    assert "📷 Carrossel · 1 imagem ✕" in ap and "Rejeitar #" in ap                   # confirmação ao rejeitar
+    assert "Ajustar 1 imagem com ⚠" in client.get(f"/post/{mix}").text

@@ -39,7 +39,13 @@ echo "==> Dependências (pip install -e .)"
 
 # depois do pip install: o comando 'backup' pode ser novo nesta atualização
 echo "==> Cópia de segurança da base de dados (data/backups/, guarda as últimas 30)"
-.venv/bin/carretos backup antes-atualizar || echo "(sem cópia: $?)"
+if ! .venv/bin/carretos backup antes-atualizar; then
+  # alternativa sem depender do comando 'backup' (cópia segura do SQLite)
+  mkdir -p data/backups
+  .venv/bin/python -c "import sqlite3,sys; s=sqlite3.connect('data/carretos.db'); d=sqlite3.connect(sys.argv[1]); s.backup(d)" \
+    "data/backups/carretos-$(date +%Y%m%d-%H%M%S)-antes-atualizar.db" && echo "Cópia feita (alternativa)." \
+    || echo "(sem cópia de segurança)"
+fi
 
 echo "==> Músicas (descarrega só as que faltam)"
 [ -f config/drive/musicas.csv ] && .venv/bin/carretos importar-drive musicas config/drive/musicas.csv || true

@@ -425,7 +425,7 @@ def cmd_fit_format(a):
 
 
 def make_quote_carousel(conn, acc_id: str, frases: list[str], *, title: str = "", caption: str = "",
-                        scheduled_at: str | None = None, auto_date: bool = True) -> int:
+                        scheduled_at: str | None = None, auto_date: bool = False, use_ai: bool = True) -> int:
     """Uma imagem de frase por linha (estilo da 'Imagem com frase') e UM post do tipo carrossel, 'Para aprovar'."""
     from .media import image_gen
     from .media.formats import spec_for
@@ -439,8 +439,45 @@ def make_quote_carousel(conn, acc_id: str, frases: list[str], *, title: str = ""
     paths = [image_gen.quote_card(f, out / f"{i:02d}.jpg", size=size) for i, f in enumerate(frases, 1)]
     ids = [add_media(conn, "image", str(p), None, {"frase": f}) for p, f in zip(paths, frases)]
     when = scheduled_at if scheduled_at is not None else (_when(conn, acc_id, None) if auto_date else None)
+    hashtags: list[str] = []
+    if not caption and use_ai:
+        caption, hashtags = _ai_caption(acc, "carrossel", "Uma imagem por frase, por esta ordem:\n"
+                                        + "\n".join(f"{i}. {f}" for i, f in enumerate(frases, 1)))
     return add_post(conn, account_id=acc_id, format="carousel", title=(title or frases[0])[:80],
-                    caption=caption, media_ids=ids, scheduled_at=when, status="draft")
+                    caption=caption, hashtags=hashtags, media_ids=ids, scheduled_at=when, status="draft")
+
+
+def _ai_caption(acc, fmt: str, brief: str) -> tuple[str, list[str]]:
+    """Legenda pela IA; sem chave ou com erro devolve vazio (a página pede para escrever ou pedir à IA)."""
+    import os
+    if not os.environ.get("SOCIAL_ANTHROPIC_API_KEY"):
+        print("(sem chave da IA: a legenda fica por escrever)")
+        return "", []
+    try:
+        from .content.ai import write_caption
+        res = write_caption(acc, fmt, brief)
+        return res.get("caption", "").strip(), res.get("hashtags") or []
+    except Exception as exc:  # noqa: BLE001
+        print(f"(a IA não escreveu a legenda: {exc})")
+        return "", []
+
+
+def cmd_caption_ai(a):
+    """Pede à IA a legenda de uma publicação que ainda não a tem (a partir do título, gancho e frases)."""
+    with connect() as conn:
+        row, extra = _post_meta(conn, a.post)
+        acc = account(row["account_id"])
+        ids = json.loads(row["media_ids"] or "[]")
+        frases = [json.loads(m["meta"] or "{}").get("frase") for m in conn.execute(
+            f"SELECT meta FROM media WHERE id IN ({','.join('?' * len(ids)) or 'NULL'})", ids)]
+        brief = "\n".join(x for x in [f"Título: {row['title'] or ''}", f"Gancho: {row['hook'] or ''}",
+                                       *[f"Frase: {f}" for f in frases if f],
+                                       *[f"Slide: {s}" for s in extra.get("slides") or []]] if x.split(": ", 1)[1])
+        caption, tags = _ai_caption(acc, row["format"] or "imagem", brief or "(sem descrição)")
+        if not caption:
+            raise SystemExit("Não foi possível gerar a legenda.")
+        update_post(conn, a.post, caption=caption, hashtags=tags)
+    print(f"#{a.post}: legenda escrita pela IA")
 
 
 def cmd_quote_carousel(a):
@@ -463,7 +500,7 @@ def cmd_example_carousel(a):
     with connect() as conn:
         pid = make_quote_carousel(conn, "ig_davidcarreto", EXEMPLO_FRASES,
                                   title="[TESTE] Carrossel de exemplo (não publicar)",
-                                  caption="[TESTE] Carrossel de exemplo: não publicar.", auto_date=False)
+                                  caption="[TESTE] Carrossel de exemplo: não publicar.", use_ai=False)
     print(f"Criada publicação de teste #{pid}: carrossel com 3 imagens, Para aprovar, sem data.")
 
 
@@ -901,6 +938,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--account", required=True); s.add_argument("--frase", action="append")
     s.add_argument("--ficheiro", help="ficheiro de texto com uma frase por linha")
     s.add_argument("--legenda"); s.add_argument("--schedule")
+    s = add("legenda-ia", cmd_caption_ai, "a IA escreve a legenda de uma publicação"); s.add_argument("post", type=int)
     add("exemplo-carrossel", cmd_example_carousel, "cria um carrossel de TESTE (sem data) para experimentar")
     s = add("repor", cmd_restore, "repõe a imagem/vídeo de uma publicação (ficheiro ou histórico)")
     s.add_argument("post", type=int); s.add_argument("--ficheiro")

@@ -6,5 +6,5 @@
 <p class="muted" style="margin:4px 0">{{ j.created_at[5:16].replace('T',' ') }}{% if j.post_id %} · <a class="gold" href="/post/{{ j.post_id }}">ver publicação #{{ j.post_id }}</a>{% endif %}</p>
 {% if j.status in ('done','failed') and j.log %}<details><summary class="muted">detalhes</summary><pre class="log">{{ j.log }}</pre></details>{% endif %}
 </div>{% endfor %}
-{% if jobs|selectattr('status','in',['queued','running'])|list %}<script>setTimeout(()=>location.reload(),8000)</script>{% endif %}
+{% if jobs|selectattr('status','in',['queued','running'])|list %}<p class="muted" style="font-size:12px">↻ A página atualiza-se sozinha enquanto houver tarefas na fila ou a criar.</p><script>setTimeout(()=>location.reload(),4000)</script>{% endif %}
 {% endblock %}

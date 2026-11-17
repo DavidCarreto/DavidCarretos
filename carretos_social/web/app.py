@@ -211,18 +211,20 @@ def _post_view(conn, r) -> dict:
     p["type"] = kind_of(p.get("format"))
     p["types"] = kinds_for(platform) or {p["type"]: KINDS.get(p["type"], p["type"])}
     items = p["fmt"].items
-    n_img = sum(1 for m in p["media"] if not m["video"])
-    if any(m["video"] for m in p["media"]):
+    # a etiqueta segue o TIPO escolhido; ✕ quando o conteúdo não bate certo com o tipo/rede
+    n = len(p["media"])
+    bad = " ✕" if p["fmt"].problems else ""
+    if p["type"] == "video":
         secs = next((i.seconds for i in items if i.video), 0)
-        p["kind"] = ("video", f"🎬 Vídeo · {int(secs // 60)}:{int(secs % 60):02d}" if secs else "🎬 Vídeo")
-    elif n_img > 1:
-        p["kind"] = ("carousel", f"📷 Carrossel · {n_img} imagens")
-    elif n_img:
-        p["kind"] = ("image", "📷 Imagem")
+        p["kind"] = ("video", (f"🎬 Vídeo · {int(secs // 60)}:{int(secs % 60):02d}" if secs else "🎬 Vídeo") + bad)
+    elif p["type"] == "carousel":
+        p["kind"] = ("carousel", f"📷 Carrossel · {n} {'imagem' if n == 1 else 'imagens'}{bad}")
     elif p["type"] == "text":
-        p["kind"] = ("none", "Só texto")
+        p["kind"] = ("none", "Só texto" + bad)
     else:
-        p["kind"] = ("none", "Ainda sem vídeo/imagem")
+        p["kind"] = ("image", f"📷 Imagem{bad}")
+    if not n and p["type"] != "text":
+        p["kind"] = (p["kind"][0], p["kind"][1].split(" ·")[0].replace(" ✕", "") + " · sem ficheiro ✕")
     p["is_video"] = p["type"] == "video"
     from ..media.formats import spec_for
     p["carousel_max"] = spec_for(platform, "carousel").get("count", (2, 10))[1]
@@ -311,16 +313,43 @@ def post_page(request: Request, pid: int):
     with connect() as conn:
         p = _post_view(conn, get_post(conn, pid))
         history = _history_view(conn, pid, p)
+        suggested = None
+        if not p["when"] and p["status"] in ("idea", "draft"):
+            from ..content.planner import next_free_slot
+            try:
+                s = next_free_slot(conn, p["account_id"])
+                suggested = datetime.fromisoformat(s[:19]) if s else None
+            except Exception:  # noqa: BLE001
+                suggested = None
     if not me.can_see(p["account_id"]):
         return _forbidden()
     extra = json.loads(p.get("script") or "{}")
     acc = p["account_id"]
     return _render(request, "post.html", {"p": p, "extra": extra, "can_create": me.can_create(acc),
-                                          "can_approve": me.can_approve(acc), "history": history})
+                                          "can_approve": me.can_approve(acc), "history": history,
+                                          "suggested": suggested,
+                                          "approve_error": request.query_params.get("erro") == "aprovar"})
 
 
 HIST_FIELDS = {"status": "Estado", "media_ids": "Imagem/vídeo", "cover_id": "Capa", "format": "Tipo",
                "scheduled_at": "Data", "caption": "Legenda"}
+
+
+def _describe_media_change(old: list, new: list) -> str:
+    """Descrição legível de uma mudança de imagens quando não ficou nota (ex.: alterações antigas)."""
+    parts = []
+    removed = [i + 1 for i, m in enumerate(old) if m not in new]
+    added = [i + 1 for i, m in enumerate(new) if m not in old]
+    if removed:
+        parts.append("Retirada" + ("s imagens " if len(removed) > 1 else " imagem ") + ", ".join(map(str, removed)))
+    if added:
+        parts.append("Acrescentada" + ("s imagens " if len(added) > 1 else " imagem ") + ", ".join(map(str, added)))
+    if not parts and set(old) == set(new) and old != new:
+        moved = [f"imagem {old.index(m) + 1} → posição {i + 1}" for i, m in enumerate(new) if old.index(m) != i]
+        parts.append("Ordem alterada: " + ", ".join(moved))
+    if not parts and old and new and len(old) == len(new):
+        parts.append("Substituída(s) por nova versão")
+    return "; ".join(parts)
 
 
 def _history_view(conn, pid: int, p: dict) -> list[dict]:
@@ -335,7 +364,7 @@ def _history_view(conn, pid: int, p: dict) -> list[dict]:
                 return STATUS.get(v, (v,))[0]
             if field == "media_ids":
                 n = len(json.loads(v or "[]"))
-                return "nenhum" if not n else f"{n} ficheiro(s)"
+                return "nenhum" if not n else f"{n} imagem/vídeo" if n == 1 else f"{n} imagens/vídeos"
             if field == "format":
                 return KINDS.get(kind_of(v), v)
             if field == "scheduled_at":
@@ -345,7 +374,11 @@ def _history_view(conn, pid: int, p: dict) -> list[dict]:
             return v
         restorable = (h["field"] == "media_ids" and json.loads(h["old"] or "[]")
                       and h["old"] != p.get("media_ids"))
-        out.append({"id": h["id"], "at": h["at"][:16].replace("T", " "), "who": h["user_name"] or "sistema",
+        note = h["note"] if "note" in h.keys() else None
+        if h["field"] == "media_ids" and not note:
+            note = _describe_media_change(json.loads(h["old"] or "[]"), json.loads(h["new"] or "[]"))
+        out.append({"note": note,
+                    "id": h["id"], "at": h["at"][:16].replace("T", " "), "who": h["user_name"] or "sistema",
                     "field": HIST_FIELDS.get(h["field"], h["field"]), "old": show(h["old"]), "new": show(h["new"]),
                     "restorable": bool(restorable)})
     return out
@@ -391,13 +424,14 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
                 new = idx + (1 if dir > 0 else -1)
                 if 0 <= new < len(ids):
                     ids[idx], ids[new] = ids[new], ids[idx]
-                    update_post(conn, pid, _by=me.id, media_ids=ids)
+                    update_post(conn, pid, _by=me.id, media_ids=ids,
+                                _note=f"Imagem {idx + 1} movida para a posição {new + 1}")
                     idx = new
             else:
                 if len(ids) == 1:
                     return _forbidden("É a única imagem: acrescente outra antes de retirar esta.")
                 ids.pop(idx)                       # sai do post; o ficheiro fica guardado (e no histórico)
-                update_post(conn, pid, _by=me.id, media_ids=ids)
+                update_post(conn, pid, _by=me.id, media_ids=ids, _note=f"Retirada imagem {idx + 1}")
                 idx = min(idx, len(ids) - 1)
             return RedirectResponse(f"/post/{pid}#img={idx + 1}", 303)
         if action == "repor":   # repõe a imagem/vídeo de uma versão anterior (histórico)
@@ -408,15 +442,19 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             restore = {"media_ids": h["old"], "error": None}
             if row["status"] == "idea":
                 restore["status"] = "draft"
-            update_post(conn, pid, _by=me.id, **restore)
+            update_post(conn, pid, _by=me.id, _note="Reposta uma versão anterior das imagens", **restore)
             return RedirectResponse(f"/post/{pid}", 303)
+        if action == "legenda_ia":
+            jobs.enqueue("legenda-ia", [str(pid)], f"Legenda pela IA #{pid}", user_id=me.id)
+            return RedirectResponse("/tarefas", 303)
         if action == "ajustar":
             jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id)
             return RedirectResponse("/tarefas", 303)
         if action == "aprovar":
             problems = all_problems(conn, get_post(conn, pid))
-            if problems:
+            if problems:   # fica (ou vai) para a página da publicação, com o erro em cima
                 update_post(conn, pid, error="; ".join(problems))
+                return RedirectResponse(f"/post/{pid}?erro=aprovar", 303)
             else:
                 update_post(conn, pid, _by=me.id, status="approved", error=None, approved_by=me.id)
         elif action == "rejeitar":
@@ -452,6 +490,7 @@ def post_add_images(request: Request, pid: int, imagens: list[UploadFile] = File
         folder = DATA_DIR / "media" / "uploads" / f"post{pid}"
         folder.mkdir(parents=True, exist_ok=True)
         added = 0
+        notes: list[str] = []
         for f in imagens:
             if not f.filename:
                 continue
@@ -469,8 +508,11 @@ def post_add_images(request: Request, pid: int, imagens: list[UploadFile] = File
                 return _forbidden(f"'{f.filename}' não é uma imagem que eu consiga abrir (JPG, PNG ou WEBP).")
             ids.append(add_media(conn, "image", str(dest), None, {"upload": f.filename}))
             added += 1
+            from ..media.formats import _ratio_name, measure
+            w, h, *_ = measure(str(dest))
+            notes.append(f"Acrescentada imagem {len(ids)} ({w}×{h} · {_ratio_name(w / h)})")
         if added:
-            update_post(conn, pid, _by=me.id, media_ids=ids)
+            update_post(conn, pid, _by=me.id, media_ids=ids, _note="; ".join(notes))
     return RedirectResponse(f"/post/{pid}#img={len(ids)}", 303)
 
 
@@ -491,11 +533,12 @@ def media(request: Request, mid: int):
 
 
 @app.get("/criar", response_class=HTMLResponse)
-def create_page(request: Request):
+def create_page(request: Request, erro: str = "", form: dict | None = None):
     me = request.state.user
     contas = [accounts()[a] for a in me.creatable_accounts]
     contas_grupos = [(g, [a for a in contas if a.group == g["id"]]) for g in groups()]
-    return _render(request, "create.html", {"page": "create", "contas": contas,
+    return _render(request, "create.html", {"page": "create", "contas": contas, "erro": erro,
+                                            "form": form or {"tipo": "zero"},
                                             "contas_grupos": [(g, cs) for g, cs in contas_grupos if cs]})
 
 
@@ -527,7 +570,8 @@ def create(request: Request, tipo: str = Form(...), conta: str = Form(...), tema
     elif tipo in ("editar", "montagem"):
         paths = _save_uploads(ficheiros)
         if not paths:
-            return RedirectResponse("/criar?erro=ficheiros", 303)
+            return create_page(request, "Escolhe pelo menos um vídeo.",
+                               {"tipo": tipo, "conta": conta, "tema": tema, "quando": quando, "segundos": segundos})
         if tipo == "editar" and len(paths) == 1:
             jobs.enqueue("edit-video", [paths[0], "--account", conta, "--seconds", str(segundos), "--fill", "crop",
                                         *(["--goal", tema] if tema else []), *sched],
@@ -539,7 +583,9 @@ def create(request: Request, tipo: str = Form(...), conta: str = Form(...), tema
     elif tipo == "carrossel":
         frases = [x.strip() for x in (texto or tema).splitlines() if x.strip()]
         if not 2 <= len(frases) <= 10:
-            return RedirectResponse("/criar?erro=frases", 303)
+            return create_page(request, f"Um carrossel de frases leva 2 a 10 frases, uma por linha "
+                                        f"(escreveste {len(frases)}).",
+                               {"tipo": tipo, "conta": conta, "tema": texto or tema, "quando": quando})
         args = ["--account", conta, *sum((["--frase", x] for x in frases), []), *sched]
         jobs.enqueue("carrossel-frases", args, f"Carrossel de {len(frases)} frases", user_id=me.id)
     elif tipo == "imagem":

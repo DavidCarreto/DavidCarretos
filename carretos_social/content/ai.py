@@ -274,3 +274,20 @@ Monta UM vídeo vertical de ~{target_seconds} s. {goal}
 Vídeos:
 {json.dumps(clips, ensure_ascii=False)}"""
     return _ask(prompt, MONTAGE_SCHEMA, effort="high")
+
+
+def write_caption(acc: Account, fmt: str, brief: str) -> dict:
+    """Legenda + hashtags para uma publicação já feita (ex.: carrossel de frases), sem inventar factos."""
+    schema = _obj({"caption": STR, "hashtags": STRS})
+    prompt = f"""{_account_line(acc)}
+Formato: {fmt}.
+
+Conteúdo da publicação (já criado; NÃO o alteres, escreve só a legenda para ele):
+{brief}
+
+Escreve:
+- caption: legenda pronta a publicar, adaptada à plataforma, que acompanha este conteúdo
+  (primeira linha forte; termina com uma pergunta ou chamada à ação simples). Sem factos novos:
+  se precisares de um facto concreto que não está nos FACTOS CONFIRMADOS, usa [PREENCHER: ...].
+- hashtags: 3 a 8, relevantes."""
+    return _ask(prompt, schema, max_tokens=4000, effort="low")

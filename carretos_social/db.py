@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS post_history (
     user_id INTEGER,
     field TEXT NOT NULL,
     old TEXT,
-    new TEXT
+    new TEXT,
+    note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_post_history ON post_history(post_id, id);
 
@@ -147,12 +148,13 @@ MIGRATIONS = [  # colunas acrescentadas depois (ALTER TABLE é ignorado se já e
     "ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE user_accounts ADD COLUMN level TEXT",
     "ALTER TABLE users ADD COLUMN email TEXT",
+    "ALTER TABLE post_history ADD COLUMN note TEXT",
 ]
 
 
 def _migrate(conn) -> None:
     """Só ACRESCENTA colunas (nunca apaga nem altera media/estados). Antes de mudar, faz uma cópia da base."""
-    tables = ("posts", "jobs", "chat", "users", "user_accounts")
+    tables = ("posts", "jobs", "chat", "users", "user_accounts", "post_history")
     cols = {t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")} for t in tables}
     pending = [sql for sql in MIGRATIONS if sql.split()[5] not in cols[sql.split()[2]]]
     if pending:
@@ -227,7 +229,8 @@ class MediaLossError(ValueError):
     """Tentativa de deixar sem imagem/vídeo uma publicação que já os tem."""
 
 
-def update_post(conn, post_id: int, _by: int | None = None, _allow_clear_media: bool = False, **fields) -> None:
+def update_post(conn, post_id: int, _by: int | None = None, _allow_clear_media: bool = False,
+                _note: str | None = None, **fields) -> None:
     """Atualiza uma publicação e regista no histórico o que mudou (estado, media, tipo, data, legenda).
 
     Nunca deixa sem media uma publicação que já tem imagem/vídeo, a não ser com _allow_clear_media=True.
@@ -246,8 +249,9 @@ def update_post(conn, post_id: int, _by: int | None = None, _allow_clear_media: 
         for key in TRACKED:
             if key in fields and str(fields[key] if fields[key] is not None else "") != \
                     str(old[key] if old[key] is not None else ""):
-                conn.execute("INSERT INTO post_history(post_id, at, user_id, field, old, new) VALUES (?,?,?,?,?,?)",
-                             (post_id, now(), _by, key, old[key], fields[key]))
+                conn.execute("INSERT INTO post_history(post_id, at, user_id, field, old, new, note) "
+                             "VALUES (?,?,?,?,?,?,?)", (post_id, now(), _by, key, old[key], fields[key],
+                                                        _note if key == "media_ids" else None))
     fields["updated_at"] = now()
     sets = ",".join(f"{k}=?" for k in fields)
     conn.execute(f"UPDATE posts SET {sets} WHERE id=?", [*fields.values(), post_id])

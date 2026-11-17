@@ -236,6 +236,20 @@ class Report:
                                                                  "imagens por segundo", "fora do aceite"))
                    for i in self.items if i.verdict != "ok")
 
+    def _fixable_items(self) -> list[Item]:
+        keys = ("proporção", "resolução", "pequeno", "largura", "imagens por segundo", "fora do aceite")
+        return [i for i in self.items if i.verdict != "ok" and i.width and any(k in " ".join(i.notes) for k in keys)]
+
+    @property
+    def fixable_count(self) -> int:
+        return len(self._fixable_items())
+
+    @property
+    def fixable_marks(self) -> str:
+        """'⚠', '✕' ou '⚠/✕': o que têm as imagens que o botão vai ajustar."""
+        v = {i.verdict for i in self._fixable_items()}
+        return "/".join(m for k, m in (("ajustar", "⚠"), ("editar", "✕")) if k in v)
+
     def blocking(self) -> list[str]:
         out = list(self.problems)
         for n, i in enumerate(self.items, 1):

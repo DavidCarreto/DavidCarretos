@@ -29,6 +29,30 @@
       track.scrollTo({ left: i * track.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
       show(i);
     }
+    // arrastar com o rato no computador (no telemóvel o deslizar é nativo)
+    let drag = null;
+    track.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('video')) return;
+      drag = { x: e.clientX, left: track.scrollLeft, moved: false };
+      track.setPointerCapture(e.pointerId);
+    });
+    track.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (Math.abs(dx) > 4) { drag.moved = true; track.classList.add('dragging'); }
+      track.scrollLeft = drag.left - dx;
+    });
+    const end = e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, w = track.clientWidth, start = Math.round(drag.left / w);
+      const moved = drag.moved;
+      drag = null;
+      track.classList.remove('dragging');
+      if (moved) go(Math.abs(dx) > w * 0.15 ? start - Math.sign(dx) : start);
+    };
+    track.addEventListener('pointerup', end);
+    track.addEventListener('pointercancel', end);
+    track.addEventListener('click', e => { if (track.classList.contains('dragging')) e.preventDefault(); }, true);
     let t;
     track.addEventListener('scroll', () => {
       clearTimeout(t);
