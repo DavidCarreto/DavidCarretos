@@ -14,6 +14,10 @@ if [ "$(id -un)" != "$APP_USER" ]; then
 fi
 
 cd "$APP"
+# pedido pelo dashboard: o próprio script escreve o registo (linha a linha), para a página o mostrar
+if [ -n "${CARRETOS_UPDATE_LOG:-}" ]; then
+  exec >>"$CARRETOS_UPDATE_LOG" 2>&1
+fi
 echo "==> Código (git pull)"
 ANTES=$(git rev-parse --short HEAD)
 if ! git diff --quiet || ! git diff --cached --quiet; then

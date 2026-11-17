@@ -1037,6 +1037,7 @@ def _startup():
     try:
         from . import system
         system.check_reboot()          # aviso "O servidor reiniciou às HH:MM" (com a causa provável)
+        system.finish_update()         # guarda o registo/resultado da atualização que reiniciou o dashboard
     except Exception:  # noqa: BLE001
         log.exception("verificação de reinício")
     if os.environ.get("DICTATION_PRELOAD", "1") == "1":  # modelo do ditado já em memória

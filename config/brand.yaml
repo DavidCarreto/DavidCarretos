@@ -36,6 +36,7 @@ voices:
 
 rules:
   - "Nunca inventar números, prémios, nomes de clientes ou factos. Se faltar informação, deixar [PREENCHER]."
+  - "Afirmações sobre a vida, a experiência, as histórias ou as opiniões vividas do David (ex.: 'aprendi isto na oficina', 'estas frases não são de nenhum livro', 'quando comecei…') também são factos: só se estiverem nos FACTOS CONFIRMADOS; senão [PREENCHER: …] ou, melhor, escrever sem as afirmar."
   - "Não usar o logótipo Mercedes-Benz como se fôssemos representantes oficiais; dizer 'especialistas em Mercedes'."
   - "Português de Portugal (não brasileiro)."
   - "Cada publicação tem um gancho, valor e uma chamada à ação."

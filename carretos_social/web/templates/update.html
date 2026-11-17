@@ -6,12 +6,13 @@
  <p>Pedida por <b>{{ r.state.by }}</b> em {{ r.state.started[:16].replace('T',' ') }} · versão antes: <code>{{ r.before }}</code> → agora: <code id="rev">{{ r.rev }}</code></p>
  <p id="fase" class="verdict">{% if r.running %}⏳ A atualizar… (o dashboard reinicia a meio: esta página volta sozinha){% elif r.restarted %}✓ Atualização concluída{% else %}…{% endif %}</p>
  <ul style="margin:0;padding-left:18px;font-size:14px">
-  <li>Cópia de segurança: <b id="bk">{% if r.backup %}{{ '✓' if r.backup_ok else '?' }} {{ r.backup.name }} ({{ r.backup.size_kb }} KB, {{ r.backup.at }}){% else %}✘ nenhuma{% endif %}</b></li>
+  <li>Cópia de segurança: <b id="bk">{% if r.backup and not r.backup.old %}{{ '✓' if r.backup_ok else '?' }} {{ r.backup.name }} ({{ r.backup.size_kb }} KB, {{ r.backup.at }}){% elif r.running %}a fazer…{% else %}✘ não foi feita nesta atualização{% if r.backup %} (a última é de {{ r.backup.at }}){% endif %}{% endif %}</b></li>
   <li>Serviços: <b id="sv">{% for k, v in r.services.items() %}{{ k }} {{ '✓ active' if v == 'active' else '✘ ' ~ v }}{{ ' · ' if not loop.last }}{% else %}não foi possível verificar{% endfor %}</b></li>
   <li>Dashboard: <b id="db">{{ '✔ Dashboard a responder (reiniciado às ' ~ r.started_at ~ ')' if r.restarted else '✔ a responder' }}</b></li>
  </ul>{% endif %}
 </div>
-{% if r.log %}<details class="card" style="margin-top:12px" {{ 'open' if r.running }}><summary><b>Registo</b></summary><pre class="log" id="log">{{ r.log }}</pre></details>{% endif %}
+{% if r.state %}<details class="card" style="margin-top:12px" open><summary><b>Registo</b></summary>{% if r.log.strip() %}<pre class="log" id="log">{{ r.log }}</pre>{% else %}<p class="muted">O registo está vazio.</p>{% endif %}
+{% if r.restarted %}<p class="muted" style="font-size:12px">O registo pára em "Reiniciar serviços": o reinício termina o script. O resultado acima é verificado pelo dashboard já reiniciado.</p>{% endif %}</details>{% endif %}
 {% if r.running %}<script>
 // durante o reinício o servidor não responde: tenta de 3 em 3 segundos até voltar
 async function poll(){try{const j=await (await fetch('/configurar/atualizacao.json',{cache:'no-store'})).json();

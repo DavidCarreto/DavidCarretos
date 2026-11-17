@@ -480,3 +480,27 @@ def test_facts_usage_marks():
     u = usage(["O dono é David Carreto.", "A Carretos Group tem 5 oficinas: Almada e Mafra."],
               ["Venha à oficina de Almada", "outra"])
     assert u[0]["terms"] == [] and u[1]["used"] == 1
+
+
+def test_update_log_written_by_script_and_reboot_causes(tmp_path, monkeypatch):
+    import time
+    from carretos_social.web import system
+    root = tmp_path / "app"; (root / "deploy").mkdir(parents=True)
+    (root / "deploy" / "atualizar.sh").write_text(
+        'if [ -n "${CARRETOS_UPDATE_LOG:-}" ]; then exec >>"$CARRETOS_UPDATE_LOG" 2>&1; fi\n'
+        'echo "==> Código (git pull)"\necho "==> Cópia de segurança da base de dados"\n')
+    monkeypatch.setattr(system, "ROOT", root)
+    assert system.start_update("david")
+    for _ in range(50):
+        log = (system.config.DATA_DIR / system.LOG).read_text()
+        if "Cópia de segurança" in log:
+            break
+        time.sleep(0.1)
+    assert log.startswith("Atualização pedida por david") and "==> Código (git pull)" in log
+    assert "reinício ordenado" in system.guess_cause("... systemd-reboot.service: Deactivated ...")
+    # 1.ª vez com arranque recente também avisa
+    from datetime import datetime, timedelta
+    (system.config.DATA_DIR / system.SERVER).unlink(missing_ok=True)
+    monkeypatch.setattr(system, "boot_time", lambda: datetime.now() - timedelta(hours=3))
+    monkeypatch.setattr(system, "_previous_boot_tail", lambda lines=60: "Reached target System Reboot")
+    assert system.check_reboot()["cause"].startswith("reinício ordenado")

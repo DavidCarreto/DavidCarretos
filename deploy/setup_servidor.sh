@@ -25,6 +25,9 @@ apt-get update -y
 apt-get install -y git ffmpeg python3-venv python3-pip python3-dev build-essential \
                    fonts-inter fonts-dejavu-core fontconfig caddy curl
 
+log "Desligar o Ctrl+Alt+Del (evita reinícios sem querer pela consola web da Hetzner)"
+systemctl mask ctrl-alt-del.target >/dev/null 2>&1 || true
+
 log "Utilizador da aplicação"
 id "$APP_USER" &>/dev/null || useradd -m -s /bin/bash "$APP_USER"
 usermod -aG systemd-journal "$APP_USER"   # pode ler os registos (journalctl) dos serviços

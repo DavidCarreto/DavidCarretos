@@ -307,5 +307,8 @@ Escreve:
   Não acrescentes dados da empresa (n.º de oficinas, localidades, serviços, números) se o conteúdo
   não falar disso: uma legenda curta e pessoal é melhor do que uma com dados a mais.
   Evita [PREENCHER] sempre que a legenda funcione sem esse facto.
+  NÃO inventes afirmações sobre a vida, a experiência ou as histórias do David (ex.: "aprendi isto na
+  oficina", "estas frases não são de nenhum livro", "quando comecei…"): também são factos. Só as usas se
+  estiverem nos FACTOS CONFIRMADOS; caso contrário escreve a legenda sem elas (ou [PREENCHER: …]).
 - hashtags: 3 a 8, relevantes."""
     return _ask(prompt, schema, max_tokens=4000, effort="low")

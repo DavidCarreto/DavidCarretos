@@ -476,6 +476,8 @@ def cmd_caption_ai(a):
         caption, tags = _ai_caption(acc, row["format"] or "imagem", brief or "(sem descrição)")
         if not caption:
             raise SystemExit("Não foi possível gerar a legenda.")
+        if (row["title"] or "").startswith("[TESTE]") or (row["caption"] or "").startswith("[TESTE]"):
+            caption = "[TESTE] " + caption.removeprefix("[TESTE]").lstrip()   # nunca parecer um post real
         update_post(conn, a.post, caption=caption, hashtags=tags)
     print(f"#{a.post}: legenda escrita pela IA")
 
