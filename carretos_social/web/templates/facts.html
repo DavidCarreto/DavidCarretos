@@ -4,6 +4,10 @@
 (n.º de oficinas, localidades, serviços, anos, números, prémios…). Tudo o resto sai como <b>[PREENCHER: …]</b>
 e a publicação fica bloqueada até ser completada. Um facto por linha.</p>
 {% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ Factos guardados. As próximas legendas já usam esta lista.</div>{% endif %}
+{% for c in contradicoes %}<div class="card alert">⚠ {{ c }} Corrija o facto ou a conta.</div>{% endfor %}
+<div class="card" style="margin-bottom:12px"><b>Onde estão a ser usados</b> <span class="muted" style="font-size:12px">(legendas de publicações não rejeitadas)</span>
+{% for u in uso %}<div class="fact-row"><span style="flex:1">{{ u.fact }}</span><span class="muted">{% if not u.terms %}—{% elif u.used %}<span class="gold">usado em {{ u.used }} legenda{{ 's' if u.used != 1 }}</span>{% else %}não usado{% endif %}</span></div>{% endfor %}
+</div>
 <form method="post" class="card">
  <label>Factos (um por linha)</label>
  <textarea name="factos" rows="14">{{ factos|join('\n') }}</textarea>

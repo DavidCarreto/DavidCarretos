@@ -16,10 +16,15 @@ _lock = threading.Lock()
 _started = False
 
 
-def enqueue(kind: str, args: list[str], label: str = "", user_id: int | None = None) -> int:
-    with connect() as conn:
-        return conn.execute("INSERT INTO jobs(kind, args, label, created_at, created_by) VALUES (?,?,?,?,?)",
-                            (kind, json.dumps(args, ensure_ascii=False), label or kind, now(), user_id)).lastrowid
+def enqueue(kind: str, args: list[str], label: str = "", user_id: int | None = None, conn=None) -> int:
+    """Põe uma tarefa na fila. Quem já tem uma ligação aberta à base de dados passa-a em `conn`
+    (abrir outra enquanto a primeira tem alterações por gravar dava 'database is locked')."""
+    sql = "INSERT INTO jobs(kind, args, label, created_at, created_by) VALUES (?,?,?,?,?)"
+    vals = (kind, json.dumps(args, ensure_ascii=False), label or kind, now(), user_id)
+    if conn is not None:
+        return conn.execute(sql, vals).lastrowid
+    with connect() as own:
+        return own.execute(sql, vals).lastrowid
 
 
 def _run(job) -> None:

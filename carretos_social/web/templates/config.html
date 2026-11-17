@@ -30,4 +30,12 @@ Os outros campos foram guardados.</div>{% endif %}
 <p class="muted" style="font-size:13px;margin:4px 0 10px">Envia um email de teste para {{ me.email or 'o teu email (indica-o em "A minha conta")' }}.
 {% if not email_ok %}Primeiro preenche e guarda os campos "Email · …".{% endif %}</p>
 <button class="btn" {{ 'disabled' if not email_ok }}>✉ Enviar email de teste</button></form>{% endif %}
+{% if not first %}<div class="card" style="margin-top:12px">
+<b>Manutenção</b>
+<p class="muted" style="font-size:13px;margin:4px 0 10px">Atualiza o Carretos Studio para a versão mais recente (faz primeiro uma cópia de segurança da base de dados e reinicia os serviços). Não precisa da consola da Hetzner.</p>
+<div class="row">
+<form method="post" action="/configurar/atualizar" onsubmit="return confirm('Atualizar o Carretos Studio agora? O dashboard fica indisponível durante cerca de 1 minuto.')"><button class="btn gold">⟳ Atualizar o Carretos Studio</button></form>
+<a class="btn" href="/configurar/atualizacao">Ver a última atualização</a>
+<form method="post" action="/configurar/post-teste" onsubmit="return confirm('Criar um post de TESTE (carrossel de 3 frases, sem data)?')"><button class="btn">Criar post de teste (carrossel)</button></form>
+</div></div>{% endif %}
 {% endblock %}

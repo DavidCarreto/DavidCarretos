@@ -27,6 +27,31 @@ from . import jobs, mailer, users
 load_env()
 HERE = Path(__file__).parent
 app = FastAPI(title="Carretos Social")
+log = __import__("logging").getLogger("carretos.web")
+
+
+def _back_with_error(pid: int, msg: str) -> RedirectResponse:
+    from urllib.parse import quote
+    return RedirectResponse(f"/post/{pid}?falha={quote(msg[:300])}", 303)
+
+
+@app.exception_handler(Exception)
+async def friendly_error(request: Request, exc: Exception):
+    """Em vez do ecrã branco 'Internal Server Error': regista o erro (journalctl) e explica-o na página."""
+    log.exception("Erro em %s %s", request.method, request.url.path)
+    import re as _re
+    m = _re.match(r"^/post/(\d+)", request.url.path)
+    if request.method == "POST" and m:
+        return _back_with_error(int(m.group(1)), f"Não foi possível concluir a ação: {exc}")
+    return HTMLResponse(f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                        f"<body style='background:#000;color:#eee;font-family:system-ui;padding:24px'>"
+                        f"<h2 style='color:#D4AF37'>Algo correu mal</h2><p>{_esc(str(exc))[:400]}</p>"
+                        f"<p><a style='color:#D4AF37' href='javascript:history.back()'>‹ voltar</a></p>", 500)
+
+
+def _esc(s: str) -> str:
+    import html
+    return html.escape(s)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 tpl = Jinja2Templates(directory=HERE / "templates")
 
@@ -90,6 +115,9 @@ def _current_user(request: Request) -> users.User | None:
 def _render(request: Request, name: str, ctx: dict):
     ctx.setdefault("page", "")
     ctx["me"] = request.state.user
+    if ctx["me"] and getattr(ctx["me"], "is_admin", False):
+        from . import system
+        ctx.setdefault("reboot", system.reboot_notice())
     return tpl.TemplateResponse(request, name, ctx)
 
 
@@ -329,12 +357,32 @@ def post_page(request: Request, pid: int):
     acc = p["account_id"]
     return _render(request, "post.html", {"p": p, "extra": extra, "can_create": me.can_create(acc),
                                           "can_approve": me.can_approve(acc), "history": history,
-                                          "suggested": suggested,
+                                          "suggested": suggested, "fix_hint": _fix_hint(p.get("error") or ""),
                                           "approve_error": request.query_params.get("erro") == "aprovar"})
 
 
 HIST_FIELDS = {"status": "Estado", "media_ids": "Imagem/vídeo", "cover_id": "Capa", "format": "Tipo",
                "scheduled_at": "Data", "caption": "Legenda"}
+
+
+def _fix_hint(error: str) -> str:
+    """Frase de ajuda que corresponde aos problemas que impediram a aprovação."""
+    e = error.lower()
+    steps = []
+    if "sem data" in e:
+        steps.append('escolha a <a href="#quando" class="gold">data e hora</a>')
+    if "preencher" in e:
+        steps.append("complete a legenda (substitua os [PREENCHER…])")
+    elif "sem legenda" in e:
+        steps.append("escreva a legenda (ou peça-a à IA)")
+    if "sem vídeo/imagem" in e:
+        steps.append("acrescente a imagem/vídeo")
+    if "formato:" in e:
+        steps.append("corrija o formato (ver o painel \"Formato para publicar\")")
+    if not steps:
+        return ""
+    text = steps[0] if len(steps) == 1 else ", ".join(steps[:-1]) + " e " + steps[-1]
+    return text[0].upper() + text[1:] + ' e carregue outra vez em "Guardar e aprovar".'
 
 
 def _describe_media_change(old: list, new: list) -> str:
@@ -447,12 +495,16 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             update_post(conn, pid, _by=me.id, _note="Reposta uma versão anterior das imagens", **restore)
             return RedirectResponse(f"/post/{pid}", 303)
         if action == "legenda_ia":
-            refazer = bool((get_post(conn, pid)["caption"] or "").strip())
-            jobs.enqueue("legenda-ia", [str(pid)], f"{'Refazer legenda' if refazer else 'Legenda pela IA'} #{pid}",
-                         user_id=me.id)
+            try:
+                refazer = bool((get_post(conn, pid)["caption"] or "").strip())
+                jobs.enqueue("legenda-ia", [str(pid)],
+                             f"{'Refazer legenda' if refazer else 'Legenda pela IA'} #{pid}", user_id=me.id, conn=conn)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("legenda_ia #%s", pid)
+                return _back_with_error(pid, f"Não foi possível pedir a legenda à IA: {exc}")
             return RedirectResponse("/tarefas", 303)
         if action == "ajustar":
-            jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id)
+            jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id, conn=conn)
             return RedirectResponse("/tarefas", 303)
         if action == "aprovar":
             problems = all_problems(conn, get_post(conn, pid))
@@ -469,7 +521,7 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
             if kind_of(get_post(conn, pid)["format"]) != "video":
                 return _forbidden("'Refazer vídeo' só existe para publicações de vídeo.")
             jobs.enqueue("create-video", ["--account", acc, "--post", str(pid)], f"Refazer #{pid}",
-                         user_id=me.id)
+                         user_id=me.id, conn=conn)
             return RedirectResponse("/tarefas", 303)
     return RedirectResponse(f"/post/{pid}" if action == "guardar" else "/aprovar", 303)
 
@@ -525,7 +577,12 @@ def facts_page(request: Request, ok: int = 0):
     from ..content.ai import verified_facts
     if not request.state.user.is_admin:
         return _forbidden("Só o administrador edita os factos.")
-    return _render(request, "facts.html", {"factos": verified_facts(), "ok": ok})
+    from ..content.facts_check import contradictions, usage
+    facts = verified_facts()
+    with connect() as conn:
+        caps = [r["caption"] or "" for r in conn.execute("SELECT caption FROM posts WHERE status != 'rejected'")]
+    return _render(request, "facts.html", {"factos": facts, "ok": ok, "uso": usage(facts, caps),
+                                           "contradicoes": contradictions(facts, accounts())})
 
 
 @app.post("/factos")
@@ -902,6 +959,57 @@ async def config_save(request: Request):
     return r
 
 
+def _admin_only(request: Request):
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return None
+    request.state.user = me
+    return me
+
+
+@app.post("/configurar/atualizar")
+def update_system(request: Request):
+    from . import system
+    me = _admin_only(request)
+    if not me:
+        return _forbidden("Só o administrador pode atualizar o sistema.")
+    system.start_update(me.username)
+    return RedirectResponse("/configurar/atualizacao", 303)
+
+
+@app.get("/configurar/atualizacao", response_class=HTMLResponse)
+def update_page(request: Request):
+    from . import system
+    if not _admin_only(request):
+        return _forbidden("Só o administrador.")
+    return _render(request, "update.html", {"r": system.update_report()})
+
+
+@app.get("/configurar/atualizacao.json")
+def update_json(request: Request):
+    from . import system
+    if not _admin_only(request):
+        return JSONResponse({"erro": "só o administrador"}, 403)
+    return JSONResponse(system.update_report())
+
+
+@app.post("/configurar/post-teste")
+def create_test_post(request: Request):
+    me = _admin_only(request)
+    if not me:
+        return _forbidden("Só o administrador.")
+    jobs.enqueue("exemplo-carrossel", [], "Post de teste (carrossel)", user_id=me.id)
+    return RedirectResponse("/tarefas", 303)
+
+
+@app.post("/configurar/reinicio-visto")
+def reboot_seen(request: Request):
+    from . import system
+    if _admin_only(request):
+        system.dismiss_reboot()
+    return RedirectResponse(request.headers.get("referer") or "/", 303)
+
+
 @app.post("/configurar/testar-email")
 def config_test_email(request: Request):
     """Envia um email de teste ao administrador (confirma a configuração SMTP)."""
@@ -926,6 +1034,11 @@ def config_test_email(request: Request):
 @app.on_event("startup")
 def _startup():
     jobs.start_worker()
+    try:
+        from . import system
+        system.check_reboot()          # aviso "O servidor reiniciou às HH:MM" (com a causa provável)
+    except Exception:  # noqa: BLE001
+        log.exception("verificação de reinício")
     if os.environ.get("DICTATION_PRELOAD", "1") == "1":  # modelo do ditado já em memória
         import threading
         from ..media.video_editor import preload_dictation

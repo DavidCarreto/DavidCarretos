@@ -169,9 +169,11 @@ def _migrate(conn) -> None:
     if tuple(before) != tuple(after):
         conn.rollback()
         raise RuntimeError("migração alteraria publicações: cancelada")
-    # permissões antigas (criar/aprovar) → nível por conta, sem perder nada
-    conn.execute("UPDATE user_accounts SET level = CASE WHEN can_approve=1 THEN 'aprovar' "
-                 "WHEN can_create=1 THEN 'criar' ELSE 'ver' END WHERE level IS NULL")
+    # permissões antigas (criar/aprovar) → nível por conta, sem perder nada (só escreve se houver o que mudar:
+    # uma escrita em cada ligação bloqueava a base de dados às outras ligações)
+    if conn.execute("SELECT 1 FROM user_accounts WHERE level IS NULL LIMIT 1").fetchone():
+        conn.execute("UPDATE user_accounts SET level = CASE WHEN can_approve=1 THEN 'aprovar' "
+                     "WHEN can_create=1 THEN 'criar' ELSE 'ver' END WHERE level IS NULL")
 
 
 def _snapshot(conn, reason: str) -> None:
@@ -189,8 +191,9 @@ def _snapshot(conn, reason: str) -> None:
 
 @contextmanager
 def connect(path: Path | None = None):
-    conn = sqlite3.connect(path or db_path())
+    conn = sqlite3.connect(path or db_path(), timeout=20)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")   # dashboard, agendador e tarefas leem/escrevem ao mesmo tempo
     conn.executescript(SCHEMA)
     _migrate(conn)
     try:

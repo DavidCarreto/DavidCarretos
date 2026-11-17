@@ -409,3 +409,74 @@ def test_placeholders_block_suggestions_distinct_and_facts(client, tmp_path):
     from carretos_social.content.ai import verified_facts
     assert verified_facts() == ["O dono é David Carreto.", "A empresa chama-se Carretos Group."]
     assert "Almada" not in client.get("/factos").text
+
+
+def test_caption_ai_with_edited_caption_creates_job(client):
+    """Regressão: 'Refazer legenda com a IA' dava 'database is locked' (500) quando a legenda tinha sido editada."""
+    from carretos_social.cli import main
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    main(["exemplo-carrossel"])
+    r = client.post("/post/1", data={"action": "legenda_ia", "caption": "[TESTE] legenda mudada", "img": "1"},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/tarefas"
+    with connect() as conn:
+        assert conn.execute("SELECT kind FROM jobs ORDER BY id DESC").fetchone()[0] == "legenda-ia"
+        assert conn.execute("SELECT caption FROM posts WHERE id=1").fetchone()[0] == "[TESTE] legenda mudada"
+
+
+def test_friendly_error_hint_and_menu(client, monkeypatch):
+    import carretos_social.web.app as app_mod
+    from carretos_social.cli import main
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    main(["exemplo-carrossel"])
+    def boom(*a, **k):
+        raise RuntimeError("falha de teste")
+    monkeypatch.setattr(app_mod.jobs, "enqueue", boom)
+    r = client.post("/post/1", data={"action": "legenda_ia"}, follow_redirects=False)
+    assert "falha=" in r.headers["location"]
+    assert "Não foi possível pedir a legenda à IA: falha de teste" in client.get(r.headers["location"]).text
+    assert app_mod._fix_hint("sem data/hora; legenda por preencher ([PREENCHER…])").startswith(
+        'Escolha a <a href="#quando" class="gold">data e hora</a> e complete a legenda')
+    page = client.get("/").text
+    assert 'class="topmenu"' in page and "📋 Factos" in page
+
+
+def test_update_button_reboot_notice_and_facts_check(client, monkeypatch, tmp_path):
+    import subprocess
+    from datetime import datetime, timedelta
+    from carretos_social.web import system
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    calls = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: calls.append(a[0]))
+    monkeypatch.setattr(system, "STARTED_AT", datetime.now() - timedelta(minutes=5))
+    r = client.post("/configurar/atualizar", follow_redirects=False)
+    assert r.headers["location"] == "/configurar/atualizacao" and calls[-1][0] == "bash" and calls[-1][1].endswith("atualizar.sh")
+    page = client.get("/configurar/atualizacao").text
+    assert "A atualizar" in page and "Pedida por <b>david</b>" in page
+    assert "Atualizar o Carretos Studio" in client.get("/configurar").text
+    client.post("/configurar/post-teste", follow_redirects=False)
+    # reinício do servidor
+    monkeypatch.setattr(system, "boot_time", lambda: datetime(2026, 11, 16, 10, 0))
+    system.check_reboot()
+    monkeypatch.setattr(system, "boot_time", lambda: datetime(2026, 11, 17, 0, 33))
+    monkeypatch.setattr(system, "_previous_boot_tail", lambda lines=60: "… unattended-upgrade: rebooting")
+    system.check_reboot()
+    home = client.get("/").text
+    assert "O servidor reiniciou às 00:33 (17/11)" in home and "unattended-upgrades" in home
+    client.post("/configurar/reinicio-visto")
+    assert "O servidor reiniciou" not in client.get("/").text
+    # factos: contradição com as contas
+    client.post("/factos", data={"factos": "Contas: Instagram @davidcarreto e @carretoclips.\nO dono é David Carreto."})
+    f = client.get("/factos").text
+    assert "configurada é @davidcarretos" in f and "Onde estão a ser usados" in f
+
+
+def test_facts_usage_marks():
+    from carretos_social.content.facts_check import usage
+    u = usage(["O dono é David Carreto.", "A Carretos Group tem 5 oficinas: Almada e Mafra."],
+              ["Venha à oficina de Almada", "outra"])
+    assert u[0]["terms"] == [] and u[1]["used"] == 1

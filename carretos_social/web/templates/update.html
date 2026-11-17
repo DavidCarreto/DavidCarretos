@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block body %}
+<p><a class="muted" href="/configurar">‹ Configurar</a></p>
+<h1>Atualização do Carretos Studio</h1>
+<div class="card" id="estado">
+ {% if not r.state %}<p class="muted">Ainda não foi feita nenhuma atualização a partir do dashboard.</p>{% else %}
+ <p>Pedida por <b>{{ r.state.by }}</b> em {{ r.state.started[:16].replace('T',' ') }} · versão antes: <code>{{ r.before }}</code> → agora: <code id="rev">{{ r.rev }}</code></p>
+ <p id="fase" class="verdict">{% if r.running %}⏳ A atualizar… (o dashboard reinicia a meio: esta página volta sozinha){% elif r.restarted %}✓ Atualização concluída{% else %}…{% endif %}</p>
+ <ul style="margin:0;padding-left:18px;font-size:14px">
+  <li>Cópia de segurança: <b id="bk">{% if r.backup %}{{ '✓' if r.backup_ok else '?' }} {{ r.backup.name }} ({{ r.backup.size_kb }} KB, {{ r.backup.at }}){% else %}✘ nenhuma{% endif %}</b></li>
+  <li>Serviços: <b id="sv">{% for k, v in r.services.items() %}{{ k }} {{ '✓ active' if v == 'active' else '✘ ' ~ v }}{{ ' · ' if not loop.last }}{% else %}não foi possível verificar{% endfor %}</b></li>
+  <li>Dashboard: <b id="db">{{ '✔ Dashboard a responder (reiniciado às ' ~ r.started_at ~ ')' if r.restarted else '✔ a responder' }}</b></li>
+ </ul>{% endif %}
+</div>
+{% if r.log %}<details class="card" style="margin-top:12px" {{ 'open' if r.running }}><summary><b>Registo</b></summary><pre class="log" id="log">{{ r.log }}</pre></details>{% endif %}
+{% if r.running %}<script>
+// durante o reinício o servidor não responde: tenta de 3 em 3 segundos até voltar
+async function poll(){try{const j=await (await fetch('/configurar/atualizacao.json',{cache:'no-store'})).json();
+ if(!j.running){location.reload();return}}catch(e){}
+ setTimeout(poll,3000)}
+setTimeout(poll,3000);
+</script>{% endif %}
+{% endblock %}
