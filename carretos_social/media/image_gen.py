@@ -192,7 +192,7 @@ def quote_card(text: str, out: str | Path, author: str | None = None, size=(1080
     y = _draw_lines(d, lines, font, fs, margin, y, _hex(_v()["colors"]["text"]), spacing=1.15)
     af = _font(False, int(W * 0.034))
     _accent_bar(d, margin, y + int(fs * 0.5), int(W * 0.08), max(4, SS * 3))
-    d.text((margin, y + int(fs * 0.8)), (author or brand()["owner"]).upper(), font=af,
+    d.text((margin, y + int(fs * 0.8)), (author or _v().get("quote_author") or brand()["owner"]).upper(), font=af,
            fill=_hex(_v()["colors"]["secondary"]))
     _logo(img, pos="top-right")
     return _save(img, out, size)

@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block body %}
 <h1>Factos confirmados</h1>
-<p class="muted">A IA só pode afirmar factos concretos sobre o David e a Carretos Group que estejam nesta lista
+<div class="tabsel" style="margin-bottom:12px">{% for m in marcas %}<a class="btn {{ 'gold' if m.id == marca }}" href="/factos?marca={{ m.id }}">{{ m.name }}</a>{% endfor %}</div>
+<p class="muted" style="font-size:13px">A lista e o tom de <b>{{ marca_nome }}</b> só são usados nas contas {{ 'do David e da Carretos Group' if marca == 'geral' else 'da ' ~ marca_nome }}. As marcas não se misturam.</p>
+<p class="muted">A IA só pode afirmar factos concretos sobre {{ 'o David e a Carretos Group' if marca == 'geral' else 'a ' ~ marca_nome }} que estejam nesta lista
 (n.º de oficinas, localidades, serviços, anos, números, prémios…). Tudo o resto sai como <b>[PREENCHER: …]</b>
 e a publicação fica bloqueada até ser completada. Um facto por linha.</p>
 {% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ Factos guardados. As próximas legendas já usam esta lista.</div>{% endif %}
@@ -9,6 +11,10 @@ e a publicação fica bloqueada até ser completada. Um facto por linha.</p>
 {% for u in uso %}<div class="fact-row"><span style="flex:1">{{ u.fact }}</span><span class="muted">{% if not u.terms %}—{% elif u.used %}<span class="gold">usado em {{ u.used }} legenda{{ 's' if u.used != 1 }}</span>{% else %}não usado{% endif %}</span></div>{% endfor %}
 </div>
 <form method="post" class="card">
+ <input type="hidden" name="marca" value="{{ marca }}">
+ <label>Tom de comunicação{% if marca == 'geral' %} (notas extra; o tom de cada conta já está definido){% endif %}</label>
+ <textarea name="tom" rows="3" placeholder="{{ 'Ex.: moderno, confiante, frases curtas, sem gíria; tratar o público por tu.' if marca != 'geral' else 'Opcional' }}">{{ tom }}</textarea>
+ {% if marca != 'geral' and not tom %}<p class="fmt-line ajustar" style="margin:4px 0 0">⚠ Tom por definir: até lá a IA escreve de forma neutra e profissional.</p>{% endif %}
  <label>Factos (um por linha)</label>
  <textarea name="factos" rows="14">{{ factos|join('\n') }}</textarea>
  <p class="muted" style="font-size:12px">Para a IA deixar de usar um dado (ex.: as localidades das oficinas), apague a linha.</p>

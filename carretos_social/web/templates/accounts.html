@@ -11,10 +11,12 @@
   <code>docs/GUIA_META.md</code>.</p>
   <p class="muted" style="font-size:13px">Endereço a pôr na app da Meta ("Valid OAuth Redirect URIs"):<br><code>{{ redirect }}</code></p>
  {% else %}
-  <p class="muted" style="font-size:14px;margin:4px 0 10px">Entre com o Facebook e autorize as Páginas e os Instagrams profissionais.
+  <p class="muted" style="font-size:14px;margin:4px 0 10px">Entre com o Facebook e autorize as Páginas e os Instagrams profissionais
+  <b>de todos os portefólios</b> (ex.: Carreto's e RibaMotor): na janela do Facebook, em "Editar acesso", marque tudo.
   Depois confirme abaixo a que conta corresponde cada um. As chaves ficam guardadas no servidor e nunca são mostradas.</p>
   <a class="btn gold" href="/contas/meta/ligar">ⓕ Ligar com o Facebook</a>
-  {% if found.at %}<span class="muted" style="font-size:12px;margin-left:8px">Última autorização: {{ found.user }} · {{ found.at.replace('T',' ') }} · {{ found.pages|length }} Página(s)</span>{% endif %}
+  {% if found.at %}<span class="muted" style="font-size:12px;margin-left:8px">Última autorização: {{ found.user }} · {{ found.at.replace('T',' ') }} · {{ found.pages|length }} Página(s){% if found.businesses %} · portefólios: {{ found.businesses|join(', ') }}{% endif %}</span>{% endif %}
+  {% for e in found.errors or [] %}<p class="fmt-line ajustar" style="margin:4px 0 0">⚠ {{ e }}</p>{% endfor %}
   <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno configurado na app: <code>{{ redirect }}</code></p>
  {% endif %}
 </div>

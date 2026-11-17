@@ -573,25 +573,36 @@ def post_add_images(request: Request, pid: int, imagens: list[UploadFile] = File
 
 
 @app.get("/factos", response_class=HTMLResponse)
-def facts_page(request: Request, ok: int = 0):
-    from ..content.ai import verified_facts
+def facts_page(request: Request, ok: int = 0, marca: str = "geral"):
+    from ..config import facts_brand, facts_brands
+    from ..content.ai import brand_tone, verified_facts
     if not request.state.user.is_admin:
         return _forbidden("Só o administrador edita os factos.")
     from ..content.facts_check import contradictions, usage
-    facts = verified_facts()
+    marcas = facts_brands()
+    if marca not in {m["id"] for m in marcas}:
+        marca = "geral"
+    facts = verified_facts(marca)
+    accs = {i: a for i, a in accounts().items() if facts_brand(i) == marca}   # só as contas desta marca
     with connect() as conn:
-        caps = [r["caption"] or "" for r in conn.execute("SELECT caption FROM posts WHERE status != 'rejected'")]
+        caps = [r["caption"] or "" for r in conn.execute("SELECT account_id, caption FROM posts WHERE status != 'rejected'")
+                if r["account_id"] in accs]
     return _render(request, "facts.html", {"factos": facts, "ok": ok, "uso": usage(facts, caps),
-                                           "contradicoes": contradictions(facts, accounts())})
+                                           "contradicoes": contradictions(facts, accs), "marca": marca,
+                                           "marcas": marcas, "tom": brand_tone(marca),
+                                           "marca_nome": next(m["name"] for m in marcas if m["id"] == marca)})
 
 
 @app.post("/factos")
-def facts_save(request: Request, factos: str = Form("")):
+def facts_save(request: Request, factos: str = Form(""), marca: str = Form("geral"), tom: str = Form("")):
+    from ..config import facts_brands
     from ..content.ai import save_facts
     if not request.state.user.is_admin:
         return _forbidden("Só o administrador edita os factos.")
-    save_facts(factos.splitlines())
-    return RedirectResponse("/factos?ok=1", 303)
+    if marca not in {m["id"] for m in facts_brands()}:
+        return _forbidden("Marca desconhecida.")
+    save_facts(factos.splitlines(), marca, tom)
+    return RedirectResponse(f"/factos?ok=1&marca={marca}", 303)
 
 
 # ------------------------------------------------------------------ contas (ligar redes)

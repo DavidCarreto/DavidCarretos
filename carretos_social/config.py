@@ -43,6 +43,7 @@ class Account:
     theme: str = "carretos"
     group: str = "david"
     status: str = ""                 # "por_ligar" = ainda sem handle/tokens
+    meta_id: str = ""                # id da Página/Instagram na Meta (ajuda a ligação a reconhecê-lo)
     credentials: dict = field(default_factory=dict)
 
     def secret(self, key: str) -> str | None:
@@ -107,6 +108,27 @@ def group_of(account_id: str) -> dict:
     acc = accounts().get(account_id)
     gid = acc.group if acc else "david"
     return next((g for g in groups() if g["id"] == gid), {"id": gid, "name": gid, "short": gid})
+
+
+def facts_brand(account_id: str | None = None, group_id: str | None = None) -> str:
+    """Que lista de factos/tom usar: 'geral' (David + Carretos Group) ou a da marca do grupo (ex.: 'auron')."""
+    if account_id and not group_id:
+        acc = accounts().get(account_id)
+        group_id = acc.group if acc else None
+    g = next((g for g in groups() if g["id"] == group_id), None) if group_id else None
+    return (g or {}).get("facts") or "geral"
+
+
+def facts_brands() -> list[dict]:
+    """Listas de factos existentes: [{"id","name","groups"}], 'geral' primeiro."""
+    out: dict[str, dict] = {}
+    for g in groups():
+        b = g.get("facts") or "geral"
+        item = out.setdefault(b, {"id": b, "name": "", "groups": []})
+        item["groups"].append(g["short"])
+    for b in out.values():
+        b["name"] = " + ".join(b["groups"])
+    return list(out.values())
 
 
 def accounts_by_group() -> list[tuple[dict, list[Account]]]:

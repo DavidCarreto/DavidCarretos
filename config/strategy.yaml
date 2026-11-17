@@ -61,6 +61,23 @@ accounts:
     default_times: ["09:00"]
     best_times: auto
 
+  # AURON: ponto de partida (o David ajusta); os horários afinam-se sozinhos com as métricas
+  ig_auron:
+    posts_per_week: 4
+    formats: {image: 2, carousel: 1, reel: 1}
+    pillar_mix: {auron: 100}
+    days: [mon, wed, fri, sat]
+    default_times: ["12:30", "19:30"]
+    best_times: auto
+
+  fb_auron:
+    posts_per_week: 3
+    formats: {image: 2, video: 1}
+    pillar_mix: {auron: 100}
+    days: [tue, thu, sat]
+    default_times: ["19:00"]
+    best_times: auto
+
 # Reaproveitamento: um vídeo teu pode gerar várias versões (corte, formato, legenda)
 # para várias contas, espaçadas no tempo para não parecer repetido.
 repurpose:

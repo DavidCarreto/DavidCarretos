@@ -24,6 +24,10 @@ pillars:
   - id: conquistas
     name: "Conquistas"
     description: "Marcos atingidos, prémios, números, carros difíceis resolvidos, momentos de orgulho."
+  - id: auron
+    marca: auron            # só para as contas da AURON (não aparece nas outras)
+    name: "AURON"
+    description: "Conteúdos da marca AURON, só com base nos factos e no tom definidos para a AURON."
   - id: dificuldades
     name: "Dificuldades"
     description: "Falhas, erros, momentos duros, o que correu mal e o que se aprendeu. Vulnerabilidade autêntica."
@@ -33,6 +37,12 @@ voices:
   pessoal: "Primeira pessoa (eu), autêntico, próximo, direto, com emoção e histórias reais. Partilha bastidores e reflexões."
   marca: "Carreto Clips: energia alta, ganchos fortes nos primeiros 2 segundos, curto, visual, técnico mas acessível, humor leve."
   empresa: "Carretos Group: profissional, credível, nós (equipa), foco em qualidade, confiança e especialização Mercedes."
+  auron: "AURON: tom por definir pelo David (dashboard → Factos → AURON). Até lá: neutro, profissional, frases curtas."
+
+# Marcas com factos e tom próprios (o grupo indica-a em accounts.yaml → groups → facts)
+marcas:
+  auron:
+    nome: "AURON"
 
 rules:
   - "Nunca inventar números, prémios, nomes de clientes ou factos. Se faltar informação, deixar [PREENCHER]."
@@ -71,6 +81,18 @@ transcription_fixes:
 # Temas visuais por conta (accounts.yaml → theme). Sobrepõem-se a "visual".
 themes:
   carretos: {}                               # azul da Carretos Group (o "visual" acima)
+  auron:                                     # PROVISÓRIO: cores neutras até o David definir a identidade AURON
+    signature: "AURON"
+    quote_author: "AURON"                    # as frases assinam "AURON", não "David Carreto"
+    colors:
+      primary: "#0B0B0C"
+      secondary: "#BFC4CC"
+      accent: "#E6E8EB"
+      text: "#FFFFFF"
+    logo: ""
+    carousel_cta: "Guarda e partilha"
+    intro_video: ""
+    outro_video: ""
   pessoal:                                   # redes pessoais do David: preto e dourado
     signature: "DAVID CARRETO"
     colors:

@@ -602,3 +602,72 @@ def test_public_folder_for_instagram(client, monkeypatch, tmp_path):
     assert client.get(f"/publico/{name}").status_code == 200                # sem sessão: a Meta vai buscar
     assert client.get("/publico/..%2Fcarretos.db").status_code == 404
     assert client.get("/publico/" + "a" * 32 + ".db").status_code == 404
+
+
+def test_auron_brand_separate_facts_and_multi_portfolio(client, monkeypatch, tmp_path):
+    from carretos_social import meta_connect
+    from carretos_social.config import accounts, facts_brand, groups
+    from carretos_social.content import ai
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    # 3.º grupo só com 2 contas
+    assert [g["id"] for g in groups()] == ["david", "carretos", "auron"]
+    auron = [a for a in accounts().values() if a.group == "auron"]
+    assert sorted(a.platform for a in auron) == ["facebook_page", "instagram"]
+    assert facts_brand("ig_auron") == "auron" and facts_brand("li_carretosgroup") == "geral"
+    # factos e tom separados
+    client.post("/factos", data={"marca": "auron", "factos": "A marca chama-se AURON.", "tom": "Moderno e direto."})
+    assert ai.verified_facts("auron") == ["A marca chama-se AURON."] and ai.brand_tone("auron") == "Moderno e direto."
+    assert "AURON" not in "\n".join(ai.verified_facts("geral"))
+    s_auron, s_geral = ai._system("auron"), ai._system("geral")
+    assert "Moderno e direto." in s_auron and "Almada" not in s_auron and "Carretos Group tem" not in s_auron
+    assert "AURON" not in s_geral
+    ai._account_line(accounts()["ig_auron"])
+    assert ai._BRAND.get() == "auron"
+    page = client.get("/factos?marca=auron").text
+    assert "Moderno e direto." in page and "AURON" in page and "/factos?marca=geral" in page
+    # Meta: a AURON está noutro portefólio (RibaMotor) e só aparece pelas Páginas do portefólio
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+    def fake(method, url, **kw):
+        if url.endswith("/oauth/access_token"):
+            return R({"access_token": "T"})
+        if url.endswith("/me"):
+            return R({"id": "u1", "name": "David Carreto"})
+        if url.endswith("/me/accounts"):
+            return R({"data": [{"id": "222", "name": "Carretos Group", "access_token": "P2"}]})
+        if url.endswith("/me/businesses"):
+            return R({"data": [{"id": "1", "name": "Carreto's"}, {"id": "748541838052879", "name": "RibaMotor"}]})
+        if url.endswith("/748541838052879/owned_pages"):
+            return R({"data": [{"id": "900", "name": "AURON", "access_token": "PA",
+                                "instagram_business_account": {"id": "17841477151306262", "username": "_auron_2026"}}]})
+        return R({"data": []})
+    monkeypatch.setattr(meta_connect, "request", fake)
+    found = meta_connect.discover("T")
+    assert {p["name"] for p in found["pages"]} == {"Carretos Group", "AURON"}
+    assert found["businesses"] == ["Carreto's", "RibaMotor"]
+    acc = accounts()
+    assert meta_connect.suggestion(acc["ig_auron"], found) == "ig:17841477151306262"
+    assert meta_connect.suggestion(acc["fb_auron"], found) == "page:900"
+    assert meta_connect.suggestion(acc["fb_carretosgroup"], found) == "page:222"
+    assert "portefólio RibaMotor" in client.get("/contas").text
+
+
+def test_auron_quote_signed_auron(tmp_path):
+    from PIL import Image
+    from carretos_social.config import account, brand
+    from carretos_social.media import image_gen
+    account("ig_auron")
+    assert brand()["visual"].get("quote_author") == "AURON"
+    out = image_gen.quote_card("Teste", tmp_path / "q.jpg")
+    assert Image.open(out).size == (1080, 1350)
+    account("ig_davidcarreto")
+    assert not brand()["visual"].get("quote_author")
+
+
+def test_facts_no_false_contradiction_with_full_stop():
+    from carretos_social.config import accounts
+    from carretos_social.content.facts_check import contradictions
+    auron = {k: v for k, v in accounts().items() if v.group == "auron"}
+    assert contradictions(["Instagram: @_auron_2026. Página de Facebook: AURON."], auron) == []

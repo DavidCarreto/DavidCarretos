@@ -47,3 +47,9 @@ autorização explícita do David**: propor primeiro e esperar pela aprovação.
 A IA só afirma factos concretos que estejam em `config/factos.yaml` (ou na versão editada no dashboard
 → Factos, guardada em `data/factos.yaml`, que tem prioridade); o resto sai como
 `[PREENCHER: ...]` e a publicação fica bloqueada até ser completada.
+
+## Marcas separadas (AURON)
+A AURON é uma 3.ª marca (grupo `auron`, só Página de Facebook e Instagram @_auron_2026, portefólio Meta
+"RibaMotor"). Tem factos e tom próprios (`config/factos_auron.yaml` / dashboard → Factos → AURON) e a IA
+nunca mistura os factos da AURON com os do David/Carretos Group (nem o contrário).
+

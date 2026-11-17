@@ -7,6 +7,7 @@ Uma vez, ~20 minutos, **sem custos**. Depois, tudo se faz no dashboard → **Con
 |---|---|
 | Instagram @davidcarretos, @carretoclips e o da Carretos Group | **Publicação automática** (têm de ser contas profissionais ligadas a uma Página) |
 | Página de Facebook da Carretos Group | **Publicação automática** (imagem, várias fotos, Reel, texto) |
+| AURON: Página «AURON» e Instagram @_auron_2026 | **Publicação automática** (estão no portefólio Meta **RibaMotor**) |
 | Facebook pessoal (perfil) | **Modo assistido**: a Meta não deixa publicar em perfis por API; o post vai para o telemóvel |
 
 ## 1. Preparar as contas (na app do Instagram e no Facebook)
@@ -41,7 +42,9 @@ Uma vez, ~20 minutos, **sem custos**. Depois, tudo se faz no dashboard → **Con
 ## 3. No Carretos Studio
 1. **⚙ Configurar** → preencher **Meta · App ID**, **Meta · App Secret** (e o **Configuration ID**, só se
    houver) → Guardar.
-2. **Contas** → **Ligar com o Facebook** → entrar e **marcar todas as Páginas e Instagrams** que quer ligar.
+2. **Contas** → **Ligar com o Facebook** → entrar e **marcar todas as Páginas e Instagrams** que quer ligar,
+   **de todos os portefólios** (Carreto's e RibaMotor). Se já tinha autorizado antes só um portefólio, na
+   janela do Facebook use **"Editar acesso"** e marque também as Páginas/Instagrams do outro.
 3. De volta a Contas, confirmar a que conta corresponde cada Página/Instagram (o sistema já sugere) →
    **Guardar ligações** → **Testar** em cada uma.
 

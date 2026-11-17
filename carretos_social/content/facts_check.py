@@ -12,7 +12,7 @@ PLATFORMS = {"instagram": "instagram", "tiktok": "tiktok", "linkedin": "linkedin
 def keys_of(fact: str) -> list[str]:
     """Partes distintivas de um facto (para procurar nas legendas): @contas, telefones, números com
     palavra (ex.: '5 oficinas') e nomes próprios (ex.: localidades)."""
-    keys = set(h.lower() for h in re.findall(r"@[\w.]+", fact))
+    keys = set(h.lower() for h in re.findall(r"@[\w.]*\w", fact))
     keys |= {re.sub(r"\D", "", p) for p in re.findall(r"\b\d[\d ]{7,}\d\b", fact)}
     keys |= {m.lower() for m in re.findall(r"\b\d+\s+[a-zà-ú]{4,}", fact)}
     for i, w in enumerate(re.findall(r"\b[A-ZÀ-Ú][\wÀ-ú-]{3,}\b", fact)):
@@ -47,7 +47,7 @@ def contradictions(facts: list[str], accounts: dict) -> list[str]:
     for f in facts:
         # segmentos "Instagram @a e @b; TikTok …": cada @conta fica com a última rede nomeada antes dela
         current = None
-        for tok in re.findall(r"[A-Za-zÀ-ú]+|@[\w.]+", f):
+        for tok in re.findall(r"[A-Za-zÀ-ú]+|@[\w.]*\w", f):
             low = tok.lower()
             if low in PLATFORMS:
                 current = PLATFORMS[low]

@@ -1,0 +1,10 @@
+# FACTOS CONFIRMADOS da marca AURON (separados dos da Carretos Group).
+# A IA só afirma factos concretos sobre a AURON que estejam aqui; o resto sai como [PREENCHER: ...].
+# Editável no dashboard → Factos → AURON (a versão do dashboard tem prioridade).
+
+factos:
+  - "A marca chama-se AURON."
+  - "Instagram: @_auron_2026. Página de Facebook: AURON."
+
+# Tom de comunicação da AURON (por definir pelo David no dashboard → Factos → AURON)
+tom: ""

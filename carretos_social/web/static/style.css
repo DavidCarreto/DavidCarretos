@@ -114,3 +114,4 @@ textarea.need-fix{border-color:#f85149}
 .fact-row{display:flex;gap:8px;align-items:baseline;border-top:1px solid var(--line);padding:6px 0;font-size:14px}.fact-row .muted{font-size:12px;white-space:nowrap}
 .acc-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
 .acc-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.acc-actions select{min-width:240px;max-width:100%}
+.gtag.auron{background:#E6E8EB;color:#000}

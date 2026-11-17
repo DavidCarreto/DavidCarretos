@@ -5,6 +5,7 @@ sistema de avaliações). Todas as respostas são JSON validado por esquema.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 
@@ -27,12 +28,52 @@ def client() -> anthropic.Anthropic:
     return _client
 
 
-def _system() -> str:
+_BRAND: contextvars.ContextVar[str] = contextvars.ContextVar("facts_brand", default="geral")
+
+_NETWORKS = """Conheces a fundo o que funciona em cada rede: Reels/TikTok (gancho visual e verbal nos 2 primeiros \
+segundos, legendas no ecrã, 15–45 s, ritmo rápido, loop no fim), carrosséis (slide 1 = promessa forte, \
+1 ideia por slide, último slide = CTA), LinkedIn (primeira linha que obriga a "ver mais", frases curtas, \
+história → lição → pergunta), Facebook (comunidade, emoção, histórias mais longas)."""
+
+
+def _system(brand_id: str | None = None) -> str:
+    """Instruções da IA para a marca da conta em causa. Cada marca usa SÓ os seus factos e o seu tom
+    ('geral' = David Carreto + Carretos Group; outras, ex.: 'auron', ficam totalmente separadas)."""
+    brand_id = brand_id or _BRAND.get()
     b = brand()
-    pillars = "\n".join(f"- {p['id']}: {p['name']} — {p['description']}" for p in b["pillars"])
-    voices = "\n".join(f"- {k}: {v}" for k, v in b["voices"].items())
+    facts = "\n".join(f"- {f}" for f in verified_facts(brand_id)) or "- (nenhum ainda)"
+    general_rules = [r for r in b["rules"] if "Mercedes" not in r and "David" not in r]
+    if brand_id != "geral":
+        name = ((b.get("marcas") or {}).get(brand_id) or {}).get("nome") or brand_id.upper()
+        pillars = "\n".join(f"- {p['id']}: {p['name']} — {p['description']}" for p in b["pillars"]
+                            if p.get("marca") == brand_id) or "- (sem pilares definidos)"
+        tone = brand_tone(brand_id) or b["voices"].get(brand_id) or "neutro, profissional, frases curtas"
+        rules = "\n".join(f"- {r}" for r in general_rules)
+        return f"""És o diretor de conteúdo e social media da marca {name}.
+Escreves sempre em {b['language']} (português de Portugal).
+A {name} é uma marca à parte: NÃO fales do David Carreto, da Carretos Group, das oficinas Carretos nem de
+Mercedes, a não ser que esteja nos factos da {name} abaixo.
+
+Tom de comunicação da {name}:
+{tone}
+
+Pilares de conteúdo:
+{pillars}
+
+FACTOS CONFIRMADOS da {name} (os ÚNICOS factos concretos que podes afirmar sobre a marca, pessoas, produtos,
+serviços, preços, números, locais ou datas):
+{facts}
+Qualquer outro facto concreto → [PREENCHER: o que falta]. Não inventes nada sobre a {name}.
+
+Regras obrigatórias:
+{rules}
+- Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
+
+{_NETWORKS}"""
+    pillars = "\n".join(f"- {p['id']}: {p['name']} — {p['description']}" for p in b["pillars"] if not p.get("marca"))
+    voices = "\n".join(f"- {k}: {v}" for k, v in b["voices"].items() if k not in (b.get("marcas") or {}))
+    tone = brand_tone("geral")
     rules = "\n".join(f"- {r}" for r in b["rules"])
-    facts = "\n".join(f"- {f}" for f in verified_facts()) or "- (nenhum ainda)"
     # dados da empresa (n.º de oficinas, localidades, serviços…) SÓ da lista de factos confirmados
     return f"""És o diretor de conteúdo e social media de {b['owner']} e da {b['company']}.
 Escreves sempre em {b['language']} (português de Portugal).
@@ -41,7 +82,7 @@ Pilares de conteúdo:
 {pillars}
 
 Tom de voz por tipo de conta:
-{voices}
+{voices}{chr(10) + "Notas de tom do David: " + tone if tone else ""}
 
 FACTOS CONFIRMADOS (os únicos factos concretos que podes afirmar sobre o David, a empresa,
 as oficinas, clientes, números, prémios ou datas):
@@ -53,34 +94,45 @@ Regras obrigatórias:
 {rules}
 - Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
 
-Conheces a fundo o que funciona em cada rede: Reels/TikTok (gancho visual e verbal nos 2 primeiros \
-segundos, legendas no ecrã, 15–45 s, ritmo rápido, loop no fim), carrosséis (slide 1 = promessa forte, \
-1 ideia por slide, último slide = CTA), LinkedIn (primeira linha que obriga a "ver mais", frases curtas, \
-história → lição → pergunta), Facebook (comunidade, emoção, histórias mais longas)."""
+{_NETWORKS}"""
 
 
-def facts_path():
-    """Factos editados no dashboard (data/factos.yaml, não é apagado nas atualizações); senão config/factos.yaml."""
+def _file(brand_id: str) -> str:
+    return "factos.yaml" if brand_id in ("", "geral") else f"factos_{brand_id}.yaml"
+
+
+def facts_path(brand_id: str = "geral"):
+    """Factos editados no dashboard (data/, não é apagado nas atualizações); senão os de config/."""
     from ..config import CONFIG_DIR, DATA_DIR
-    edited = DATA_DIR / "factos.yaml"
-    return edited if edited.exists() else CONFIG_DIR / "factos.yaml"
+    edited = DATA_DIR / _file(brand_id)
+    return edited if edited.exists() else CONFIG_DIR / _file(brand_id)
 
 
-def verified_facts() -> list[str]:
+def _load(brand_id: str) -> dict:
     import yaml
-    path = facts_path()
+    path = facts_path(brand_id)
     if not path.exists():
-        return []
-    return [str(f) for f in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("factos", [])]
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def save_facts(facts: list[str]) -> None:
+def verified_facts(brand_id: str | None = None) -> list[str]:
+    return [str(f) for f in _load(brand_id or _BRAND.get()).get("factos", [])]
+
+
+def brand_tone(brand_id: str | None = None) -> str:
+    return str(_load(brand_id or _BRAND.get()).get("tom") or "").strip()
+
+
+def save_facts(facts: list[str], brand_id: str = "geral", tom: str | None = None) -> None:
     import yaml
     from ..config import DATA_DIR
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    body = yaml.safe_dump({"factos": [f.strip() for f in facts if f.strip()]}, allow_unicode=True, sort_keys=False)
-    (DATA_DIR / "factos.yaml").write_text("# Factos confirmados (editados no dashboard → Factos)\n" + body,
-                                          encoding="utf-8")
+    data = {"factos": [f.strip() for f in facts if f.strip()]}
+    data["tom"] = (tom if tom is not None else brand_tone(brand_id)).strip()
+    body = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+    (DATA_DIR / _file(brand_id)).write_text("# Factos confirmados e tom (editados no dashboard → Factos)\n" + body,
+                                            encoding="utf-8")
 
 
 def _ask(prompt: str, schema: dict, max_tokens: int = 16000, effort: str = "medium") -> dict:
@@ -127,6 +179,9 @@ POST_SCHEMA = _obj({
 
 
 def _account_line(acc: Account) -> str:
+    """Linha da conta no pedido à IA. Também escolhe a marca (factos e tom) das instruções desse pedido."""
+    from ..config import facts_brand
+    _BRAND.set(facts_brand(acc.id))
     return f"Conta: {acc.name} (@{acc.handle}) — plataforma {acc.platform} — voz '{acc.voice}'."
 
 

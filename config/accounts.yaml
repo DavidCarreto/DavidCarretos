@@ -10,6 +10,8 @@
 # group: a que grupo pertence a conta (define as duas tabelas de permissões na página "Equipa")
 #   david     -> "Redes do David Carreto" (pessoais + Carreto Clips)
 #   carretos  -> "Redes da Carretos Group" (empresa)
+#   auron     -> "Redes da AURON" (marca à parte; portefólio Meta "RibaMotor")
+# facts (no grupo): que lista de factos e tom a IA usa ("geral" = David + Carretos Group; "auron" = só AURON)
 # status: "por_ligar" enquanto não houver handle/tokens (o sistema não publica nestas contas)
 groups:
   - id: david
@@ -18,6 +20,10 @@ groups:
   - id: carretos
     name: "Redes da Carretos Group"
     short: "Carretos Group"
+  - id: auron
+    name: "Redes da AURON"
+    short: "AURON"
+    facts: auron              # factos e tom próprios (não se misturam com os da Carretos Group)
 
 accounts:
   - id: ig_davidcarreto
@@ -173,3 +179,36 @@ accounts:
     credentials:
       refresh_token_env: YT_CARRETOSGROUP_REFRESH_TOKEN
       channel_id_env: YT_CARRETOSGROUP_CHANNEL_ID
+
+  # ---------------- Grupo C (AURON): marca à parte, só Facebook e Instagram ----------------
+  # Ativos no portefólio Meta "RibaMotor" (business_id 748541838052879), não no "Carreto's".
+  - id: fb_auron
+    group: auron
+    platform: facebook_page
+    name: "AURON (Página de Facebook)"
+    handle: "AURON"
+    status: por_ligar
+    voice: auron
+    narrator: generica
+    theme: auron
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: FB_AURON_PAGE_TOKEN
+      page_id_env: FB_AURON_PAGE_ID
+
+  - id: ig_auron
+    group: auron
+    platform: instagram
+    name: "AURON (Instagram)"
+    handle: "_auron_2026"
+    meta_id: "17841477151306262"   # id do Instagram na Meta (para a ligação o reconhecer logo)
+    status: por_ligar
+    voice: auron
+    narrator: generica
+    theme: auron
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: IG_AURON_TOKEN
+      user_id_env: IG_AURON_USER_ID

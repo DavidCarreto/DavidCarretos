@@ -64,23 +64,71 @@ def exchange_code(code: str, redirect_uri: str) -> str:
     return long["access_token"]
 
 
-def discover(user_token: str) -> dict:
-    """Páginas a que o utilizador deu acesso, com o token de cada uma e o Instagram ligado (se houver)."""
-    me = request("GET", f"{graph()}/me", params={"fields": "id,name", "access_token": user_token}).json()
-    pages, url = [], f"{graph()}/me/accounts"
-    params = {"fields": "id,name,access_token,tasks,instagram_business_account{id,username,name}",
-              "limit": 100, "access_token": user_token}
+PAGE_FIELDS = "id,name,access_token,tasks,instagram_business_account{id,username,name}"
+
+
+def _paged(url: str, params: dict | None) -> list[dict]:
+    out = []
     while url:
         data = request("GET", url, params=params).json()
-        for p in data.get("data", []):
-            ig = p.get("instagram_business_account") or None
-            pages.append({"id": p["id"], "name": p.get("name", ""), "token": p.get("access_token", ""),
-                          "tasks": p.get("tasks", []),
-                          "ig": {"id": ig["id"], "username": ig.get("username", "")} if ig else None})
+        out += data.get("data", [])
         url = (data.get("paging") or {}).get("next")
         params = None                                      # o "next" já traz os parâmetros
-    found = {"user": me.get("name", ""), "user_id": me.get("id", ""), "at": datetime.now().isoformat(timespec="minutes"),
-             "pages": pages}
+    return out
+
+
+def discover(user_token: str) -> dict:
+    """Páginas e Instagrams a que o utilizador deu acesso, de TODOS os portefólios (ex.: "Carreto's" e
+    "RibaMotor"), com o token de cada Página e o Instagram ligado (se houver)."""
+    me = request("GET", f"{graph()}/me", params={"fields": "id,name", "access_token": user_token}).json()
+    pages: dict[str, dict] = {}
+    errors: list[str] = []
+
+    def add(p: dict, business: str = "") -> None:
+        cur = pages.get(p["id"]) or {"id": p["id"], "name": p.get("name", ""), "token": "", "tasks": [],
+                                     "ig": None, "business": ""}
+        if p.get("access_token") and not cur["token"]:
+            cur["token"] = p["access_token"]
+        ig = p.get("instagram_business_account")
+        if ig and not cur["ig"]:
+            cur["ig"] = {"id": ig["id"], "username": ig.get("username", "")}
+        cur["tasks"] = cur["tasks"] or p.get("tasks", [])
+        cur["business"] = cur["business"] or business
+        pages[p["id"]] = cur
+
+    for p in _paged(f"{graph()}/me/accounts", {"fields": PAGE_FIELDS, "limit": 100, "access_token": user_token}):
+        add(p)
+    # Páginas dos portefólios empresariais (business_management): podem não vir em /me/accounts
+    try:
+        businesses = _paged(f"{graph()}/me/businesses", {"fields": "id,name", "limit": 100,
+                                                          "access_token": user_token})
+    except Exception as exc:  # noqa: BLE001
+        businesses = []
+        errors.append(f"portefólios: {str(exc)[:120]}")
+    for biz in businesses:
+        for edge in ("owned_pages", "client_pages"):
+            try:
+                for p in _paged(f"{graph()}/{biz['id']}/{edge}", {"fields": PAGE_FIELDS, "limit": 100,
+                                                                   "access_token": user_token}):
+                    add(p, biz.get("name", ""))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{biz.get('name')}/{edge}: {str(exc)[:120]}")
+    # Página sem token (vista pelo portefólio): tentar pedir o token diretamente
+    for p in pages.values():
+        if not p["token"]:
+            try:
+                r = request("GET", f"{graph()}/{p['id']}", retries=1,
+                            params={"fields": "access_token,instagram_business_account{id,username}",
+                                    "access_token": user_token}).json()
+                p["token"] = r.get("access_token", "")
+                if r.get("instagram_business_account") and not p["ig"]:
+                    ig = r["instagram_business_account"]
+                    p["ig"] = {"id": ig["id"], "username": ig.get("username", "")}
+            except Exception:  # noqa: BLE001
+                pass
+    found = {"user": me.get("name", ""), "user_id": me.get("id", ""),
+             "at": datetime.now().isoformat(timespec="minutes"), "businesses": [b.get("name", "") for b in businesses],
+             "pages": sorted(pages.values(), key=lambda p: (p["business"], p["name"].lower())), "errors": errors}
     _save(found)
     return found
 
@@ -108,27 +156,36 @@ def options_for(acc: Account, found: dict | None = None) -> list[dict]:
     found = found if found is not None else discovered()
     out = []
     for p in found.get("pages", []):
+        biz = f" · portefólio {p['business']}" if p.get("business") else ""
+        warn = "" if p.get("token") else " · ⚠ sem acesso de publicação"
         if acc.platform == "facebook_page":
-            out.append({"value": f"page:{p['id']}", "label": f"Página «{p['name']}»", "name": p["name"]})
+            out.append({"value": f"page:{p['id']}", "label": f"Página «{p['name']}»{biz}{warn}", "name": p["name"],
+                        "id": p["id"], "ok": bool(p.get("token"))})
         elif acc.platform == "instagram" and p.get("ig"):
             out.append({"value": f"ig:{p['ig']['id']}",
-                        "label": f"Instagram @{p['ig']['username']} (Página «{p['name']}»)",
-                        "name": p["ig"]["username"]})
+                        "label": f"Instagram @{p['ig']['username']} (Página «{p['name']}»{biz}){warn}",
+                        "name": p["ig"]["username"], "id": p["ig"]["id"], "ok": bool(p.get("token"))})
     return out
 
 
 def suggestion(acc: Account, found: dict | None = None) -> str:
     """Escolha provável (mesmo @ no Instagram; nome parecido na Página)."""
     opts = options_for(acc, found)
+    for o in opts:                                          # id conhecido (accounts.yaml → meta_id)
+        if acc.meta_id and o["id"] == acc.meta_id:
+            return o["value"]
     handle = (acc.handle or "").lower().lstrip("@")
     for o in opts:
         if handle and o["name"].lower().lstrip("@") == handle:
             return o["value"]
     if acc.platform == "facebook_page":
         words = [w for w in re.findall(r"\w{4,}", acc.name.lower()) if w not in ("página", "facebook")]
-        for o in opts:
-            if any(w in o["name"].lower() for w in words):
-                return o["value"]
+        best, score = "", 0
+        for o in opts:                                      # o nome da Página que mais palavras partilha
+            n = sum(1 for w in words if w in o["name"].lower())
+            if n > score:
+                best, score = o["value"], n
+        return best
     return ""
 
 
@@ -137,6 +194,11 @@ def link(acc: Account, choice: str, found: dict | None = None) -> dict[str, str]
     found = found if found is not None else discovered()
     kind, _, ident = choice.partition(":")
     for p in found.get("pages", []):
+        if ((kind == "page" and p["id"] == ident) or (kind == "ig" and (p.get("ig") or {}).get("id") == ident)) \
+                and not p.get("token"):
+            raise ValueError(f"sem acesso de publicação à Página «{p['name']}»: no portefólio "
+                             f"{p.get('business') or 'da Página'}, dê-se a função de administrador da Página e volte a "
+                             "'Ligar com o Facebook'")
         if kind == "page" and p["id"] == ident and acc.platform == "facebook_page":
             updates = {acc.credentials["access_token_env"]: p["token"], acc.credentials["page_id_env"]: p["id"]}
             save_account_override(acc.id, status="ligada", handle=acc.handle or p["name"], meta_name=p["name"],
