@@ -408,7 +408,8 @@ def test_placeholders_block_suggestions_distinct_and_facts(client, tmp_path):
     client.post("/factos", data={"factos": "O dono é David Carreto.\nA empresa chama-se Carretos Group."})
     from carretos_social.content.ai import verified_facts
     assert verified_facts() == ["O dono é David Carreto.", "A empresa chama-se Carretos Group."]
-    assert "Almada" not in client.get("/factos").text
+    page = client.get("/factos").text
+    assert "Almada" not in page.split('name="factos"')[1].split("</textarea>")[0]    # a lista guardada
 
 
 def test_caption_ai_with_edited_caption_creates_job(client):
@@ -621,7 +622,7 @@ def test_auron_brand_separate_facts_and_multi_portfolio(client, monkeypatch, tmp
     assert "AURON" not in "\n".join(ai.verified_facts("geral"))
     s_auron, s_geral = ai._system("auron"), ai._system("geral")
     assert "Moderno e direto." in s_auron and "Almada" not in s_auron and "Carretos Group tem" not in s_auron
-    assert "AURON" not in s_geral
+    assert "O AURON é a plataforma" not in s_geral and "PALAVRAS PROIBIDAS nestas contas" in s_geral
     ai._account_line(accounts()["ig_auron"])
     assert ai._BRAND.get() == "auron"
     page = client.get("/factos?marca=auron").text
@@ -671,3 +672,40 @@ def test_facts_no_false_contradiction_with_full_stop():
     from carretos_social.content.facts_check import contradictions
     auron = {k: v for k, v in accounts().items() if v.group == "auron"}
     assert contradictions(["Instagram: @_auron_2026. Página de Facebook: AURON."], auron) == []
+
+
+
+def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
+    from PIL import Image
+    from carretos_social.content.ai import verified_facts
+    from carretos_social.content.guard import found_terms, sanitize
+    from carretos_social.db import add_media, add_post, connect, get_post
+    from carretos_social.scheduler import all_problems
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    assert len(verified_facts("geral")) == 13 and len(verified_facts("auron")) == 12
+    link = "auron.carretos.pt/schedule"
+    assert found_terms("ig_carretosgroup", f"Saiba o preço na hora: {link}") == []          # o link pode ficar
+    assert found_terms("ig_carretosgroup", f"Com o AURON sabe o preço: {link}")[0][1] == \
+        "Nas contas da Carretos não se usa o nome AURON."
+    assert found_terms("ig_auron", f"O AURON dá-lhe o preço: {link}") == []
+    assert found_terms("ig_auron", "Integrado com a TecAlliance")                          # interno: todas as marcas
+    assert "[PREENCHER" in sanitize("li_carretosgroup", f"Use o AURON. {link}") and link in \
+        sanitize("li_carretosgroup", f"Use o AURON. {link}")
+    img = tmp_path / "a.jpg"; Image.new("RGB", (1080, 1350)).save(img)
+    with connect() as conn:
+        mid = add_media(conn, "image", str(img))
+        pid = add_post(conn, account_id="ig_davidcarreto", format="image", status="draft", media_ids=[mid],
+                       caption=f"Revisão com o AURON: {link}", scheduled_at="2030-01-01T10:00:00+00:00")
+        assert "Nas contas da Carretos não se usa o nome AURON." in all_problems(conn, get_post(conn, pid))
+    assert "⚠ Nas contas da Carretos não se usa o nome AURON." in client.get(f"/post/{pid}").text
+    assert client.post(f"/post/{pid}", data={"action": "aprovar"}, follow_redirects=False
+                       ).headers["location"].startswith(f"/post/{pid}?erro=aprovar")
+    # Factos: lista editada no dashboard recebe os factos novos da lista de base sem perder os seus
+    client.post("/factos", data={"marca": "geral", "factos": "O dono é David Carreto.\nFacto meu.", "tom": ""})
+    page = client.get("/factos?marca=geral").text
+    assert "facto(s) novo(s)" in page and "Acrescentar à minha lista" in page
+    client.post("/factos/juntar", data={"marca": "geral"})
+    f = verified_facts("geral")
+    assert "Facto meu." in f and "Quem paga online no momento da marcação tem 5% de desconto." in f
+    assert "facto(s) novo(s)" not in client.get("/factos?marca=geral").text

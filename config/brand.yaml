@@ -39,6 +39,14 @@ voices:
   empresa: "Carretos Group: profissional, credível, nós (equipa), foco em qualidade, confiança e especialização Mercedes."
   auron: "AURON: tom por definir pelo David (dashboard → Factos → AURON). Até lá: neutro, profissional, frases curtas."
 
+# Termos que NÃO podem aparecer nas legendas (fora de links). Bloqueiam a aprovação e a publicação.
+#   todas: em todas as marcas (fornecedores/sistemas internos, funcionalidades ainda não lançadas). Deixam de
+#          ser bloqueados numa marca se o David os acrescentar aos factos dessa marca.
+#   geral: só nas contas do David e da Carretos Group (o nome AURON é só das contas da AURON)
+termos_proibidos:
+  todas: ["OfficeGest", "Typs4y", "Inovcorp", "TecAlliance", "Carretos Care"]
+  geral: ["AURON"]
+
 # Marcas com factos e tom próprios (o grupo indica-a em accounts.yaml → groups → facts)
 marcas:
   auron:
@@ -48,6 +56,7 @@ rules:
   - "Nunca inventar números, prémios, nomes de clientes ou factos. Se faltar informação, deixar [PREENCHER]."
   - "Afirmações sobre a vida, a experiência, as histórias ou as opiniões vividas do David (ex.: 'aprendi isto na oficina', 'estas frases não são de nenhum livro', 'quando comecei…') também são factos: só se estiverem nos FACTOS CONFIRMADOS; senão [PREENCHER: …] ou, melhor, escrever sem as afirmar."
   - "Não usar o logótipo Mercedes-Benz como se fôssemos representantes oficiais; dizer 'especialistas em Mercedes'."
+  - "Nunca publicar informação interna: fornecedores e sistemas internos (OfficeGest, Typs4y, Inovcorp, TecAlliance), margens, diferenças de preço entre sistemas, nem funcionalidades ainda em desenvolvimento (peças equivalentes vs originais, Contratos de Serviço / Carretos Care+), a não ser que estejam nos factos."
   - "Português de Portugal (não brasileiro)."
   - "Cada publicação tem um gancho, valor e uma chamada à ação."
 

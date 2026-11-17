@@ -256,6 +256,8 @@ def _post_view(conn, r) -> dict:
     p["is_video"] = p["type"] == "video"
     import re as _re
     p["placeholders"] = _re.findall(r"\[PREENCHER[^\]]*\]?", p.get("caption") or "")
+    from ..content.guard import found_terms
+    p["forbidden"] = [w for _, w in found_terms(p["account_id"], p.get("caption") or "")]
     from ..media.formats import spec_for
     p["carousel_max"] = spec_for(platform, "carousel").get("count", (2, 10))[1]
     p["account"] = accounts().get(p["account_id"])
@@ -377,6 +379,8 @@ def _fix_hint(error: str) -> str:
         steps.append("escreva a legenda (ou peça-a à IA)")
     if "sem vídeo/imagem" in e:
         steps.append("acrescente a imagem/vídeo")
+    if "não se usa" in e or "informação interna" in e:
+        steps.append("retire da legenda o que não se pode publicar (ver o aviso por baixo da legenda)")
     if "formato:" in e:
         steps.append("corrija o formato (ver o painel \"Formato para publicar\")")
     if not steps:
@@ -590,7 +594,52 @@ def facts_page(request: Request, ok: int = 0, marca: str = "geral"):
     return _render(request, "facts.html", {"factos": facts, "ok": ok, "uso": usage(facts, caps),
                                            "contradicoes": contradictions(facts, accs), "marca": marca,
                                            "marcas": marcas, "tom": brand_tone(marca),
-                                           "marca_nome": next(m["name"] for m in marcas if m["id"] == marca)})
+                                           "marca_nome": next(m["name"] for m in marcas if m["id"] == marca),
+                                           "novos": _new_base_facts(marca), "tom_base": _base_tone_missing(marca)})
+
+
+def _base_facts(marca: str) -> dict:
+    import yaml
+    from ..config import CONFIG_DIR
+    from ..content.ai import _file
+    p = CONFIG_DIR / _file(marca)
+    return (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
+
+
+def _edited(marca: str) -> bool:
+    """Há uma versão editada no dashboard (data/) desta lista de factos?"""
+    from .. import config
+    from ..content.ai import _file
+    return (config.DATA_DIR / _file(marca)).exists()
+
+
+def _new_base_facts(marca: str) -> list[str]:
+    """Factos da lista de base (config/) que ainda não estão na versão editada no dashboard."""
+    from ..content.ai import verified_facts
+    if not _edited(marca):
+        return []
+    mine = set(verified_facts(marca))
+    return [str(f) for f in _base_facts(marca).get("factos", []) if str(f) not in mine]
+
+
+def _base_tone_missing(marca: str) -> str:
+    from ..content.ai import brand_tone
+    base = str(_base_facts(marca).get("tom") or "").strip()
+    if not _edited(marca) or not base or base in brand_tone(marca):
+        return ""
+    return base
+
+
+@app.post("/factos/juntar")
+def facts_merge(request: Request, marca: str = Form("geral")):
+    """Acrescenta à lista editada os factos novos (e o tom, se faltar) da lista de base, sem apagar nada."""
+    from ..content.ai import brand_tone, save_facts, verified_facts
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador edita os factos.")
+    tone = brand_tone(marca)
+    extra = _base_tone_missing(marca)
+    save_facts(verified_facts(marca) + _new_base_facts(marca), marca, (tone + "\n" + extra).strip() if extra else tone)
+    return RedirectResponse(f"/factos?ok=1&marca={marca}", 303)
 
 
 @app.post("/factos")

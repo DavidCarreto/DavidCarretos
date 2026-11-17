@@ -164,7 +164,7 @@ def cmd_generate(a):
                 print(f"A criar {len(batch)} publicações para {acc.name}...")
                 posts = generate_posts(acc, slots, insights, a.context or "")
                 for r, p in zip(batch, posts):
-                    update_post(conn, r["id"], title=p["title"], hook=p["hook"], caption=p["caption"],
+                    update_post(conn, r["id"], title=p["title"], hook=p["hook"], caption=_safe(r["account_id"], p["caption"]),
                                 script=json.dumps({k: p[k] for k in ("script", "on_screen_texts", "slides",
                                                                      "cover_text", "filming_notes")},
                                                   ensure_ascii=False),
@@ -447,6 +447,12 @@ def make_quote_carousel(conn, acc_id: str, frases: list[str], *, title: str = ""
                     caption=caption, hashtags=hashtags, media_ids=ids, scheduled_at=when, status="draft")
 
 
+def _safe(account_id: str, caption: str) -> str:
+    """Legenda escrita pela IA → sem termos proibidos (ex.: AURON nas contas da Carretos), ver content/guard.py."""
+    from .content.guard import sanitize
+    return sanitize(account_id, caption or "")
+
+
 def _ai_caption(acc, fmt: str, brief: str) -> tuple[str, list[str]]:
     """Legenda pela IA; sem chave ou com erro devolve vazio (a página pede para escrever ou pedir à IA)."""
     import os
@@ -455,8 +461,9 @@ def _ai_caption(acc, fmt: str, brief: str) -> tuple[str, list[str]]:
         return "", []
     try:
         from .content.ai import write_caption
+        from .content.guard import sanitize
         res = write_caption(acc, fmt, brief)
-        return res.get("caption", "").strip(), res.get("hashtags") or []
+        return sanitize(acc.id, res.get("caption", "").strip()), res.get("hashtags") or []
     except Exception as exc:  # noqa: BLE001
         print(f"(a IA não escreveu a legenda: {exc})")
         return "", []
@@ -644,7 +651,7 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
     if post_id:
         fields = {"media_ids": [vid_id], "cover_id": cov_id}
         if not post.get("caption") and res.get("caption"):
-            fields.update(caption=res["caption"], hashtags=res.get("hashtags") or [])
+            fields.update(caption=_safe(acc.id, res["caption"]), hashtags=res.get("hashtags") or [])
         if post["status"] == "idea":
             fields["status"] = "draft"
         update_post(conn, post_id, **fields)
@@ -652,7 +659,7 @@ def _create_for(conn, acc, *, topic: str = "", post_id: int | None = None, story
     else:
         res["post_id"] = add_post(conn, account_id=acc.id, format="reel" if acc.platform == "instagram" else "video",
                                   title=res.get("title") or stem, hook=sb["scenes"][0].get("title", ""),
-                                  caption=res.get("caption") or "", hashtags=res.get("hashtags") or [],
+                                  caption=_safe(acc.id, res.get("caption") or ""), hashtags=res.get("hashtags") or [],
                                   media_ids=[vid_id], cover_id=cov_id,
                                   scheduled_at=_when(conn, acc.id, schedule), status="draft")
     return res

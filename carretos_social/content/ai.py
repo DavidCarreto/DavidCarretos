@@ -67,6 +67,7 @@ Qualquer outro facto concreto → [PREENCHER: o que falta]. Não inventes nada s
 
 Regras obrigatórias:
 {rules}
+{_guard_lines(brand_id)}
 - Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
 
 {_NETWORKS}"""
@@ -92,9 +93,15 @@ geral sobre Mercedes é permitido; factos sobre a Carretos Group só da lista ac
 
 Regras obrigatórias:
 {rules}
+{_guard_lines("geral")}
 - Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
 
 {_NETWORKS}"""
+
+
+def _guard_lines(brand_id: str) -> str:
+    from .guard import prompt_lines
+    return prompt_lines(brand_id)
 
 
 def _file(brand_id: str) -> str:
@@ -357,7 +364,10 @@ Conteúdo da publicação (já criado; NÃO o alteres, escreve só a legenda par
 
 Escreve:
 - caption: legenda pronta a publicar, adaptada à plataforma, que acompanha este conteúdo
-  (primeira linha forte; termina com uma pergunta ou chamada à ação simples). Sem factos novos:
+  (primeira linha forte). Se houver uma pergunta para o público, vem ANTES da chamada à ação. Se a
+  legenda tiver um link de chamada à ação (ex.: para ver o preço e marcar), a ÚLTIMA linha é essa chamada
+  com o link (no Instagram pode acrescentar "(link na bio)"); não ponhas nada depois dela. Não acrescentes
+  outros contactos (ex.: WhatsApp) quando a chamada à ação já é o link. Sem factos novos:
   se precisares de um facto concreto que não está nos FACTOS CONFIRMADOS, usa [PREENCHER: ...].
   Não acrescentes dados da empresa (n.º de oficinas, localidades, serviços, números) se o conteúdo
   não falar disso: uma legenda curta e pessoal é melhor do que uma com dados a mais.

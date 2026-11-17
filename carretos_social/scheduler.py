@@ -37,6 +37,9 @@ def ready_problems(row) -> list[str]:
         problems.append("sem legenda")
     if "[PREENCHER" in (row["caption"] or ""):
         problems.append("legenda por preencher ([PREENCHER…])")
+    from .content.guard import found_terms
+    for _, warning in found_terms(row["account_id"], row["caption"] or ""):
+        problems.append(warning)
     if row["format"] not in ("text",) and not json.loads(row["media_ids"] or "[]"):
         problems.append("sem vídeo/imagem associado")
     return problems

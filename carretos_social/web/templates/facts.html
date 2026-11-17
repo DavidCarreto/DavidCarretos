@@ -6,6 +6,9 @@
 (n.º de oficinas, localidades, serviços, anos, números, prémios…). Tudo o resto sai como <b>[PREENCHER: …]</b>
 e a publicação fica bloqueada até ser completada. Um facto por linha.</p>
 {% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ Factos guardados. As próximas legendas já usam esta lista.</div>{% endif %}
+{% if novos or tom_base %}<div class="card" style="border-color:var(--gold);margin-bottom:12px"><b class="gold">Há {{ novos|length }} facto(s) novo(s){{ ' e notas de tom' if tom_base }} na lista de base</b> que ainda não estão na sua lista:
+{% for f in novos %}<div class="fact-row"><span>＋ {{ f }}</span></div>{% endfor %}{% if tom_base %}<div class="fact-row"><span>＋ Tom: {{ tom_base }}</span></div>{% endif %}
+<form method="post" action="/factos/juntar" style="margin-top:8px"><input type="hidden" name="marca" value="{{ marca }}"><button class="btn gold">Acrescentar à minha lista</button> <span class="muted" style="font-size:12px">Não apaga nem altera os que já tem.</span></form></div>{% endif %}
 {% for c in contradicoes %}<div class="card alert">⚠ {{ c }} Corrija o facto ou a conta.</div>{% endfor %}
 <div class="card" style="margin-bottom:12px"><b>Onde estão a ser usados</b> <span class="muted" style="font-size:12px">(legendas de publicações não rejeitadas)</span>
 {% for u in uso %}<div class="fact-row"><span style="flex:1">{{ u.fact }}</span><span class="muted">{% if not u.terms %}—{% elif u.used %}<span class="gold">usado em {{ u.used }} legenda{{ 's' if u.used != 1 }}</span>{% else %}não usado{% endif %}</span></div>{% endfor %}
