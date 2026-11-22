@@ -921,7 +921,7 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
     assert "ligada" in r.headers["location"].replace("%20", " ")
     assert os.environ["TT_CARRETOCLIPS_TOKEN"] == "TT1" and os.environ["TT_CARRETOCLIPS_REFRESH"] == "RF1"
     ok, text = tc.test(accounts()["tt_carretoclips"])
-    assert ok and "TikTok «Carreto Clips» ✓" in text and "só publica em privado" in text
+    assert ok and "TikTok @carretoclips («Carreto Clips») ✓" in text and "só publica em privado" in text
     assert accounts()["tt_carretoclips"].handle == "carretoclips" and accounts()["tt_davidcarreto"].handle == "davidcarretos"
     save_account_override("tt_carretoclips", access_expires=(datetime.now() - timedelta(minutes=1)).isoformat())
     assert tc.ensure_fresh(accounts()["tt_carretoclips"]) == "TT2" and os.environ["TT_CARRETOCLIPS_REFRESH"] == "RF2"

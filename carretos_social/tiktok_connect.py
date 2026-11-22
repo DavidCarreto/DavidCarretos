@@ -93,7 +93,8 @@ def test(acc: Account) -> tuple[bool, str]:
     try:
         user = user_info(ensure_fresh(acc))
         note = "" if audited() else " (app por auditar: só publica em privado; os posts públicos vão para o telemóvel)"
-        return True, f"TikTok «{user.get('display_name') or acc.handle or '?'}» ✓{note}"
+        name = f" («{user['display_name']}»)" if user.get("display_name") else ""
+        return True, f"TikTok @{acc.handle or '?'}{name} ✓{note}"
     except Exception as exc:  # noqa: BLE001
         return False, f"a ligação falhou: {exc}"
 
