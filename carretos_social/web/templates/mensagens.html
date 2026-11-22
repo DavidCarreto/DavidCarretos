@@ -25,17 +25,19 @@ verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div
 <form method="post" action="/mensagens/testar" class="card" style="margin-bottom:12px"><b>Testar resposta</b> <span class="muted" style="font-size:12px">(não envia nada)</span>
  <div class="row" style="gap:8px"><div style="flex:1;min-width:200px"><label>Conta</label><select name="conta">{% for a, s in accs %}<option value="{{ a.id }}" {{ 'selected' if test and test.conta == a.id }}>{{ a.name }}</option>{% endfor %}</select></div>
  <div style="flex:0 0 200px"><label>Tipo</label><select name="tipo"><option value="comment">Comentário</option><option value="message" {{ 'selected' if test and test.tipo == 'message' }}>Mensagem privada</option></select></div></div>
+ <label>Quem comentou <span class="muted">(Instagram: o @; Facebook: o nome. Vazio = exemplo)</span></label>
+ <input name="quem" value="{{ test.quem if test else '' }}" placeholder="ex.: cliente_exemplo (Instagram) ou João Silva (Facebook)">
  <label>Texto recebido</label><textarea name="texto" rows="2" placeholder="Ex.: Quanto custa a revisão do meu Classe C?">{{ test.texto if test else '' }}</textarea>
  <p><button class="btn gold">Ver a resposta</button></p>
  {% if test %}<div class="kb-form"><b>Tipo:</b> {{ test.intent }}{% if test.alert %} · <span style="color:#ff9b93">avisa o David</span>{% endif %}<br>
-  <b>Resposta:</b> {{ test.reply or '(não responde)' }}{% if test.private_reply %}<br><b>Mensagem privada:</b> {{ test.private_reply }}{% endif %}
+  <b>Resposta como vai sair</b> (no fio do comentário de {{ ('@' ~ test.quem.lstrip('@')) if test.platform == 'instagram' else test.quem }}):<br>{{ test.reply or '(não responde)' }}{% if test.private_reply %}<br><b>Mensagem privada:</b> {{ test.private_reply }}{% endif %}
   {% if test.error %}<br><span class="muted" style="font-size:12px">IA indisponível, resposta-padrão: {{ test.error }}</span>{% endif %}</div>{% endif %}
 </form>
 
 <div class="card"><b>Últimos comentários e mensagens</b>
-{% for r in rows %}<div class="hist"><span class="muted">{{ r.created_at[:16].replace('T',' ') }} · {{ names.get(r.account_id, r.account_id or '?') }} · {{ 'comentário' if r.kind == 'comment' else 'mensagem' }}{% if r.author %} de {{ r.author }}{% endif %}</span>
+{% for r in rows %}<div class="hist"><span class="muted">{{ r.created_at[:16].replace('T',' ') }} · {{ names.get(r.account_id, r.account_id or '?') }} · {{ 'comentário' if r.kind == 'comment' else 'mensagem' }}{% if r.author %} de {{ ('@' ~ r.author) if r.network == 'instagram' else r.author }}{% endif %}</span>
  <span class="pill" style="font-size:11px;color:{{ {'respondido':'#3fb950','erro':'#f85149','novo':'#d29922'}.get(r.status, '#7d8590') }};border-color:currentColor">{{ r.status }}</span>{% if r.intent %} <span class="muted" style="font-size:12px">{{ r.intent }}</span>{% endif %}<br>
- «{{ r.text }}»{% if r.reply %}<br>↳ {{ r.reply }}{% endif %}{% if r.private_reply and r.status == 'respondido' %}<br>↳ (privada) {{ r.private_reply }}{% endif %}
+ «{{ r.text }}»{% if r.reply %}<br>↳ {{ 'resposta no fio do comentário: ' if r.kind == 'comment' }}{{ r.reply }}{% endif %}{% if r.private_reply and r.status == 'respondido' %}<br>↳ (privada) {{ r.private_reply }}{% endif %}
  {% if r.note %}<br><span class="muted" style="font-size:12px;word-break:break-word">{{ r.note }}</span>{% endif %}</div>
 {% else %}<p class="muted" style="font-size:13px">Ainda não chegou nada. Depois de ativar na Meta, os comentários e as mensagens aparecem aqui.</p>{% endfor %}
 </div>

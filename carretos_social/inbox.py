@@ -181,6 +181,44 @@ def compose(acc: Account, kind: str, text: str, author: str = "") -> dict:
         res[k] = "" if "[PREENCHER" in txt else txt              # nunca enviar um marcador por preencher
     if res.get("intent") != "spam" and res.get("reply") and wa not in res["reply"] and res["intent"] != "elogio":
         res["reply"] = f"{res['reply']} {wa}"
+    return personalize(acc, kind, author, res)
+
+
+# ------------------------------------------------------------------ identificar quem comentou
+import re as _re
+
+_GREETING = _re.compile(r"^\s*(ol[áa]|oi|bom dia|boa tarde|boa noite)\b[^!.,\n]{0,30}[!.,]?\s*", _re.I)
+
+
+def first_name(name: str) -> str:
+    """Primeiro nome de quem comentou no Facebook (ex.: "joão silva" → "João"); vazio se não parecer um nome."""
+    token = (name or "").strip().split(" ")[0] if name else ""
+    return token[:1].upper() + token[1:].lower() if token.isalpha() and 1 < len(token) <= 20 else ""
+
+
+def personalize(acc: Account, kind: str, author: str, res: dict) -> dict:
+    """Comentários: a resposta pública começa por @username (Instagram) ou "Olá {primeiro nome}!" (Facebook);
+    a mensagem privada começa com a saudação. Spam/ofensas não têm resposta, logo nunca levam o nome.
+    (Facebook: a API deixa uma Página mencionar outras Páginas, não pessoas; por isso usa-se o primeiro nome.)"""
+    if res.get("intent") == "spam" or not res.get("reply"):
+        return {**res, "reply": "", "private_reply": ""}
+    author = (author or "").strip().lstrip("@")
+    if acc.platform == "instagram" and author:
+        body = _re.sub(rf"^\s*@{_re.escape(author)}\b[\s,:]*", "", res["reply"], flags=_re.I)
+        body = _GREETING.sub("", body, count=1)
+        res["reply"] = f"@{author} {body[:1].upper() + body[1:]}".strip()
+        hello = f"Olá @{author}!"
+    elif acc.platform == "facebook_page":
+        name = first_name(author)
+        hello = f"Olá {name}!" if name else "Olá!"
+        if kind == "comment":
+            body = _GREETING.sub("", res["reply"], count=1)
+            res["reply"] = f"{hello} {body[:1].upper() + body[1:]}".strip()
+    else:
+        hello = "Olá!"
+    if res.get("private_reply"):
+        body = _GREETING.sub("", res["private_reply"], count=1)
+        res["private_reply"] = f"{hello} {body[:1].upper() + body[1:]}".strip()
     return res
 
 

@@ -37,6 +37,15 @@ App → **Webhooks** (adicionar o produto se não existir):
 3. Pôr a app em **Live** (modo ativo). A política de privacidade já existe em
    `https://carretosstudio.duckdns.org/privacidade`.
 
+## Identificar quem comentou
+- A resposta vai **sempre no fio do comentário** (Facebook: `POST /{comentário}/comments`; Instagram:
+  `POST /{comentário}/replies`), para a pessoa ser notificada.
+- **Instagram:** a resposta começa por **@username** de quem comentou.
+- **Facebook:** a API deixa uma Página mencionar outras Páginas, mas não etiquetar pessoas: a resposta começa por
+  **"Olá {primeiro nome}!"** (ou "Olá!" se a Meta não enviar o nome).
+- A mensagem privada (se ligada) começa por "Olá {primeiro nome}!" / "Olá @username!".
+- Spam e ofensas não têm resposta, logo nunca levam o nome.
+
 ## Regras automáticas
 - Desligado por defeito em cada conta; quem aprova numa conta pode ligar/desligar.
 - Uma resposta por comentário; nas mensagens privadas, uma resposta automática por pessoa em 24 h.

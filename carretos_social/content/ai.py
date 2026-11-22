@@ -377,12 +377,13 @@ Recebemos este {where} de "{author or 'alguém'}":
 
 O WhatsApp {whatsapp} tem um assistente disponível 24 horas que dá o preço da revisão na hora, explica o
 orçamento e os serviços e faz a marcação. Escreve a resposta automática:
-- intent: pergunta | preco | marcacao | elogio | reclamacao | spam | outro
+- intent: pergunta | preco | marcacao | elogio | reclamacao | spam (inclui ofensas e insultos) | outro
 - reply: resposta curta (máximo 2 frases e cerca de 250 carateres, no tom da conta, tratar por "você"), que encaminha SEMPRE para o
   WhatsApp {whatsapp} quando há uma pergunta, pedido de preço, marcação, dúvida ou reclamação. Nunca dês preços,
   prazos, disponibilidade nem factos que não estejam nos FACTOS CONFIRMADOS: o WhatsApp responde a isso.
   Elogio: agradece de forma curta e calorosa (o WhatsApp é opcional). Spam, ofensas ou mensagens sem sentido:
   reply vazio. Nunca uses [PREENCHER] aqui: se faltar informação, encaminha para o WhatsApp.
+  Não comeces com saudação nem com o nome/@ da pessoa: o sistema acrescenta-os.
 - private_reply: (só para comentários) mensagem privada curta a enviar à pessoa, com o link {whatsapp};
   vazio se for elogio simples ou spam.
 - alert: true se for reclamação, problema sério, urgência ou algo que o David deva ver pessoalmente."""

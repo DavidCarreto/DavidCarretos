@@ -1302,3 +1302,38 @@ def test_inbox_compose_with_ai_spam_and_alert(monkeypatch):
         "intent": "reclamacao", "reply": "Lamentamos muito. Fale connosco no WhatsApp", "private_reply": "", "alert": True})
     res = inbox.compose(accounts()["ig_carretosgroup"], "message", "Correu mal a revisão")
     assert res["alert"] and res["reply"].endswith("https://wa.me/351211454646")   # o link é sempre acrescentado
+
+
+def test_inbox_replies_identify_commenter(client, monkeypatch):
+    from carretos_social import inbox
+    from carretos_social.config import accounts
+    from carretos_social.content import ai
+    monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "sk-ant-teste")
+    def fake(acc, kind, text, author, wa):
+        return {"intent": "preco", "reply": "Olá! Para saber o preço fale connosco no WhatsApp " + wa,
+                "private_reply": "Boa tarde! Envie a matrícula no WhatsApp " + wa, "alert": False}
+    monkeypatch.setattr(ai, "inbox_reply", fake)
+    ig = inbox.compose(accounts()["ig_carretosgroup"], "comment", "Preço?", "cliente_x")
+    assert ig["reply"].startswith("@cliente_x Para saber o preço") and "Olá!" not in ig["reply"]
+    assert ig["private_reply"].startswith("Olá @cliente_x! Envie a matrícula")
+    fb = inbox.compose(accounts()["fb_carretosgroup"], "comment", "Preço?", "joão SILVA")
+    assert fb["reply"].startswith("Olá João! Para saber o preço") and fb["private_reply"].startswith("Olá João! Envie")
+    assert inbox.compose(accounts()["fb_carretosgroup"], "comment", "Preço?", "")["reply"].startswith("Olá! Para saber")
+    assert inbox.first_name("Oficina 24h") == "Oficina" and inbox.first_name("123abc") == ""
+    # @ já escrito pela IA não fica repetido
+    monkeypatch.setattr(ai, "inbox_reply", lambda acc, kind, text, author, wa: {
+        "intent": "pergunta", "reply": "@cliente_x claro, fale no WhatsApp " + wa, "private_reply": "", "alert": False})
+    assert inbox.compose(accounts()["ig_auron"], "comment", "?", "cliente_x")["reply"].count("@cliente_x") == 1
+    # spam/ofensas: sem resposta e sem nome
+    monkeypatch.setattr(ai, "inbox_reply", lambda acc, kind, text, author, wa: {
+        "intent": "spam", "reply": "", "private_reply": "Olá", "alert": False})
+    res = inbox.compose(accounts()["fb_carretosgroup"], "comment", "insulto", "João Silva")
+    assert res["reply"] == "" and res["private_reply"] == ""
+    # "Testar resposta" mostra a resposta final, já com o @
+    monkeypatch.setattr(ai, "inbox_reply", fake)
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("IG_CARRETOSGROUP_TOKEN", "t"); monkeypatch.setenv("IG_CARRETOSGROUP_USER_ID", "17")
+    page = client.post("/mensagens/testar", data={"conta": "ig_carretosgroup", "tipo": "comment", "texto": "Preço?",
+                                                  "quem": "maria.r"}).text
+    assert "Resposta como vai sair" in page and "@maria.r Para saber o preço" in page

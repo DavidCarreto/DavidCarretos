@@ -1104,14 +1104,17 @@ def inbox_subscribe(request: Request, acc_id: str):
 
 
 @app.post("/mensagens/testar", response_class=HTMLResponse)
-def inbox_test(request: Request, conta: str = Form(...), tipo: str = Form("comment"), texto: str = Form("")):
+def inbox_test(request: Request, conta: str = Form(...), tipo: str = Form("comment"), texto: str = Form(""),
+               quem: str = Form("")):
     from .. import inbox
     me = request.state.user
     if conta not in accounts() or not me.can_see(conta):
         return _forbidden()
-    res = inbox.compose(accounts()[conta], "message" if tipo == "message" else "comment", texto, "Teste")
+    acc = accounts()[conta]
+    quem = quem.strip() or ("cliente_exemplo" if acc.platform == "instagram" else "João Silva")
+    res = inbox.compose(acc, "message" if tipo == "message" else "comment", texto, quem)
     page = inbox_page(request)
-    page.context["test"] = {"conta": conta, "tipo": tipo, "texto": texto, **res}
+    page.context["test"] = {"conta": conta, "tipo": tipo, "texto": texto, "quem": quem, "platform": acc.platform, **res}
     return tpl.TemplateResponse(request, "mensagens.html", page.context)
 
 
