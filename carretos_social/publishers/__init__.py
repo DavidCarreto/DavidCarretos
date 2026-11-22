@@ -5,6 +5,9 @@ from .base import PublishRequest, PublishResult, Publisher
 def get_publisher(acc: Account) -> Publisher:
     # perfil pessoal do Facebook: a Graph API não publica em perfis (publish_actions removido em 2018);
     # vai SEMPRE para o telemóvel, seja qual for a configuração
+    if acc.mode == "draft":       # TikTok: rascunho na app TikTok (nunca publica em público)
+        from .tiktok import TikTokPublisher
+        return TikTokPublisher()
     if acc.mode == "assist":   # perfil pessoal do Facebook, TikTok por auditar, página LinkedIn por aprovar…
         from .assist import AssistPublisher
         return AssistPublisher()

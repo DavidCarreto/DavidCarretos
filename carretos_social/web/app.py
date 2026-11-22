@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -57,7 +57,8 @@ tpl = Jinja2Templates(directory=HERE / "templates")
 
 STATUS = {"idea": ("Ideia", "#7d8590"), "draft": ("Para aprovar", "#d29922"), "approved": ("Aprovado", "#3fb950"),
           "published": ("Publicado", "#D4AF37"), "failed": ("Falhou", "#f85149"),
-          "assist_sent": ("Enviado p/ telemóvel", "#a371f7"), "rejected": ("Rejeitado", "#484f58")}
+          "assist_sent": ("Enviado p/ telemóvel", "#a371f7"),
+          "tiktok_draft": ("No TikTok: falta publicar na app", "#25F4EE"), "rejected": ("Rejeitado", "#484f58")}
 ICON = {"instagram": "IG", "tiktok": "TT", "facebook_profile": "FB", "facebook_page": "FB", "linkedin_member": "in",
         "linkedin_org": "in", "youtube": "YT"}
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
@@ -127,6 +128,9 @@ def _render(request: Request, name: str, ctx: dict):
 async def auth(request: Request, call_next):
     request.state.user = None
     open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor", "/publico/", "/privacidade", "/termos")
+    verify = os.environ.get("TIKTOK_VERIFY_FILE", "")
+    if verify and request.url.path == "/" + verify:       # verificação do domínio na TikTok (sem sessão)
+        return PlainTextResponse(os.environ.get("TIKTOK_VERIFY_CONTENT", ""))
     users.bootstrap_admin()
     if users.count() == 0:  # ainda não há administrador: 1.ª configuração
         if not request.url.path.startswith(open_paths):
@@ -732,7 +736,7 @@ def accounts_page(request: Request, msg: str = "", erro: str = ""):
                                                      "org_app": lc.configured("pagina"),
                                                      "saved": lc.saved(),
                                                      "redirect": _base_url(request) + "/contas/linkedin/callback"},
-                                              "tt": {"configured": tc.configured(), "audited": tc.audited(),
+                                              "tt": {"configured": tc.configured(),
                                                      "redirect": _base_url(request) + "/contas/tiktok/callback"},
                                               "redirect": _base_url(request) + "/contas/meta/callback",
                                               "msg": msg, "erro": erro, "page": "contas"})
@@ -894,6 +898,16 @@ def linkedin_associate(request: Request, urn: str = Form("")):
     except ValueError as exc:
         return RedirectResponse(f"/contas?erro={quote(str(exc))}", 303)
     return RedirectResponse("/contas?msg=Página+do+LinkedIn+ligada.", 303)
+
+
+@app.post("/contas/{acc_id}/tiktok-teste")
+def tiktok_test_draft(request: Request, acc_id: str):
+    me = request.state.user
+    if not me.is_admin or acc_id not in accounts() or accounts()[acc_id].platform != "tiktok":
+        return _forbidden()
+    jobs.enqueue("tiktok-teste", ["--account", acc_id], f"Teste de rascunho TikTok · {accounts()[acc_id].name}",
+                 user_id=me.id)
+    return RedirectResponse("/tarefas", 303)
 
 
 # ---------------- TikTok (cada conta autoriza à parte)
@@ -1272,7 +1286,10 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     # TikTok (ver docs/GUIA_TIKTOK.md)
     ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
     ("TIKTOK_CLIENT_SECRET", "TikTok · Client secret", True),
-    ("TIKTOK_AUDITED", "TikTok · app já auditada pela TikTok? (sim/não)", False),
+    ("TIKTOK_CAPTION_EMAIL", "TikTok · email para onde vão as legendas dos vídeos (rascunhos)", False),
+    ("TIKTOK_PULL_FROM_URL", "TikTok · domínio verificado na TikTok? (sim/não; com sim, os vídeos vão pelo endereço público)", False),
+    ("TIKTOK_VERIFY_FILE", "TikTok · nome do ficheiro de verificação do domínio (ex.: tiktokAbC123.txt)", False),
+    ("TIKTOK_VERIFY_CONTENT", "TikTok · conteúdo desse ficheiro (tiktok-developers-site-verification=…)", False),
 ]
 
 
@@ -1294,7 +1311,12 @@ KEY_FORMATS = {
     "LINKEDIN_ORG_API": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
     "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
     "TIKTOK_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_\-]{16,80}$"), "letras e números, sem espaços"),
-    "TIKTOK_AUDITED": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
+    "TIKTOK_CAPTION_EMAIL": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}(,[^@\s,]+@[^@\s,]+\.[a-z]{2,})*$", _re.I),
+                             "um email (ou vários separados por vírgula)"),
+    "TIKTOK_PULL_FROM_URL": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
+    "TIKTOK_VERIFY_FILE": (_re.compile(r"^tiktok[A-Za-z0-9_\-]{4,80}\.txt$"), "nome do ficheiro .txt dado pela TikTok"),
+    "TIKTOK_VERIFY_CONTENT": (_re.compile(r"^tiktok-developers-site-verification=[A-Za-z0-9_\-]{8,200}$"),
+                              "o texto completo do ficheiro dado pela TikTok"),
     "PEXELS_API_KEY": (_re.compile(r"^[A-Za-z0-9]{40,64}$"), "~56 letras e números"),
     "SMTP_HOST": (_re.compile(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"), "um servidor, ex.: smtp.gmail.com"),
     "SMTP_PORT": (_re.compile(r"^(25|465|587|2525)$"), "587 ou 465"),

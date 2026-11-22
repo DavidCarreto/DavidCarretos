@@ -22,4 +22,4 @@ class AssistPublisher(Publisher):
         notify.send(f"📲 Hora de publicar em {req.account.name}:\n\n{req.caption}")
         for p in req.media:
             notify.send_file(p, caption=f"{req.account.name} — {req.title}")
-        return PublishResult(remote_id=f"assist:{folder.name}", note=f"pacote em {folder}")
+        return PublishResult(remote_id=f"assist:{folder.name}", note=f"pacote em {folder}", status="assist_sent")

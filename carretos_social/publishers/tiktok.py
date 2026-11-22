@@ -1,7 +1,17 @@
-"""Publicação no TikTok (Content Posting API — Direct Post).
+"""TikTok em modo "rascunho na app TikTok" (Content Posting API, scope video.upload).
 
-Nota: enquanto a app TikTok não passar a auditoria, o TikTok só permite publicar como
-privado (SELF_ONLY). Define TIKTOK_PRIVACY=PUBLIC_TO_EVERYONE depois de aprovada.
+A TikTok não aprova o Direct Post para ferramentas internas que publicam nas próprias contas, por isso o
+Carretos Studio NUNCA publica em público no TikTok: envia o conteúdo para os rascunhos/caixa de entrada da
+app TikTok e o David revê e publica lá.
+
+- Vídeo: POST /post/publish/inbox/video/init/ (FILE_UPLOAD por blocos; PULL_FROM_URL se TIKTOK_PULL_FROM_URL=sim
+  e o domínio estiver verificado na TikTok). Este pedido não aceita legenda nem capa: a legenda pronta é enviada
+  ao David (email + Telegram + dashboard, com "Copiar legenda").
+- Carrossel de fotos: POST /post/publish/content/init/ com post_mode=MEDIA_UPLOAD e media_type=PHOTO (título,
+  descrição e capa vão já com o rascunho; as fotos vão por PULL_FROM_URL a partir do servidor).
+- Estado: /post/publish/status/fetch/ até "SEND_TO_USER_INBOX" (rascunho entregue).
+- Se a TikTok recusar o rascunho (ex.: app ainda não aprovada), o erro fica completo e o post segue em modo
+  assistido (vai para o telemóvel).
 """
 from __future__ import annotations
 
@@ -14,60 +24,111 @@ from .base import PublishRequest, PublishResult, Publisher
 
 API = "https://open.tiktokapis.com/v2"
 CHUNK = 10 * 1024 * 1024
+DRAFT_NOTE = "Enviado para os rascunhos do TikTok – falta publicar na app"
+DONE = ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE")
+
+
+def _yes(env: str) -> bool:
+    return os.environ.get(env, "").strip().lower() in ("1", "sim", "yes", "true")
 
 
 class TikTokPublisher(Publisher):
+    """Envia para os rascunhos da app TikTok (nunca publica em público)."""
+
     def publish(self, req: PublishRequest) -> PublishResult:
         from ..tiktok_connect import ensure_fresh
-        token = ensure_fresh(req.account)          # o token da TikTok dura 24 h: renova-se sozinho
-        if not token:
-            raise RuntimeError(f"{req.account.id}: falta o token TikTok no .env")
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
-        creator = request("POST", f"{API}/post/publish/creator_info/query/", headers=headers).json()["data"]
-        privacy = os.environ.get("TIKTOK_PRIVACY", "SELF_ONLY")
-        if privacy not in creator.get("privacy_level_options", [privacy]):
-            privacy = creator["privacy_level_options"][0]
+        try:
+            token = ensure_fresh(req.account)          # o token da TikTok dura 24 h: renova-se sozinho
+            self.h = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
+            videos = [m for m in req.media if m.lower().endswith((".mp4", ".mov"))]
+            if videos:
+                publish_id = self._video(Path(videos[0]))
+                kind = "video"
+            else:
+                images = [m for m in req.media if m.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+                if not images:
+                    raise ApiError("O TikTok só aceita um vídeo ou fotos.")
+                publish_id = self._photos(images, req)
+                kind = "photo"
+            self._wait(publish_id)
+        except Exception as exc:  # noqa: BLE001 — a TikTok recusou: segue em modo assistido
+            from .assist import AssistPublisher
+            res = AssistPublisher().publish(req)
+            return PublishResult(remote_id=res.remote_id, status="assist_sent",
+                                 note=f"A TikTok recusou o rascunho: {exc} → enviado para o telemóvel (modo assistido).")
+        if kind == "video":
+            _send_caption(req)
+            note = f"{DRAFT_NOTE}. Legenda e capa a definir na app TikTok (abra a notificação da TikTok para continuar)."
+        else:
+            note = f"{DRAFT_NOTE}. Abra a notificação da TikTok para rever e publicar."
+        return PublishResult(remote_id=publish_id, status="tiktok_draft", note=note)
 
-        video = Path(req.media[0])
-        # a duração máxima depende da conta (3, 5 ou 10 min): validar antes de enviar
-        max_sec = creator.get("max_video_post_duration_sec")
-        if max_sec:
-            from ..media.video_editor import probe
-            secs = probe(video).duration
-            if secs > float(max_sec) + 0.5:
-                raise ApiError(f"vídeo com {secs:.0f} s; esta conta TikTok só aceita até {int(max_sec)} s")
+    # ---------------------------------------------------------------- vídeo (sem legenda nem capa)
+    def _video(self, video: Path) -> str:
+        if _yes("TIKTOK_PULL_FROM_URL"):
+            from .media_host import public_url
+            source = {"source": "PULL_FROM_URL", "video_url": public_url(video)}
+            return request("POST", f"{API}/post/publish/inbox/video/init/", headers=self.h,
+                           json={"source_info": source}).json()["data"]["publish_id"]
         size = video.stat().st_size
         chunk = size if size <= CHUNK else CHUNK
-        count = max(1, size // chunk) if size > CHUNK else 1
-        init = request("POST", f"{API}/post/publish/video/init/", headers=headers, json={
-            "post_info": {
-                "title": req.caption[:2200], "privacy_level": privacy,
-                "disable_comment": False, "disable_duet": False, "disable_stitch": False,
-                "video_cover_timestamp_ms": 1000,
-            },
+        count = max(1, size // chunk)
+        init = request("POST", f"{API}/post/publish/inbox/video/init/", headers=self.h, json={
             "source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": chunk,
-                            "total_chunk_count": count},
-        }).json()["data"]
+                            "total_chunk_count": count}}).json()["data"]
         data = video.read_bytes()
         for i in range(count):
             start = i * chunk
-            end = size - 1 if i == count - 1 else start + chunk - 1   # último bloco leva o resto
+            end = size - 1 if i == count - 1 else start + chunk - 1   # o último bloco leva o resto
             request("PUT", init["upload_url"], headers={
                 "Content-Type": "video/mp4", "Content-Range": f"bytes {start}-{end}/{size}",
                 "Content-Length": str(end - start + 1)}, data=data[start:end + 1], timeout=900)
-        return self._wait(init["publish_id"], headers, privacy)
+        return init["publish_id"]
 
-    def _wait(self, publish_id: str, headers: dict, privacy: str, timeout: int = 900) -> PublishResult:
+    # ---------------------------------------------------------------- carrossel de fotos (com legenda)
+    def _photos(self, images: list[str], req: PublishRequest) -> str:
+        from .media_host import public_url
+        urls = [public_url(p) for p in images[:35]]
+        title = (req.title or req.caption.split("\n", 1)[0])[:90]
+        body = {"post_info": {"title": title, "description": req.caption[:4000]},
+                "source_info": {"source": "PULL_FROM_URL", "photo_cover_index": 0, "photo_images": urls},
+                "post_mode": "MEDIA_UPLOAD", "media_type": "PHOTO"}
+        return request("POST", f"{API}/post/publish/content/init/", headers=self.h, json=body).json()["data"]["publish_id"]
+
+    def _wait(self, publish_id: str, timeout: int = 600) -> None:
         start = time.time()
         while time.time() - start < timeout:
-            st = request("POST", f"{API}/post/publish/status/fetch/", headers=headers,
-                         json={"publish_id": publish_id}).json()["data"]
-            if st["status"] == "PUBLISH_COMPLETE":
-                ids = st.get("publicaly_available_post_id") or st.get("publicly_available_post_id") or []
-                return PublishResult(remote_id=str(ids[0]) if ids else publish_id,
-                                     note=f"privacidade: {privacy}")
-            if st["status"] == "FAILED":
-                raise ApiError(f"TikTok falhou: {st.get('fail_reason')}")
-            time.sleep(6)
-        raise ApiError("TikTok demorou demasiado a processar")
+            st = request("POST", f"{API}/post/publish/status/fetch/", headers=self.h,
+                         json={"publish_id": publish_id}).json().get("data", {})
+            if st.get("status") in DONE:
+                return
+            if st.get("status") == "FAILED":
+                raise ApiError(f"TikTok: {st.get('fail_reason') or st}")
+            time.sleep(5)
+        raise ApiError("A TikTok demorou demasiado a receber o rascunho (mais de 10 minutos).")
 
+
+def _send_caption(req: PublishRequest) -> None:
+    """O rascunho de vídeo não leva legenda: envia-a pronta ao David (email e Telegram)."""
+    from .. import notify
+    text = (f"Legenda para o TikTok ({req.account.name} · @{req.account.handle}).\n"
+            "O vídeo já está nos rascunhos da app TikTok: abra a notificação da TikTok, cole esta legenda, "
+            f"escolha a capa e publique.\n\n{req.caption}")
+    try:
+        notify.send("📣 Carretos Studio · " + text)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from ..web import mailer
+        to = os.environ.get("TIKTOK_CAPTION_EMAIL") or _admin_emails()
+        if to and mailer.configured():
+            mailer.send(to, f"Legenda para o TikTok · @{req.account.handle}", text)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _admin_emails() -> str:
+    from ..db import connect
+    with connect() as conn:
+        rows = conn.execute("SELECT email FROM users WHERE is_admin=1 AND active=1 AND email IS NOT NULL").fetchall()
+    return ",".join(r["email"] for r in rows if r["email"])

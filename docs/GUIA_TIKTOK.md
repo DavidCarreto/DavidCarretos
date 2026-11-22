@@ -1,37 +1,43 @@
-# Ligar o TikTok ao Carretos Studio
+# TikTok no Carretos Studio: modo "rascunho na app TikTok"
 
-Uma vez, ~30 minutos, **sem custos**. Depois liga-se cada conta no dashboard → **Contas → "Ligar esta conta"**.
+A TikTok **não aprova o Direct Post** para ferramentas internas que publicam nas próprias contas. Por isso o
+Carretos Studio **nunca publica em público no TikTok**: envia os conteúdos para os **rascunhos da app TikTok**
+e o David revê e publica lá. Não é preciso pedir a auditoria do Direct Post.
 
-**Importante:** enquanto a TikTok não **auditar** a app, a API só deixa publicar em **privado** (só o dono vê).
-Até lá, os posts públicos seguem em **modo assistido** (vão para o telemóvel, para publicar à mão).
+| Conta | @ |
+|---|---|
+| TikTok pessoal | @davidcarretos |
+| Carreto Clips | @clips.do.carreto |
+| Carretos Group | @carretos_group |
 
-## 1. Criar a app (developers.tiktok.com)
-1. Entrar em **developers.tiktok.com** (com a conta TikTok ou um email) → **Manage apps → Connect an app**.
-2. Preencher em **App details**:
-   - **App name**: `Carretos Studio` · ícone (logótipo) · categoria (ex.: Business / Productivity)
-   - **Description**: "Ferramenta interna da Carretos Group para publicar os nossos próprios vídeos."
-   - **Terms of Service URL**: `https://carretosstudio.duckdns.org/termos`
-   - **Privacy Policy URL**: `https://carretosstudio.duckdns.org/privacidade`
-   - **Platforms**: Web · Website URL: `https://carretosstudio.duckdns.org`
-3. **Add products**:
-   - **Login Kit** → **Redirect URI**: `https://carretosstudio.duckdns.org/contas/tiktok/callback`
-   - **Content Posting API** → ativar **Direct Post**
-4. **Scopes**: `user.info.basic`, `video.publish`, `video.upload`.
-5. Para testar já, sem esperar pela auditoria: usar o modo **Sandbox** e, em **Target users / Sandbox users**,
-   acrescentar as 3 contas: pessoal, Carreto Clips e Carretos Group.
-6. Copiar o **Client key** e o **Client secret** (separador Credentials).
+## Como funciona
+- **Vídeos**: vão para os rascunhos **sem legenda nem capa** (a TikTok não deixa enviá-las neste modo). No mesmo
+  momento a legenda pronta vai por **email** (⚙ Configurar → "TikTok · email para onde vão as legendas") e pelo
+  Telegram, e fica no dashboard com o botão **"📋 Copiar legenda"**. No telemóvel: abrir a notificação da TikTok
+  → colar a legenda → escolher a capa → publicar.
+- **Carrosséis de fotos**: vão para os rascunhos **já com título, legenda e capa**. Só falta publicar na app.
+- No dashboard o post fica **"No TikTok: falta publicar na app"**.
+- Se a TikTok recusar o rascunho (ex.: app ainda não aprovada), aparece o erro completo e o post segue em
+  **modo assistido** (vai para o telemóvel).
 
-## 2. No Carretos Studio
-1. **⚙ Configurar** → **TikTok · Client key**, **TikTok · Client secret** → Guardar.
-   Em **TikTok · app já auditada?** escrever `não` (por agora).
-2. Para **cada** conta (pessoal, Carreto Clips, Carretos Group):
-   - abrir **tiktok.com** no mesmo browser e **entrar com essa conta** (o TikTok autoriza a conta que estiver aberta);
-   - no dashboard → **Contas** → nessa conta → **♪ Ligar esta conta** → autorizar → **Testar**.
-   - para a conta seguinte: sair do TikTok, entrar com a outra conta e repetir.
-3. O token da TikTok dura 24 horas: o sistema renova-o sozinho (o de renovação dura ~1 ano).
+## Configuração da app (developers.tiktok.com)
+1. Produtos: **Login Kit** (Redirect URI `https://carretosstudio.duckdns.org/contas/tiktok/callback`) e
+   **Content Posting API**. Scopes: `user.info.basic` e `video.upload`.
+   O **Direct Post** e o scope `video.publish` já não são usados: pode retirá-los da app.
+2. Sandbox: cada conta (pessoal, Carreto Clips, Carretos Group) tem de estar em **Target users**.
+3. ⚙ Configurar: **TikTok · Client key**, **TikTok · Client secret** e **email para as legendas**.
+4. Contas → em cada conta TikTok: abrir tiktok.com com essa conta → **"♪ Ligar esta conta"** → **Testar**.
 
-## 3. Auditoria (para publicar em público)
-1. Na app → **Content Posting API** → **Submit for review/audit**: a TikTok pede uma descrição e um vídeo curto
-   a mostrar como a app é usada (pode gravar o ecrã do Carretos Studio a aprovar e publicar um vídeo).
-2. Quando for aprovada: **⚙ Configurar → TikTok · app já auditada? → `sim`**. A partir daí as contas ligadas
-   publicam sozinhas em público.
+## Fotos: verificar o domínio na TikTok (necessário para os carrosséis)
+As fotos são enviadas a partir do servidor (endereço público). A TikTok só as aceita de um domínio verificado:
+1. Na app → **URL properties** (ou "Manage URL properties") → **Add URL prefix**:
+   `https://carretosstudio.duckdns.org/` → método **ficheiro**: a TikTok dá um ficheiro `.txt`.
+2. ⚙ Configurar → **TikTok · nome do ficheiro de verificação** (ex.: `tiktokAbC123.txt`) e **conteúdo desse
+   ficheiro** (`tiktok-developers-site-verification=…`) → Guardar.
+3. Na TikTok → **Verify**. (Com o domínio verificado, pode também pôr **"TikTok · domínio verificado?" = sim**:
+   os vídeos passam a ir pelo endereço público em vez de envio por blocos.)
+
+## Testar
+Contas → conta TikTok → **"Testar envio de rascunho"**: envia um vídeo curto e um carrossel de 2 fotos de TESTE
+para os rascunhos dessa conta (nada é publicado). O resultado aparece em **Tarefas**. Depois apague os rascunhos
+de teste na app TikTok.

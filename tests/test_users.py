@@ -847,10 +847,10 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
         monkeypatch.delenv(k, raising=False)
     # modos assistidos enquanto as redes não aprovam
     assert isinstance(get_publisher(accounts()["li_carretosgroup"]), AssistPublisher)
-    assert isinstance(get_publisher(accounts()["tt_carretoclips"]), AssistPublisher)
+    assert isinstance(get_publisher(accounts()["tt_carretoclips"]), AssistPublisher)       # TikTok por ligar
     assert "Community Management API" in accounts()["li_carretosgroup"].assist_reason
     page = client.get("/contas").text
-    assert "Primeiro crie a app em linkedin.com/developers" in page and "ainda não auditou a app" in page
+    assert "Primeiro crie a app em linkedin.com/developers" in page and "não publica em público no TikTok" in page
     # ---- LinkedIn
     monkeypatch.setenv("LINKEDIN_CLIENT_ID", "86abcdefgh1234")
     monkeypatch.setenv("LINKEDIN_CLIENT_SECRET", "segredo-linkedin-123")
@@ -915,14 +915,15 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
         raise AssertionError(url)
     monkeypatch.setattr(tc, "request", tt_fake)
     loc = client.get("/contas/tiktok/ligar?conta=tt_carretoclips", follow_redirects=False).headers["location"]
-    assert loc.startswith("https://www.tiktok.com/v2/auth/authorize/") and "video.publish" in loc
+    assert loc.startswith("https://www.tiktok.com/v2/auth/authorize/") and "video.upload" in loc and "video.publish" not in loc
     st = parse_qs(urlparse(loc).query)["state"][0]
     r = client.get(f"/contas/tiktok/callback?code=c&state={st}", follow_redirects=False)
     assert "ligada" in r.headers["location"].replace("%20", " ")
     assert os.environ["TT_CARRETOCLIPS_TOKEN"] == "TT1" and os.environ["TT_CARRETOCLIPS_REFRESH"] == "RF1"
     ok, text = tc.test(accounts()["tt_carretoclips"])
-    assert ok and "TikTok @carretoclips («Carreto Clips») ✓" in text and "só publica em privado" in text
-    assert accounts()["tt_carretoclips"].handle == "carretoclips" and accounts()["tt_davidcarreto"].handle == "davidcarretos"
+    assert ok and "TikTok @clips.do.carreto («Carreto Clips») ✓" in text and "rascunhos da app TikTok" in text
+    assert accounts()["tt_carretosgroup"].handle == "carretos_group" and accounts()["tt_davidcarreto"].handle == "davidcarretos"
+    assert accounts()["tt_carretoclips"].mode == "draft"
     save_account_override("tt_carretoclips", access_expires=(datetime.now() - timedelta(minutes=1)).isoformat())
     assert tc.ensure_fresh(accounts()["tt_carretoclips"]) == "TT2" and os.environ["TT_CARRETOCLIPS_REFRESH"] == "RF2"
     # Testar mostra a mensagem completa do erro
@@ -933,9 +934,6 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
     from urllib.parse import unquote
     loc = unquote(client.post("/contas/tt_carretoclips/testar", follow_redirects=False).headers["location"])
     assert "The access token is invalid or not found in the request." in loc
-    # depois da auditoria: publica sozinha
-    monkeypatch.setenv("TIKTOK_AUDITED", "sim")
-    assert accounts()["tt_carretoclips"].mode == "auto"
 
 
 def test_public_legal_pages(client):
@@ -962,3 +960,86 @@ def test_expiring_connections_banner_and_reminder(client, monkeypatch):
     assert expiry.remind() and "📣 Carretos Studio · Ligações a renovar" in sent[0] and "LinkedIn" in sent[0]
     save_account_override("li_davidcarreto", token_expires=(date.today() + timedelta(days=60)).isoformat())
     assert expiry.expiring() == []
+
+
+
+def test_tiktok_drafts_video_photos_fallback_and_status(client, monkeypatch, tmp_path):
+    import subprocess
+    from PIL import Image
+    from carretos_social import notify
+    from carretos_social.config import accounts, save_account_override
+    from carretos_social.db import add_media, add_post, connect, get_post
+    from carretos_social.publishers import get_publisher, tiktok
+    from carretos_social.publishers.base import PublishRequest
+    import carretos_social.config as cfg
+    from carretos_social.scheduler import publish_post
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("TT_CARRETOCLIPS_TOKEN", "TT1"); monkeypatch.setenv("TT_CARRETOCLIPS_REFRESH", "RF1")
+    from datetime import datetime, timedelta
+    save_account_override("tt_carretoclips", status="ligada", access_expires=(datetime.now() + timedelta(hours=5)).isoformat())
+    acc = accounts()["tt_carretoclips"]
+    assert isinstance(get_publisher(acc), tiktok.TikTokPublisher) and acc.connected
+    # servidor com endereço público (para as fotos)
+    monkeypatch.setattr(cfg, "ROOT", tmp_path)
+    (tmp_path / "ENDERECO_DASHBOARD.txt").write_text("https://carretosstudio.duckdns.org\n")
+    monkeypatch.delenv("MEDIA_FOLDER", raising=False); monkeypatch.delenv("MEDIA_BASE_URL", raising=False)
+    calls, texts = [], []
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+    def fake(method, url, **kw):
+        calls.append((url, kw.get("json")))
+        if url.endswith("/inbox/video/init/"):
+            return R({"data": {"publish_id": "v1", "upload_url": "https://upload.tiktok/up"}})
+        if url.endswith("/content/init/"):
+            return R({"data": {"publish_id": "p1"}})
+        if url.endswith("/status/fetch/"):
+            return R({"data": {"status": "SEND_TO_USER_INBOX"}})
+        return R({})
+    monkeypatch.setattr(tiktok, "request", fake)
+    monkeypatch.setattr(notify, "send", lambda t: texts.append(t))
+    video = tmp_path / "v.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=540x960:d=4", "-pix_fmt",
+                    "yuv420p", str(video)], check=True)
+    res = get_publisher(acc).publish(PublishRequest(account=acc, format="video", caption="Legenda do vídeo", media=[str(video)]))
+    assert res.status == "tiktok_draft" and "Legenda e capa a definir na app TikTok" in res.note
+    init = next(j for u, j in calls if u.endswith("/inbox/video/init/"))
+    assert init["source_info"]["source"] == "FILE_UPLOAD" and "post_info" not in init        # sem legenda nem capa
+    assert any("Legenda do vídeo" in t and "@clips.do.carreto" in t for t in texts)          # legenda enviada
+    imgs = []
+    for i in range(2):
+        p = tmp_path / f"f{i}.jpg"; Image.new("RGB", (1080, 1920)).save(p); imgs.append(str(p))
+    res = get_publisher(acc).publish(PublishRequest(account=acc, format="carousel", caption="Legenda do carrossel",
+                                                    media=imgs, title="Título"))
+    body = next(j for u, j in calls if u.endswith("/content/init/"))
+    assert body["post_mode"] == "MEDIA_UPLOAD" and body["media_type"] == "PHOTO"
+    assert body["post_info"]["description"] == "Legenda do carrossel" and body["source_info"]["photo_cover_index"] == 0
+    assert all(u.startswith("https://carretosstudio.duckdns.org/publico/") for u in body["source_info"]["photo_images"])
+    # a TikTok recusa (app não aprovada): erro completo e modo assistido
+    def refuse(method, url, **kw):
+        raise RuntimeError("POST /v2/post/publish/inbox/video/init/ -> 403: {\"error\":{\"code\":\"unaudited_client_can_only_post_to_private_accounts\"}}")
+    monkeypatch.setattr(tiktok, "request", refuse)
+    res = get_publisher(acc).publish(PublishRequest(account=acc, format="video", caption="x", media=[str(video)]))
+    assert res.status == "assist_sent" and "unaudited_client_can_only_post_to_private_accounts" in res.note
+    # estado no dashboard
+    monkeypatch.setattr(tiktok, "request", fake)
+    with connect() as conn:
+        mid = add_media(conn, "video", str(video))
+        pid = add_post(conn, account_id="tt_carretoclips", format="video", caption="Legenda #1", media_ids=[mid],
+                       status="approved", scheduled_at="2020-01-01T10:00:00+00:00")
+        publish_post(conn, pid)
+        assert get_post(conn, pid)["status"] == "tiktok_draft"
+    page = client.get(f"/post/{pid}").text
+    assert "No TikTok: falta publicar na app" in page and "Copiar legenda" in page and "legenda e capa a definir na app TikTok" in page
+    # botão de teste cria a tarefa
+    client.post("/contas/tt_carretoclips/tiktok-teste", follow_redirects=False)
+    with connect() as conn:
+        assert conn.execute("SELECT kind FROM jobs ORDER BY id DESC").fetchone()[0] == "tiktok-teste"
+
+
+def test_tiktok_domain_verification_file(client, monkeypatch):
+    monkeypatch.setenv("TIKTOK_VERIFY_FILE", "tiktokAbC123.txt")
+    monkeypatch.setenv("TIKTOK_VERIFY_CONTENT", "tiktok-developers-site-verification=XYZ12345")
+    r = client.get("/tiktokAbC123.txt")
+    assert r.status_code == 200 and r.text == "tiktok-developers-site-verification=XYZ12345"

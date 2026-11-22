@@ -20,6 +20,7 @@ class PublishResult:
     remote_id: str
     url: str | None = None
     note: str = ""
+    status: str = ""                # vazio = "published"; "assist_sent" (telemóvel); "tiktok_draft" (rascunho no TikTok)
 
 
 class Publisher:

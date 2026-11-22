@@ -56,7 +56,9 @@ class Account:
 
     @property
     def mode(self) -> str:
-        """Modo efetivo: 'assist' quando a rede ainda não deixa publicar sozinho, senão 'auto'."""
+        """Modo efetivo: 'assist' (telemóvel), 'draft' (rascunho na app TikTok) ou 'auto' (publica sozinho)."""
+        if self.platform == "tiktok" and self.has_credentials:
+            return "draft"
         return "assist" if self.assist_reason else "auto"
 
     @property
@@ -66,9 +68,8 @@ class Account:
             return "A Meta não deixa publicar em perfis pessoais: vai para o telemóvel, para publicar à mão."
         if self.publish_mode == "assist":
             return "Configurada em modo assistido."
-        if self.platform == "tiktok" and not _yes("TIKTOK_AUDITED"):
-            return ("A TikTok ainda não auditou a app: a publicação automática só sai em privado, por isso os posts "
-                    "públicos vão para o telemóvel.")
+        if self.platform == "tiktok" and not self.has_credentials:
+            return "TikTok por ligar: até lá os posts vão para o telemóvel."
         if self.platform == "linkedin_org" and not (_yes("LINKEDIN_ORG_API") and self.has_credentials):
             return ("O LinkedIn ainda não aprovou a Community Management API (necessária para publicar na página): "
                     "vai para o telemóvel.")
@@ -79,7 +80,7 @@ class Account:
         """Conta ligada: não está 'por ligar' e tem as credenciais (o modo assistido não precisa)."""
         if self.status == "por_ligar":
             return False
-        if self.mode == "assist":
+        if self.mode in ("assist", "draft"):
             return True
         return self.has_credentials
 

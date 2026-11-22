@@ -83,7 +83,7 @@ def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
         notify.send(f"⚠️ Falhou a publicação #{post_id} em {acc.name}: {exc}")
         traceback.print_exc()
         return f"#{post_id} FALHOU: {exc}"
-    status = "assist_sent" if acc.publish_mode == "assist" else "published"
+    status = res.status or "published"
     update_post(conn, post_id, status=status, remote_id=res.remote_id, remote_url=res.url, error=res.note or None)
     return f"#{post_id} {status} em {acc.name} {res.url or ''} {res.note}".strip()
 

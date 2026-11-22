@@ -513,6 +513,44 @@ def cmd_example_carousel(a):
     print(f"Criada publicação de teste #{pid}: carrossel com 3 imagens, Para aprovar, sem data.")
 
 
+def cmd_tiktok_test(a):
+    """Envia para os rascunhos do TikTok um vídeo curto e um carrossel de 2 fotos de TESTE (nada é publicado)."""
+    import subprocess
+    from PIL import Image, ImageDraw
+    from .publishers.base import PublishRequest
+    from .publishers.tiktok import TikTokPublisher
+    from .tiktok_connect import ensure_fresh
+    acc = account(a.account)
+    out = _out_dir("teste_tiktok")
+    video = out / "teste_tiktok.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1080x1920:d=5:r=30",
+                    "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-shortest", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", "-c:a", "aac", str(video)], check=True)
+    photos = []
+    for i in (1, 2):
+        im = Image.new("RGB", (1080, 1920), (17, 17, 17))
+        ImageDraw.Draw(im).rectangle([60, 60, 1020, 1860], outline=(212, 175, 55), width=12)
+        p = out / f"teste_tiktok_{i}.jpg"
+        im.save(p, quality=92)
+        photos.append(str(p))
+    pub = TikTokPublisher()
+    pub.h = {"Authorization": f"Bearer {ensure_fresh(acc)}", "Content-Type": "application/json; charset=UTF-8"}
+    ok = True
+    for label, run in (("Vídeo", lambda: pub._video(video)),
+                       ("Carrossel de 2 fotos", lambda: pub._photos(photos, PublishRequest(
+                           account=acc, format="carousel", caption="[TESTE] Carrossel de teste do Carretos Studio.",
+                           media=photos, title="[TESTE] Carrossel de teste")))):
+        try:
+            pid = run()
+            pub._wait(pid)
+            print(f"✔ {label}: enviado para os rascunhos do TikTok ({acc.name} · @{acc.handle}) – falta publicar na app.")
+        except Exception as exc:  # noqa: BLE001
+            ok = False
+            print(f"✘ {label}: a TikTok recusou: {exc}")
+    if not ok:
+        raise SystemExit("Pelo menos um envio foi recusado (ver acima). Os posts desta conta seguem em modo assistido.")
+
+
 def cmd_restore(a):
     """Repõe a imagem/vídeo de uma publicação: um ficheiro indicado, ou a última versão do histórico."""
     from .db import post_history
@@ -949,6 +987,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--legenda"); s.add_argument("--schedule")
     s = add("legenda-ia", cmd_caption_ai, "a IA escreve a legenda de uma publicação"); s.add_argument("post", type=int)
     add("exemplo-carrossel", cmd_example_carousel, "cria um carrossel de TESTE (sem data) para experimentar")
+    s = add("tiktok-teste", cmd_tiktok_test, "envia um vídeo e um carrossel de TESTE para os rascunhos do TikTok")
+    s.add_argument("--account", required=True)
     s = add("repor", cmd_restore, "repõe a imagem/vídeo de uma publicação (ficheiro ou histórico)")
     s.add_argument("post", type=int); s.add_argument("--ficheiro")
     s.add_argument("--estado", choices=["idea", "draft", "approved"], help="por defeito: 'draft' (Para aprovar)")

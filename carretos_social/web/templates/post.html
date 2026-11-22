@@ -53,6 +53,12 @@
  <input type="datetime-local" name="quando" id="quando" class="{{ 'need' if approve_error and p.error and 'sem data' in p.error }}" value="{{ p.when.strftime('%Y-%m-%dT%H:%M') if p.when else '' }}" {{ 'disabled' if not can_approve }}>
  {% if not p.when %}<p class="muted" style="font-size:13px;margin:4px 0 0">Sem data: não é publicada.{% if suggested and can_approve %} Hora sugerida: <b class="gold">{{ suggested|quando }}</b> <button type="button" class="btn" style="padding:3px 10px;font-size:12px" onclick="const q=document.getElementById('quando');q.value='{{ suggested.strftime('%Y-%m-%dT%H:%M') }}';q.classList.add('need');q.focus()">Usar esta hora</button> <span style="font-size:12px">(depois carregue em Guardar)</span>{% endif %}</p>{% endif %}
  <input type="hidden" name="img" value="">
+ {% if p.account and p.account.platform == 'tiktok' and p.account.mode == 'draft' %}<div class="card" style="border-color:#25F4EE;margin:0 0 10px;padding:10px 12px">
+  <b style="color:#25F4EE">♪ TikTok: vai para os rascunhos da app TikTok</b>
+  <p class="muted" style="font-size:13px;margin:4px 0">{% if p.status == 'tiktok_draft' %}Enviado para os rascunhos do TikTok – falta publicar na app. Abra a notificação da TikTok para continuar a edição e publicar.{% else %}À hora marcada, o conteúdo é enviado para os rascunhos da app TikTok; depois é o David que publica lá.{% endif %}</p>
+  {% if p.type == 'video' %}<p class="muted" style="font-size:13px;margin:4px 0">Vídeo: <b>legenda e capa a definir na app TikTok</b> (a legenda também vai por email).</p>
+  <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.querySelector('textarea[name=caption]').value).then(()=>{this.textContent='✓ Legenda copiada'})">📋 Copiar legenda</button>{% endif %}
+ </div>{% endif %}
  <label>Legenda</label><textarea name="caption" rows="9" class="{{ 'need-fix' if p.placeholders }}" {{ 'readonly' if not can_create }} placeholder="Sem legenda – escreva uma ou peça à IA">{{ p.caption or '' }}</textarea>
  {% for w in p.forbidden %}<div class="ph-box">⚠ {{ w }} Reescreva essa parte (os links podem ficar).</div>{% endfor %}
  {% if p.placeholders %}<div class="ph-box">✕ <b>A legenda tem partes por preencher</b> (não pode ser aprovada assim). Substitua estes marcadores pelo texto certo ou apague-os:

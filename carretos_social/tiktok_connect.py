@@ -3,8 +3,8 @@
 - Cada conta autoriza à parte (pessoal, Carreto Clips, Carretos Group): antes de carregar em "Ligar", é preciso
   estar com ESSA conta aberta em tiktok.com.
 - O token de acesso dura 24 horas: é renovado sozinho com o "refresh token" (que dura ~1 ano).
-- Enquanto a TikTok não auditar a app, só se pode publicar em privado (SELF_ONLY): até lá os posts públicos
-  seguem em modo assistido (TIKTOK_AUDITED=sim em ⚙ Configurar depois da auditoria).
+- Não publica em público: envia para os rascunhos da app TikTok e o David publica lá
+  (a TikTok não aprova o Direct Post para ferramentas internas).
 Chaves em ⚙ Configurar: TIKTOK_CLIENT_KEY e TIKTOK_CLIENT_SECRET. Guia: docs/GUIA_TIKTOK.md.
 """
 from __future__ import annotations
@@ -13,21 +13,17 @@ import os
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-from .config import Account, _yes, account_overrides, save_account_override
+from .config import Account, account_overrides, save_account_override
 from .http import request
 
 AUTH = "https://www.tiktok.com/v2/auth/authorize/"
 TOKEN = "https://open.tiktokapis.com/v2/oauth/token/"
 API = "https://open.tiktokapis.com/v2"
-SCOPES = ["user.info.basic", "video.publish", "video.upload"]
+SCOPES = ["user.info.basic", "video.upload"]     # sem video.publish: só rascunhos (a TikTok não aprova o Direct Post)
 
 
 def configured() -> bool:
     return bool(os.environ.get("TIKTOK_CLIENT_KEY") and os.environ.get("TIKTOK_CLIENT_SECRET"))
-
-
-def audited() -> bool:
-    return _yes("TIKTOK_AUDITED")
 
 
 def login_url(redirect_uri: str, state: str) -> str:
@@ -92,7 +88,7 @@ def ensure_fresh(acc: Account) -> str:
 def test(acc: Account) -> tuple[bool, str]:
     try:
         user = user_info(ensure_fresh(acc))
-        note = "" if audited() else " (app por auditar: só publica em privado; os posts públicos vão para o telemóvel)"
+        note = " (os conteúdos vão para os rascunhos da app TikTok)"
         name = f" («{user['display_name']}»)" if user.get("display_name") else ""
         return True, f"TikTok @{acc.handle or '?'}{name} ✓{note}"
     except Exception as exc:  # noqa: BLE001

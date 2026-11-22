@@ -84,7 +84,7 @@ accounts:
     group: david
     platform: tiktok
     name: "Carreto Clips (TikTok)"
-    handle: "carretoclips"
+    handle: "clips.do.carreto"
     voice: marca
     narrator: generica           # voz da narração: david | generica
     publish_mode: auto
@@ -157,7 +157,7 @@ accounts:
     group: carretos
     platform: tiktok
     name: "Carretos Group (TikTok)"
-    handle: ""                # por preencher (o David indica)
+    handle: "carretos_group"                # por preencher (o David indica)
     status: por_ligar
     voice: empresa
     narrator: generica

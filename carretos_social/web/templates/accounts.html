@@ -46,7 +46,9 @@
   <p class="muted" style="font-size:13px;margin:4px 0 6px">Cada conta liga-se à parte, no botão "Ligar esta conta" abaixo.
   <b>Antes, abra tiktok.com com essa conta</b> (o TikTok autoriza a conta que estiver aberta).</p>
  {% endif %}
- {% if not tt.audited %}<p class="fmt-line ajustar" style="margin:4px 0 0">⚠ A TikTok ainda não auditou a app: a publicação automática só sai em <b>privado</b>. Até lá, os posts públicos seguem em modo assistido.</p>{% endif %}
+ <p class="fmt-line ajustar" style="margin:4px 0 0">ℹ O Carretos Studio <b>não publica em público no TikTok</b>: envia os conteúdos para os
+ <b>rascunhos da app TikTok</b> e o David revê e publica lá (vídeos: a legenda vai por email e fica no dashboard para copiar).</p>
+ <p class="muted" style="font-size:12px;margin:6px 0 0">Na app em developers.tiktok.com pode retirar o "Direct Post" e o scope <code>video.publish</code>: já não são usados.</p>
  <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno: <code>{{ tt.redirect }}</code></p>
 </div>
 </div>
@@ -59,7 +61,8 @@
   <b>{{ ICON.get(a.platform,'') }} {{ a.name }}</b>{% if a.handle %} <span class="muted">@{{ a.handle }}</span>{% endif %}<br>
   {% if a.has_credentials %}<span class="pill" style="color:#3fb950;border-color:#3fb950">✓ Ligada</span>{% if it.over.meta_name %} <span class="muted" style="font-size:12px">{{ it.over.meta_name }}{% if it.over.linked_at %} · desde {{ it.over.linked_at.replace('T',' ') }}{% endif %}</span>{% endif %}
    {% if it.over.token_expires %}<span class="muted" style="font-size:12px"> · volte a ligar antes de {{ it.over.token_expires }}</span>{% endif %}<br>{% endif %}
-  {% if a.assist_reason %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span> <span class="muted" style="font-size:12px">{{ a.assist_reason }}</span>
+  {% if a.mode == 'draft' %}<span class="pill" style="color:#25F4EE;border-color:#25F4EE">Rascunhos no TikTok</span> <span class="muted" style="font-size:12px">Vai para os rascunhos da app TikTok; publica-se lá.</span>
+  {% elif a.assist_reason %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span> <span class="muted" style="font-size:12px">{{ a.assist_reason }}</span>
   {% elif not a.has_credentials %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Por ligar</span>
    {% if a.platform == 'youtube' %}<span class="muted" style="font-size:12px">YouTube: ligação numa próxima fase.</span>
    {% elif a.platform == 'linkedin_member' %}<span class="muted" style="font-size:12px">Use "Ligar o perfil pessoal" acima.</span>{% endif %}
@@ -68,7 +71,8 @@
  <div class="acc-actions">
   {% if a.has_credentials %}
    <button class="btn" formaction="/contas/{{ a.id }}/testar">Testar</button>
-   {% if a.platform == 'tiktok' %}<a class="btn" href="/contas/tiktok/ligar?conta={{ a.id }}">Voltar a ligar</a>{% endif %}
+   {% if a.platform == 'tiktok' %}<button class="btn" formaction="/contas/{{ a.id }}/tiktok-teste" onclick="return confirm('Enviar um vídeo curto e um carrossel de 2 fotos de TESTE para os rascunhos do TikTok de {{ a.name }}?')">Testar envio de rascunho</button>
+   <a class="btn" href="/contas/tiktok/ligar?conta={{ a.id }}">Voltar a ligar</a>{% endif %}
    <button class="btn red" formaction="/contas/{{ a.id }}/desligar" onclick="return confirm('Desligar {{ a.name }}? Deixa de publicar automaticamente.')">Desligar</button>
   {% elif it.meta and a.platform != 'facebook_profile' %}
    {% if it.options %}<select name="acc_{{ a.id }}"><option value="">— escolher —</option>{% for o in it.options %}<option value="{{ o.value }}" {{ 'selected' if o.value == it.suggest }}>{{ o.label }}</option>{% endfor %}</select>
