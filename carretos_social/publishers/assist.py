@@ -19,7 +19,9 @@ class AssistPublisher(Publisher):
         for p in req.media + ([req.cover] if req.cover else []):
             shutil.copy(p, folder / Path(p).name)
         (folder / "legenda.txt").write_text(req.caption, encoding="utf-8")
-        notify.send(f"📲 Hora de publicar em {req.account.name}:\n\n{req.caption}")
+        from ..routine import dashboard_url
+        notify.send(f"📲 Hora de publicar em {req.account.name}:\n\n{req.caption}\n\n"
+                    f"Legenda para copiar, ficheiros e \"Já publiquei\": {dashboard_url('/manual')}")
         for p in req.media:
             notify.send_file(p, caption=f"{req.account.name} — {req.title}")
         return PublishResult(remote_id=f"assist:{folder.name}", note=f"pacote em {folder}", status="assist_sent")

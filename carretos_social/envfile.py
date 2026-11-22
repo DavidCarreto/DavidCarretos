@@ -29,5 +29,10 @@ def reload_env(root=None) -> None:
     for line in env.read_text(encoding="utf-8").splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
-            if k.strip() and v.strip():
-                os.environ[k.strip()] = v.strip()
+            k, v = k.strip(), v.strip()
+            if not k:
+                continue
+            if v:
+                os.environ[k] = v
+            else:
+                os.environ.pop(k, None)          # chave apagada (ex.: conta desligada)

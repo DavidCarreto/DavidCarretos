@@ -123,6 +123,8 @@ def _send_caption(req: PublishRequest, test: bool = False) -> list[str]:
     text = (f"Legenda para o TikTok ({req.account.name} · @{req.account.handle}).\n"
             "O vídeo já está nos rascunhos da app TikTok: abra a notificação da TikTok, cole esta legenda, "
             f"escolha a capa e publique.\n{PRIVACY}\n\n{req.caption}")
+    from ..routine import dashboard_url
+    text_tg = text + f"\n\nDepois marque \"Já publiquei\" em {dashboard_url('/manual')}"
     out = []
     try:
         from ..web import mailer
@@ -138,7 +140,7 @@ def _send_caption(req: PublishRequest, test: bool = False) -> list[str]:
         out.append(f"✘ Email da legenda: {type(exc).__name__}: {exc}")
     try:
         if notify.enabled():
-            notify.send(text)                      # o notify já põe "📣 Carretos Studio · "
+            notify.send(text_tg)                   # o notify já põe "📣 Carretos Studio · "
             out.append("✔ Legenda enviada pelo Telegram")
     except Exception as exc:  # noqa: BLE001
         out.append(f"✘ Telegram: {exc}")

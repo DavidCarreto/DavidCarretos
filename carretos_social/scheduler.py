@@ -85,7 +85,25 @@ def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
         return f"#{post_id} FALHOU: {exc}"
     status = res.status or "published"
     update_post(conn, post_id, status=status, remote_id=res.remote_id, remote_url=res.url, error=res.note or None)
+    _confirm(acc, row, status, res)
     return f"#{post_id} {status} em {acc.name} {res.url or ''} {res.note}".strip()
+
+
+def _confirm(acc, row, status: str, res) -> None:
+    """Confirmação pelo Telegram quando uma publicação sai. (O modo assistido e os vídeos do TikTok já têm a sua
+    própria mensagem, com a legenda.)"""
+    from .media.formats import kind_of
+    from .routine import dashboard_url
+    title = row["title"] or row["pillar"] or f"#{row['id']}"
+    try:
+        if status == "published":
+            notify.send(f"✅ Publicado em {acc.name}: {title}" + (f"\n{res.url}" if res.url else ""))
+        elif status == "tiktok_draft" and kind_of(row["format"]) != "video":
+            notify.send(f"♪ Rascunho enviado para o TikTok de @{acc.handle}: {title}\n"
+                        "Abra a notificação da TikTok, confirme a privacidade e publique.\n"
+                        f"Depois marque \"Já publiquei\" em {dashboard_url('/manual')}")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def due_posts(conn, now: datetime | None = None) -> list:
@@ -101,18 +119,6 @@ def auto_approve(conn) -> None:
             update_post(conn, r["id"], status="approved")
 
 
-def remind_pending(conn, hours: int = 24) -> None:
-    """Avisa sobre rascunhos que vão sair nas próximas horas e ainda não foram aprovados."""
-    limit = datetime.now(_tz()) + timedelta(hours=hours)
-    rows = [r for r in conn.execute("SELECT * FROM posts WHERE status IN ('idea','draft')").fetchall()
-            if r["scheduled_at"] and parse_dt(r["scheduled_at"]) <= limit]
-    if rows:
-        lines = [f"#{r['id']} {r['scheduled_at'][5:16]} {r['account_id']} — {r['title'] or r['pillar']} "
-                 f"({r['status']})" for r in rows]
-        notify.send("📝 Por aprovar nas próximas 24h:\n" + "\n".join(lines) +
-                    "\n\nAprova com: carretos approve <id>")
-
-
 def tick(dry_run: bool = False) -> list[str]:
     with connect() as conn:
         auto_approve(conn)
@@ -126,8 +132,7 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     from .config import ROOT
     env_file = ROOT / ".env"
     env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
-    last_sync = last_reminder = 0.0
-    last_health = time.time() - 23 * 3600          # 1.ª verificação das ligações ~1 h depois de arrancar
+    last_sync = 0.0
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
@@ -136,24 +141,16 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
                 for acc, st in sync(conn).items():
                     print(f"métricas {acc}: {st}")
             last_sync = time.time()
-        if time.time() - last_reminder > 12 * 3600:
-            with connect() as conn:
-                remind_pending(conn)
-            try:
-                from .expiry import remind
-                remind()                       # ligações a renovar (LinkedIn, Meta, TikTok)
-            except Exception as exc:  # noqa: BLE001
-                print("lembrete de ligações:", exc)
-            last_reminder = time.time()
-        if time.time() - last_health > 24 * 3600:
-            try:
-                from .health import check_all
-                bad = [k for k, r in check_all().items() if not r["ok"]]
-                print("ligações verificadas" + (f"; com problemas: {', '.join(bad)}" if bad else ": todas OK"))
-            except Exception as exc:  # noqa: BLE001
-                print("verificação das ligações:", exc)
-            last_health = time.time()
+        try:                                   # rotinas a horas fixas (08:30 e 09:00), sem repetir no mesmo dia
+            from .routine import run_due
+            for line in run_due():
+                print(datetime.now().strftime("%H:%M"), line)
+        except Exception as exc:  # noqa: BLE001
+            print("rotinas:", exc)
         if env_file.exists() and env_file.stat().st_mtime != env_mtime:
-            print("Configuração alterada: a reiniciar para carregar as chaves novas.")
-            raise SystemExit(0)  # o systemd volta a arrancar o serviço
+            # chaves novas (ex.: conta ligada no dashboard, token do TikTok renovado): relê sem reiniciar
+            from .envfile import reload_env
+            reload_env()
+            env_mtime = env_file.stat().st_mtime
+            print("Configuração relida.")
         time.sleep(interval)

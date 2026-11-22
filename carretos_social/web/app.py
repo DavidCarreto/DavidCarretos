@@ -1397,7 +1397,8 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok, "erros": erros,
                                             "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),
                                             "tg": tg, "tg_ok": notify_enabled(),
-                                            "tg_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN"))})
+                                            "tg_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+                                            "tg_bot": os.environ.get("TELEGRAM_BOT_USERNAME", "")})
 
 
 @app.post("/configurar")
@@ -1434,6 +1435,8 @@ async def config_save(request: Request):
         updates[key] = value
     from .. import envfile
     envfile.set_env(updates, root=ROOT)
+    if "TELEGRAM_BOT_TOKEN" in updates:
+        _telegram_username()
     r = RedirectResponse("/configurar?ok=1" + (f"&erro={','.join(rejected)}" if rejected else ""), 303)
     _set_session(r, admin_id)
     return r
@@ -1490,6 +1493,22 @@ def reboot_seen(request: Request):
     return RedirectResponse(request.headers.get("referer") or "/", 303)
 
 
+def _telegram_username() -> str:
+    """@ do bot configurado (pedido ao Telegram e guardado em TELEGRAM_BOT_USERNAME)."""
+    from .. import envfile
+    from ..http import request as http
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        return ""
+    try:
+        user = http("GET", f"https://api.telegram.org/bot{token}/getMe", retries=1).json().get("result", {}).get("username", "")
+    except Exception:  # noqa: BLE001
+        return os.environ.get("TELEGRAM_BOT_USERNAME", "")
+    if user and user != os.environ.get("TELEGRAM_BOT_USERNAME"):
+        envfile.set_env({"TELEGRAM_BOT_USERNAME": user}, root=ROOT)
+    return user
+
+
 @app.post("/configurar/telegram-chat")
 def config_telegram_chat(request: Request):
     """Descobre o chat do Telegram: depois de escrever uma mensagem ao bot, lê-a e guarda o número do chat."""
@@ -1502,6 +1521,7 @@ def config_telegram_chat(request: Request):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         return RedirectResponse("/configurar?tg=erro&motivo=" + quote("primeiro guarde o token do bot"), 303)
+    bot = _telegram_username()
     try:
         updates = http("GET", f"https://api.telegram.org/bot{token}/getUpdates", retries=1).json().get("result", [])
     except Exception as exc:  # noqa: BLE001
@@ -1509,8 +1529,9 @@ def config_telegram_chat(request: Request):
     chats = [u.get("message", u.get("my_chat_member", {})).get("chat", {}) for u in updates]
     chats = [c for c in chats if c.get("id")]
     if not chats:
+        where = f"abra @{bot} (https://t.me/{bot})" if bot else "abra o bot no Telegram"
         return RedirectResponse("/configurar?tg=erro&motivo=" + quote(
-            "ainda não há mensagens: abra o bot no Telegram, carregue em Iniciar (ou escreva Olá) e tente de novo"), 303)
+            f"ainda não há mensagens: {where}, envie /start e tente de novo dentro de alguns segundos"), 303)
     envfile.set_env({"TELEGRAM_CHAT_ID": str(chats[-1]["id"])}, root=ROOT)
     return RedirectResponse("/configurar?tg=chat", 303)
 

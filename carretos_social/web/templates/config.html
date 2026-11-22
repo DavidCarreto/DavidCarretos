@@ -40,6 +40,8 @@ Os outros campos foram guardados.</div>{% endif %}
  <li>Cole-o acima em "Telegram · token do bot" e carregue em <b>Guardar</b>.</li>
  <li>Abra o bot que criou e carregue em <b>Iniciar</b> (ou escreva "Olá").</li>
  <li>Carregue em <b>Descobrir o chat</b> e depois em <b>Enviar mensagem de teste</b>.</li></ol>
+{% if tg_bot %}<p style="margin:0 0 10px">Bot configurado: <b class="gold">@{{ tg_bot }}</b> <a class="btn" style="padding:4px 10px;font-size:13px" href="https://t.me/{{ tg_bot }}" target="_blank" rel="noopener">Abrir o bot ↗</a>
+ <span class="muted" style="font-size:12px">(no bot, envie <code>/start</code> antes de "Descobrir o chat")</span></p>{% endif %}
 <div class="row" style="gap:8px">
 <form method="post" action="/configurar/telegram-chat"><button class="btn" {{ 'disabled' if not tg_token }}>🔎 Descobrir o chat</button></form>
 <form method="post" action="/configurar/testar-telegram"><button class="btn" {{ 'disabled' if not tg_ok }}>✈ Enviar mensagem de teste</button></form>

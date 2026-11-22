@@ -35,10 +35,11 @@ def reminder_text(items: list[dict]) -> str:
         "\nVolte a ligar em Contas (carretosstudio.duckdns.org/contas)."
 
 
-def remind() -> bool:
-    """Envia o lembrete pelo Telegram (se estiver configurado). Devolve True se enviou."""
+def remind(only_days: set[int] | None = None) -> bool:
+    """Envia o lembrete pelo Telegram (se estiver configurado). Devolve True se enviou.
+    only_days: só nesses dias antes de expirar (ex.: {14, 7, 3, 1, 0}); depois de expirar, todos os dias."""
     from . import notify
-    items = expiring()
+    items = [e for e in expiring() if only_days is None or e["days"] < 0 or e["days"] in only_days]
     if not items or not notify.enabled():
         return False
     notify.send(reminder_text(items))

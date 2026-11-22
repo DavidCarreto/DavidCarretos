@@ -1139,3 +1139,73 @@ def test_linkedin_version_and_fb_carretoclips(monkeypatch):
     assert api_version() == "202601"
     acc = accounts()["fb_carretoclips"]
     assert acc.platform == "facebook_page" and acc.group == "david" and not acc.connected
+
+
+def test_routines_fixed_times_no_repeat_and_weekly(client, monkeypatch):
+    from datetime import date, datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from carretos_social import expiry, health, notify, routine
+    from carretos_social.config import save_account_override
+    from carretos_social.db import add_post, connect
+    _setup_admin(client)
+    sent, checks = [], []
+    monkeypatch.setattr(notify, "send", lambda t: sent.append(t))
+    monkeypatch.setattr(notify, "enabled", lambda: True)
+    monkeypatch.setattr(health, "check_all", lambda alert=True: checks.append(1) or {})
+    tz = ZoneInfo("Europe/Lisbon")
+    monday = datetime(2026, 11, 23, 8, 0, tzinfo=tz)                      # segunda-feira
+    with connect() as conn:
+        add_post(conn, account_id="ig_auron", format="image", title="[TESTE] por aprovar", status="draft",
+                 scheduled_at=(monday + timedelta(hours=10)).isoformat())
+    assert routine.run_due(monday) == []                                   # 08:00: ainda nada
+    out = routine.run_due(monday.replace(hour=8, minute=31))
+    assert out == ["ligações verificadas: todas OK"] and len(checks) == 1
+    out = routine.run_due(monday.replace(hour=9, minute=1))
+    assert "lembrete 'por aprovar': 1 publicação(ões)" in out and "resumo semanal enviado" in out
+    pend = next(t for t in sent if t.startswith("📝 Por aprovar"))
+    assert "AURON (Instagram)" in pend and "/aprovar" in pend and "carretos approve" not in pend
+    assert any(t.startswith("🗓 Resumo semanal") for t in sent)
+    n = len(sent)
+    assert routine.run_due(monday.replace(hour=15)) == [] and len(sent) == n   # reinício/mais tarde: não repete
+    # ligações a expirar: só a 14, 7, 3, 1 e 0 dias
+    monkeypatch.setenv("LI_DAVIDCARRETO_TOKEN", "t"); monkeypatch.setenv("LI_DAVIDCARRETO_URN", "urn:li:person:1")
+    save_account_override("li_davidcarreto", token_expires=(date.today() + timedelta(days=5)).isoformat())
+    assert not expiry.remind(only_days=routine.EXPIRY_DAYS)
+    save_account_override("li_davidcarreto", token_expires=(date.today() + timedelta(days=7)).isoformat())
+    assert expiry.remind(only_days=routine.EXPIRY_DAYS)
+
+
+def test_env_reload_without_restart_and_confirmations(client, monkeypatch, tmp_path):
+    import os
+    from carretos_social import envfile, notify
+    (tmp_path / ".env").write_text("NOVA_CHAVE=1\nCHAVE_APAGADA=\n", encoding="utf-8")
+    monkeypatch.setenv("CHAVE_APAGADA", "antiga")
+    envfile.reload_env(root=tmp_path)
+    assert os.environ["NOVA_CHAVE"] == "1" and "CHAVE_APAGADA" not in os.environ   # conta desligada deixa de publicar
+    monkeypatch.delenv("NOVA_CHAVE")
+    # confirmação de publicação e link no modo assistido
+    from carretos_social.publishers.assist import AssistPublisher
+    from carretos_social.publishers.base import PublishRequest, PublishResult
+    from carretos_social.config import accounts
+    from carretos_social import scheduler
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t: sent.append(t))
+    monkeypatch.setattr(notify, "send_file", lambda *a, **k: None)
+    scheduler._confirm(accounts()["ig_auron"], {"title": "Post X", "pillar": "", "id": 1, "format": "image",
+                                                "media_ids": "[]"}, "published",
+                       PublishResult(remote_id="1", url="https://instagram.com/p/x"))
+    assert sent[-1] == "✅ Publicado em AURON (Instagram): Post X\nhttps://instagram.com/p/x"
+    scheduler._confirm(accounts()["tt_carretosgroup"], {"title": "Fotos", "pillar": "", "id": 2, "format": "carousel",
+                                                        "media_ids": "[]"}, "tiktok_draft", PublishResult(remote_id="p"))
+    assert sent[-1].startswith("♪ Rascunho enviado para o TikTok de @carretos_group") and "/manual" in sent[-1]
+    AssistPublisher().publish(PublishRequest(account=accounts()["fb_davidcarreto"], format="text", caption="Olá"))
+    assert "Já publiquei" in sent[-1] and "/manual" in sent[-1]
+
+
+def test_config_shows_telegram_bot_link(client, monkeypatch):
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456789:AAH" + "x" * 32)
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "carretos_studio_bot")
+    page = client.get("/configurar").text
+    assert "@carretos_studio_bot" in page and 'href="https://t.me/carretos_studio_bot"' in page and "/start" in page
