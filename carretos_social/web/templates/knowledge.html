@@ -1,0 +1,52 @@
+{% extends "base.html" %}{% block body %}
+<h1>Base de conhecimento</h1>
+<div class="tabsel" style="margin-bottom:10px">{% for b in brands %}<a class="btn {{ 'gold' if b.id == marca }}" href="/conhecimento?marca={{ b.id }}">{{ b.name }}</a>{% endfor %}</div>
+<p class="muted" style="font-size:13px;margin-top:0">{% if marca == 'todas' %}Estas fichas valem para <b>todas as marcas</b> (ex.: o que nunca se publica).{% else %}A IA só usa as fichas <b>publicáveis e válidas</b> de <b>{{ marca_nome }}</b> (e as de "Todas as marcas") nas contas {{ 'do David e da Carretos Group' if marca == 'geral' else 'da ' ~ marca_nome }}. As marcas não se misturam.{% endif %}</p>
+{% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ {{ ok }}</div>{% endif %}
+{% if erro %}<div class="card alert">✕ {{ erro }}</div>{% endif %}
+{% for c in contradicoes %}<div class="card alert">⚠ {{ c }} Corrija a ficha ou a conta.</div>{% endfor %}
+{% if novos %}<div class="card" style="border-color:var(--gold);margin-bottom:12px"><b class="gold">Há {{ novos|length }} ficha(s) nova(s) na base</b> que ainda não estão aqui:
+{% for f in novos %}<div class="fact-row"><span>＋ {{ f.texto }}</span><span class="muted">{{ SECTIONS.get(f.secao, f.secao) }}</span></div>{% endfor %}
+<form method="post" action="/conhecimento/juntar" style="margin-top:8px"><input type="hidden" name="marca" value="{{ marca }}"><button class="btn gold">Acrescentar</button> <span class="muted" style="font-size:12px">Não apaga nem altera as que já existem.</span></form></div>{% endif %}
+
+{% if marca != 'todas' %}<form method="post" action="/conhecimento/regras" class="card" id="tom" style="margin-bottom:12px">
+ <b>Tom de comunicação e palavras proibidas</b><input type="hidden" name="marca" value="{{ marca }}">
+ <label>Tom de comunicação</label><textarea name="tom" rows="4" placeholder="Ex.: claro, direto, frases curtas; tratar o cliente por você.">{{ tone }}</textarea>
+ {% if not tone %}<p class="fmt-line ajustar" style="margin:4px 0 0">⚠ Tom por definir: a IA escreve de forma neutra e profissional.</p>{% endif %}
+ <label>Palavras proibidas nestas contas <span class="muted">(separadas por vírgula; bloqueiam a aprovação; os links não contam)</span></label>
+ <input name="proibidas" value="{{ words|join(', ') }}" placeholder="ex.: AURON">
+ <p style="margin:10px 0 0"><button class="btn gold">Guardar tom e palavras</button></p>
+</form>{% endif %}
+
+{% for sid, label, its in sections %}{% if its or sid != 'outros' %}
+<div class="card kb-sec" id="{{ sid }}">
+ <div class="row" style="justify-content:space-between;align-items:center"><b>{{ label }}</b> <span class="muted" style="font-size:12px">{{ its|length }} ficha(s)</span></div>
+ {% for i in its %}
+ <details class="kb-item {{ 'off' if i.status != 'publicavel' or i.expired }}" {{ 'open' if editar == i.id }}>
+  <summary>
+   <span class="kb-text">{{ i.text }}{% if i.answer %}<br><span class="muted">R: {{ i.answer }}</span>{% endif %}</span>
+   <span class="kb-tags">
+    {% if i.status == 'interno' %}<span class="pill" style="color:#ff7b72;border-color:#8b2b25">Interno</span>{% elif i.status == 'desenvolvimento' %}<span class="pill" style="color:#e3b341;border-color:#7a5c12">Em desenvolvimento</span>{% endif %}
+    {% if i.role and i.role != 'info' %}<span class="pill" style="color:{{ '#D4AF37' if i.role == 'cta' else '#9a9aa3' }};border-color:currentColor">{{ ROLES[i.role] }}</span>{% endif %}
+    {% if i.expired %}<span class="pill" style="color:#ff7b72;border-color:#8b2b25">Expirou {{ i.valid_until }}</span>{% elif i.valid_until %}<span class="muted">até {{ i.valid_until }}</span>{% endif %}
+    {% if i.accounts %}<span class="muted">só {{ i.accounts|length }} conta(s)</span>{% endif %}
+    {% if i.keywords %}<span class="muted">bloqueia: {{ i.keywords|join(', ') }}</span>{% endif %}
+    {% if i.used is not none %}<span class="muted">{{ 'usada em ' ~ i.used ~ ' legenda(s)' if i.used else 'não usada' }}</span>{% endif %}
+    <span class="kb-edit">✎</span>
+   </span>
+  </summary>
+  {% include "_kb_form.html" %}
+ </details>
+ {% endfor %}
+ <details class="kb-add"><summary>＋ Acrescentar ficha em "{{ label }}"</summary>{% set i = None %}{% include "_kb_form.html" %}</details>
+</div>{% endif %}{% endfor %}
+
+<div class="card" style="margin-top:12px"><b>Excel</b>
+ <p class="muted" style="font-size:13px;margin:4px 0 10px">Para preencher muita informação de uma vez: exporte, edite no Excel e importe. Linhas sem ID são fichas novas; com ID atualizam a ficha. A importação não apaga nada.</p>
+ <div class="row" style="gap:8px;align-items:center"><a class="btn" href="/conhecimento/exportar">⬇ Exportar para Excel</a>
+ <form method="post" action="/conhecimento/importar" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center"><input type="file" name="ficheiro" accept=".xlsx" required style="max-width:240px"><button class="btn gold">⬆ Importar Excel</button></form></div>
+</div>
+
+{% if hist %}<details class="card" style="margin-top:12px"><summary><b>Histórico de alterações</b> <span class="muted">({{ hist|length }})</span></summary>
+{% for h in hist %}<div class="hist"><span class="muted">{{ h.at[:16].replace('T',' ') }} · {{ h.user_name or 'sistema' }}</span><br>{{ h.summary }}</div>{% endfor %}</details>{% endif %}
+{% endblock %}

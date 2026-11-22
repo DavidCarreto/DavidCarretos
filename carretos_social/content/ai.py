@@ -29,6 +29,7 @@ def client() -> anthropic.Anthropic:
 
 
 _BRAND: contextvars.ContextVar[str] = contextvars.ContextVar("facts_brand", default="geral")
+_ACCOUNT: contextvars.ContextVar[str] = contextvars.ContextVar("facts_account", default="")
 
 _NETWORKS = """Conheces a fundo o que funciona em cada rede: Reels/TikTok (gancho visual e verbal nos 2 primeiros \
 segundos, legendas no ecrã, 15–45 s, ritmo rápido, loop no fim), carrosséis (slide 1 = promessa forte, \
@@ -36,18 +37,40 @@ segundos, legendas no ecrã, 15–45 s, ritmo rápido, loop no fim), carrosséis
 história → lição → pergunta), Facebook (comunidade, emoção, histórias mais longas)."""
 
 
-def _system(brand_id: str | None = None) -> str:
-    """Instruções da IA para a marca da conta em causa. Cada marca usa SÓ os seus factos e o seu tom
+def _knowledge_text(k: dict, name: str) -> str:
+    """Bloco da base de conhecimento (dashboard → Conhecimento) para as instruções da IA."""
+    facts = "\n".join(f"- {f}" for f in k["facts"]) or "- (nenhum ainda)"
+    parts = [f"""FACTOS CONFIRMADOS — {name} (os ÚNICOS factos concretos que podes afirmar: pessoas, empresa,
+produtos, serviços, condições, preços, números, locais, datas, contactos):
+{facts}
+Qualquer outro facto concreto → [PREENCHER: o que falta]."""]
+    if k["cta"]:
+        parts.append(f"CHAMADA À AÇÃO PRINCIPAL (usa esta quando houver chamada à ação): {k['cta']}"
+                     + (f"\nAlternativa (só como segunda opção): {k['alt']}" if k["alt"] else ""))
+    if k["rules"]:
+        parts.append("Regras desta marca:\n" + "\n".join(f"- {r}" for r in k["rules"]))
+    if k["never"]:
+        parts.append("NUNCA publicar (interno ou ainda em desenvolvimento):\n" + "\n".join(f"- {r}" for r in k["never"]))
+    if k["forbidden"]:
+        parts.append("PALAVRAS PROIBIDAS nestas contas (nunca as escrevas; só podem aparecer dentro de um link): "
+                     + ", ".join(k["forbidden"]) + ". Em vez disso descreve o benefício.")
+    return "\n\n".join(parts)
+
+
+def _system(brand_id: str | None = None, account_id: str | None = None) -> str:
+    """Instruções da IA para a marca da conta em causa. Cada marca usa SÓ a sua base de conhecimento e o seu tom
     ('geral' = David Carreto + Carretos Group; outras, ex.: 'auron', ficam totalmente separadas)."""
+    from .. import knowledge
     brand_id = brand_id or _BRAND.get()
+    account_id = account_id if account_id is not None else (_ACCOUNT.get() or None)
     b = brand()
-    facts = "\n".join(f"- {f}" for f in verified_facts(brand_id)) or "- (nenhum ainda)"
+    k = knowledge.prompt_block(brand_id, account_id)
     general_rules = [r for r in b["rules"] if "Mercedes" not in r and "David" not in r]
     if brand_id != "geral":
         name = ((b.get("marcas") or {}).get(brand_id) or {}).get("nome") or brand_id.upper()
         pillars = "\n".join(f"- {p['id']}: {p['name']} — {p['description']}" for p in b["pillars"]
                             if p.get("marca") == brand_id) or "- (sem pilares definidos)"
-        tone = brand_tone(brand_id) or b["voices"].get(brand_id) or "neutro, profissional, frases curtas"
+        tone = k["tone"] or b["voices"].get(brand_id) or "neutro, profissional, frases curtas"
         rules = "\n".join(f"- {r}" for r in general_rules)
         return f"""És o diretor de conteúdo e social media da marca {name}.
 Escreves sempre em {b['language']} (português de Portugal).
@@ -60,22 +83,16 @@ Tom de comunicação da {name}:
 Pilares de conteúdo:
 {pillars}
 
-FACTOS CONFIRMADOS da {name} (os ÚNICOS factos concretos que podes afirmar sobre a marca, pessoas, produtos,
-serviços, preços, números, locais ou datas):
-{facts}
-Qualquer outro facto concreto → [PREENCHER: o que falta]. Não inventes nada sobre a {name}.
+{_knowledge_text(k, name)}
 
 Regras obrigatórias:
 {rules}
-{_guard_lines(brand_id)}
 - Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
 
 {_NETWORKS}"""
     pillars = "\n".join(f"- {p['id']}: {p['name']} — {p['description']}" for p in b["pillars"] if not p.get("marca"))
-    voices = "\n".join(f"- {k}: {v}" for k, v in b["voices"].items() if k not in (b.get("marcas") or {}))
-    tone = brand_tone("geral")
+    voices = "\n".join(f"- {k2}: {v}" for k2, v in b["voices"].items() if k2 not in (b.get("marcas") or {}))
     rules = "\n".join(f"- {r}" for r in b["rules"])
-    # dados da empresa (n.º de oficinas, localidades, serviços…) SÓ da lista de factos confirmados
     return f"""És o diretor de conteúdo e social media de {b['owner']} e da {b['company']}.
 Escreves sempre em {b['language']} (português de Portugal).
 
@@ -83,63 +100,29 @@ Pilares de conteúdo:
 {pillars}
 
 Tom de voz por tipo de conta:
-{voices}{chr(10) + "Notas de tom do David: " + tone if tone else ""}
+{voices}{chr(10) + "Notas de tom: " + k["tone"] if k["tone"] else ""}
 
-FACTOS CONFIRMADOS (os únicos factos concretos que podes afirmar sobre o David, a empresa,
-as oficinas, clientes, números, prémios ou datas):
-{facts}
-Qualquer outro facto concreto que precisares → escreve [PREENCHER: o que falta]. Conhecimento técnico
-geral sobre Mercedes é permitido; factos sobre a Carretos Group só da lista acima.
+{_knowledge_text(k, "David Carreto e Carretos Group")}
+Conhecimento técnico geral sobre Mercedes é permitido; factos sobre a Carretos Group só da lista acima.
 
 Regras obrigatórias:
 {rules}
-{_guard_lines("geral")}
 - Nunca respondas nem cries respostas a avaliações Google (isso é feito por outro sistema).
 
 {_NETWORKS}"""
 
 
-def _guard_lines(brand_id: str) -> str:
-    from .guard import prompt_lines
-    return prompt_lines(brand_id)
-
-
-def _file(brand_id: str) -> str:
-    return "factos.yaml" if brand_id in ("", "geral") else f"factos_{brand_id}.yaml"
-
-
-def facts_path(brand_id: str = "geral"):
-    """Factos editados no dashboard (data/, não é apagado nas atualizações); senão os de config/."""
-    from ..config import CONFIG_DIR, DATA_DIR
-    edited = DATA_DIR / _file(brand_id)
-    return edited if edited.exists() else CONFIG_DIR / _file(brand_id)
-
-
-def _load(brand_id: str) -> dict:
-    import yaml
-    path = facts_path(brand_id)
-    if not path.exists():
-        return {}
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-
-
-def verified_facts(brand_id: str | None = None) -> list[str]:
-    return [str(f) for f in _load(brand_id or _BRAND.get()).get("factos", [])]
+def verified_facts(brand_id: str | None = None, account_id: str | None = None) -> list[str]:
+    """Factos publicáveis da base de conhecimento (por secção), da marca indicada ou da conta em causa."""
+    from .. import knowledge
+    return knowledge.publishable_lines(brand_id or _BRAND.get(), account_id)
 
 
 def brand_tone(brand_id: str | None = None) -> str:
-    return str(_load(brand_id or _BRAND.get()).get("tom") or "").strip()
-
-
-def save_facts(facts: list[str], brand_id: str = "geral", tom: str | None = None) -> None:
-    import yaml
-    from ..config import DATA_DIR
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    data = {"factos": [f.strip() for f in facts if f.strip()]}
-    data["tom"] = (tom if tom is not None else brand_tone(brand_id)).strip()
-    body = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
-    (DATA_DIR / _file(brand_id)).write_text("# Factos confirmados e tom (editados no dashboard → Factos)\n" + body,
-                                            encoding="utf-8")
+    from .. import knowledge
+    from ..db import connect
+    with connect() as conn:
+        return knowledge.tone(conn, brand_id or _BRAND.get())
 
 
 def _ask(prompt: str, schema: dict, max_tokens: int = 16000, effort: str = "medium") -> dict:
@@ -189,6 +172,7 @@ def _account_line(acc: Account) -> str:
     """Linha da conta no pedido à IA. Também escolhe a marca (factos e tom) das instruções desse pedido."""
     from ..config import facts_brand
     _BRAND.set(facts_brand(acc.id))
+    _ACCOUNT.set(acc.id)
     return f"Conta: {acc.name} (@{acc.handle}) — plataforma {acc.platform} — voz '{acc.voice}'."
 
 

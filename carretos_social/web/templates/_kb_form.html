@@ -1,0 +1,21 @@
+{# formulário de uma ficha (nova: i vazio) #}
+<form method="post" action="/conhecimento/ficha" class="kb-form">
+ <input type="hidden" name="brand" value="{{ marca }}"><input type="hidden" name="id" value="{{ i.id if i else '' }}">
+ <div class="row" style="gap:8px">
+  <div style="flex:1;min-width:160px"><label>Secção</label><select name="section">{% for k, v in SECTIONS.items() %}<option value="{{ k }}" {{ 'selected' if (i.section if i else sid) == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div style="flex:1;min-width:200px"><label>Estado</label><select name="status">{% for k, v in STATUS.items() %}<option value="{{ k }}" {{ 'selected' if (i.status if i else 'publicavel') == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div style="flex:0 0 170px"><label>Válida até (opcional)</label><input type="date" name="valid_until" value="{{ i.valid_until or '' if i else '' }}"></div>
+ </div>
+ <label>{{ 'Pergunta' if (i.section if i else sid) == 'faq' else 'Texto' }}</label>
+ <textarea name="text" rows="2" required>{{ i.text if i else '' }}</textarea>
+ {% if (i.section if i else sid) == 'faq' %}<label>Resposta</label><textarea name="answer" rows="3">{{ i.answer or '' if i else '' }}</textarea>{% endif %}
+ {% if (i.section if i else sid) == 'contactos' %}<div class="row" style="gap:8px">
+  <div style="flex:1;min-width:180px"><label>Função</label><select name="role">{% for k, v in ROLES.items() %}<option value="{{ k }}" {{ 'selected' if (i.role if i else 'info') == k }}>{{ v }}</option>{% endfor %}</select></div>
+  <div style="flex:2;min-width:200px"><label>Link / número</label><input name="value" value="{{ i.value or '' if i else '' }}" placeholder="ex.: https://wa.me/351…"></div></div>{% endif %}
+ <label>Palavras que bloqueiam uma legenda <span class="muted">(só para "Interno" e "Em desenvolvimento"; separadas por vírgula)</span></label>
+ <input name="keywords" value="{{ (i.keywords|join(', ')) if i else '' }}" placeholder="ex.: OfficeGest, TecAlliance">
+ {% if marca != 'todas' and accs %}<label>Contas onde se aplica <span class="muted">(nenhuma marcada = todas desta marca)</span></label>
+ <div class="kb-accs">{% for aid, a in accs.items() %}<label><input type="checkbox" name="accounts" value="{{ aid }}" {{ 'checked' if i and aid in i.accounts }}> {{ a.name }}</label>{% endfor %}</div>{% endif %}
+ <div class="row" style="margin-top:10px;gap:8px"><button class="btn gold">{{ 'Guardar' if i else 'Acrescentar' }}</button>
+ {% if i %}<button class="btn red" name="acao" value="apagar" onclick="return confirm('Apagar esta ficha? Fica registado no histórico.')">Apagar</button>{% endif %}</div>
+</form>

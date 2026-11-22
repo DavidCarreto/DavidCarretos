@@ -404,12 +404,12 @@ def test_placeholders_block_suggestions_distinct_and_facts(client, tmp_path):
     # horas sugeridas diferentes para publicações sem data da mesma conta
     hora = lambda t: re.search(r'Hora sugerida: <b class="gold">([^<]+)</b>', t).group(1)
     assert hora(client.get(f"/post/{u1}").text) != hora(client.get(f"/post/{u2}").text)
-    # factos editáveis no dashboard (data/factos.yaml)
-    client.post("/factos", data={"factos": "O dono é David Carreto.\nA empresa chama-se Carretos Group."})
+    # base de conhecimento editável no dashboard
+    client.post("/conhecimento/ficha", data={"brand": "geral", "section": "conquistas", "status": "publicavel",
+                                             "text": "Facto de teste confirmado."})
     from carretos_social.content.ai import verified_facts
-    assert verified_facts() == ["O dono é David Carreto.", "A empresa chama-se Carretos Group."]
-    page = client.get("/factos").text
-    assert "Almada" not in page.split('name="factos"')[1].split("</textarea>")[0]    # a lista guardada
+    assert "[Conquistas e números] Facto de teste confirmado." in verified_facts("geral")
+    assert client.get("/factos", follow_redirects=False).headers["location"].startswith("/conhecimento")
 
 
 def test_caption_ai_with_edited_caption_creates_job(client):
@@ -442,7 +442,7 @@ def test_friendly_error_hint_and_menu(client, monkeypatch):
     assert app_mod._fix_hint("sem data/hora; legenda por preencher ([PREENCHER…])").startswith(
         'Escolha a <a href="#quando" class="gold">data e hora</a> e complete a legenda')
     page = client.get("/").text
-    assert 'class="topmenu"' in page and "📋 Factos" in page
+    assert 'class="topmenu"' in page and "📋 Conhecimento" in page
 
 
 def test_update_button_reboot_notice_and_facts_check(client, monkeypatch, tmp_path):
@@ -471,9 +471,10 @@ def test_update_button_reboot_notice_and_facts_check(client, monkeypatch, tmp_pa
     client.post("/configurar/reinicio-visto")
     assert "O servidor reiniciou" not in client.get("/").text
     # factos: contradição com as contas
-    client.post("/factos", data={"factos": "Contas: Instagram @davidcarreto e @carretoclips.\nO dono é David Carreto."})
-    f = client.get("/factos").text
-    assert "configurada é @davidcarretos" in f and "Onde estão a ser usados" in f
+    client.post("/conhecimento/ficha", data={"brand": "geral", "section": "contactos", "role": "info",
+                                             "text": "Contas: Instagram @davidcarreto e @carretoclips."})
+    f = client.get("/conhecimento?marca=geral").text
+    assert "configurada é @davidcarretos" in f
 
 
 def test_facts_usage_marks():
@@ -617,16 +618,17 @@ def test_auron_brand_separate_facts_and_multi_portfolio(client, monkeypatch, tmp
     assert sorted(a.platform for a in auron) == ["facebook_page", "instagram"]
     assert facts_brand("ig_auron") == "auron" and facts_brand("li_carretosgroup") == "geral"
     # factos e tom separados
-    client.post("/factos", data={"marca": "auron", "factos": "A marca chama-se AURON.", "tom": "Moderno e direto."})
-    assert ai.verified_facts("auron") == ["A marca chama-se AURON."] and ai.brand_tone("auron") == "Moderno e direto."
-    assert "AURON" not in "\n".join(ai.verified_facts("geral"))
+    client.post("/conhecimento/regras", data={"marca": "auron", "tom": "Moderno e direto.", "proibidas": ""})
+    assert "[Empresa e oficinas] A marca chama-se AURON." in ai.verified_facts("auron")
+    assert ai.brand_tone("auron") == "Moderno e direto."
+    assert not any("O AURON" in f or "A marca chama-se AURON" in f for f in ai.verified_facts("geral"))
     s_auron, s_geral = ai._system("auron"), ai._system("geral")
     assert "Moderno e direto." in s_auron and "Almada" not in s_auron and "Carretos Group tem" not in s_auron
     assert "O AURON é a plataforma" not in s_geral and "PALAVRAS PROIBIDAS nestas contas" in s_geral
     ai._account_line(accounts()["ig_auron"])
     assert ai._BRAND.get() == "auron"
-    page = client.get("/factos?marca=auron").text
-    assert "Moderno e direto." in page and "AURON" in page and "/factos?marca=geral" in page
+    page = client.get("/conhecimento?marca=auron").text
+    assert "Moderno e direto." in page and "A marca chama-se AURON." in page and "/conhecimento?marca=geral" in page
     # Meta: a AURON está noutro portefólio (RibaMotor) e só aparece pelas Páginas do portefólio
     class R:
         def __init__(self, d): self._d = d
@@ -683,7 +685,7 @@ def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
     from carretos_social.scheduler import all_problems
     _setup_admin(client)
     _login(client, "david", "segredo123")
-    assert len(verified_facts("geral")) == 13 and len(verified_facts("auron")) == 12
+    assert len(verified_facts("geral")) == 14 and len(verified_facts("auron")) == 14
     link = "auron.carretos.pt/schedule"
     assert found_terms("ig_carretosgroup", f"Saiba o preço na hora: {link}") == []          # o link pode ficar
     assert found_terms("ig_carretosgroup", f"Com o AURON sabe o preço: {link}")[0][1] == \
@@ -701,11 +703,88 @@ def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
     assert "⚠ Nas contas da Carretos não se usa o nome AURON." in client.get(f"/post/{pid}").text
     assert client.post(f"/post/{pid}", data={"action": "aprovar"}, follow_redirects=False
                        ).headers["location"].startswith(f"/post/{pid}?erro=aprovar")
-    # Factos: lista editada no dashboard recebe os factos novos da lista de base sem perder os seus
-    client.post("/factos", data={"marca": "geral", "factos": "O dono é David Carreto.\nFacto meu.", "tom": ""})
-    page = client.get("/factos?marca=geral").text
-    assert "facto(s) novo(s)" in page and "Acrescentar à minha lista" in page
-    client.post("/factos/juntar", data={"marca": "geral"})
-    f = verified_facts("geral")
-    assert "Facto meu." in f and "Quem paga online no momento da marcação tem 5% de desconto." in f
-    assert "facto(s) novo(s)" not in client.get("/factos?marca=geral").text
+    # fichas novas da base: propostas no dashboard; uma ficha apagada não volta a ser proposta
+    from carretos_social import knowledge as kb
+    with connect() as conn:
+        desc = next(i for i in kb.items(conn, "geral") if i["base_key"] == "g-desconto")
+        kb.delete(conn, desc["id"])
+        assert kb.new_base_items(conn, "geral") == []
+        conn.execute("DELETE FROM settings WHERE key='knowledge_deleted_keys'")
+    page = client.get("/conhecimento?marca=geral").text
+    assert "ficha(s) nova(s) na base" in page
+    client.post("/conhecimento/juntar", data={"marca": "geral"})
+    assert "[Condições] Quem paga online no momento da marcação tem 5% de desconto." in verified_facts("geral")
+
+
+def test_knowledge_base_features(client, tmp_path):
+    from carretos_social import knowledge as kb
+    from carretos_social.content import ai
+    from carretos_social.content.guard import found_terms
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    page = client.get("/conhecimento?marca=geral").text
+    for sec in ("Empresa e oficinas", "Serviços e produtos", "Condições", "Contactos e links", "Perguntas frequentes",
+                "Regras de comunicação"):
+        assert sec in page
+    # chamada à ação principal: WhatsApp (assistente 24 h); link como alternativa
+    s = ai._system("geral")
+    cta = s.split("CHAMADA À AÇÃO PRINCIPAL")[1].split("\n")[0]
+    assert "WhatsApp 211 45 46 46" in cta and "Alternativa (só como segunda opção): Ver o preço e marcar" in s
+    assert "CHAMADA À AÇÃO PRINCIPAL (usa esta quando houver chamada à ação): Ver o preço e marcar: auron.carretos.pt/schedule" \
+        in ai._system("auron")
+    # pergunta frequente
+    client.post("/conhecimento/ficha", data={"brand": "geral", "section": "faq", "text": "Quanto tempo demora a revisão?",
+                                             "answer": "[TESTE] resposta"})
+    assert "[Perguntas frequentes] P: Quanto tempo demora a revisão? — R: [TESTE] resposta" in ai.verified_facts("geral")
+    # ficha interna: nunca vai para os factos e as palavras bloqueiam a legenda
+    client.post("/conhecimento/ficha", data={"brand": "todas", "section": "regras", "status": "interno",
+                                             "text": "O fornecedor X não se publica.", "keywords": "FornecedorX"})
+    assert not any("FornecedorX" in f for f in ai.verified_facts("auron"))
+    assert found_terms("ig_auron", "Com o FornecedorX")[0][1] == 'Informação interna que não se publica: "FornecedorX".'
+    assert "O fornecedor X não se publica." in ai._system("geral").split("NUNCA publicar")[1]
+    # validade: ficha expirada deixa de ser usada
+    client.post("/conhecimento/ficha", data={"brand": "geral", "section": "condicoes", "text": "Promoção de teste.",
+                                             "valid_until": "2020-01-01"})
+    assert not any("Promoção de teste" in f for f in ai.verified_facts("geral"))
+    assert "Expirou 2020-01-01" in client.get("/conhecimento?marca=geral").text
+    # só para uma conta
+    client.post("/conhecimento/ficha", data={"brand": "geral", "section": "pessoas", "text": "Só para o LinkedIn.",
+                                             "accounts": "li_davidcarreto"})
+    assert any("Só para o LinkedIn" in f for f in ai.verified_facts("geral", "li_davidcarreto"))
+    assert not any("Só para o LinkedIn" in f for f in ai.verified_facts("geral", "ig_davidcarreto"))
+    # editar e apagar, com histórico
+    with connect() as conn:
+        item = next(i for i in kb.items(conn, "geral") if i["text"] == "Só para o LinkedIn.")
+    client.post("/conhecimento/ficha", data={"id": item["id"], "brand": "geral", "section": "pessoas",
+                                             "text": "Só para o LinkedIn (editado)."})
+    client.post("/conhecimento/ficha", data={"id": item["id"], "brand": "geral", "section": "pessoas",
+                                             "text": "x", "acao": "apagar"})
+    hist = client.get("/conhecimento?marca=geral").text
+    assert "Alterada: Só para o LinkedIn (editado)." in hist and "Apagada:" in hist
+    # Excel: exportar, acrescentar uma linha, importar
+    r = client.get("/conhecimento/exportar")
+    assert r.status_code == 200 and r.content[:2] == b"PK"
+    from openpyxl import load_workbook
+    xl = tmp_path / "k.xlsx"; xl.write_bytes(r.content)
+    wb = load_workbook(xl); ws = wb.worksheets[0]
+    ws.append(["", "auron", "faq", "O AURON serve para outras marcas?", "Não, é só para Mercedes-Benz.", "publicavel",
+               "", "", "", "", ""])
+    ws.append(["", "marca-errada", "faq", "x", "", "publicavel", "", "", "", "", ""])
+    wb.save(xl)
+    r = client.post("/conhecimento/importar", files={"ficheiro": ("k.xlsx", xl.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}, follow_redirects=False)
+    from urllib.parse import unquote
+    loc = unquote(r.headers["location"])
+    assert "1 nova(s)" in loc and "marca desconhecida" in loc
+    assert any("O AURON serve para outras marcas?" in f for f in ai.verified_facts("auron"))
+
+
+def test_knowledge_seed_imports_old_dashboard_facts(tmp_path, monkeypatch):
+    import carretos_social.config as cfg
+    import carretos_social.db as db
+    (tmp_path / "factos.yaml").write_text('factos:\n  - "Facto antigo editado no dashboard."\n', encoding="utf-8")
+    from carretos_social import knowledge as kb
+    with db.connect() as conn:
+        outros = [i["text"] for i in kb.items(conn, "geral") if i["section"] == "outros"]
+    assert outros == ["Facto antigo editado no dashboard."]

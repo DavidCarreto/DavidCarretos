@@ -54,6 +54,40 @@ CREATE TABLE IF NOT EXISTS post_history (
 );
 CREATE INDEX IF NOT EXISTS idx_post_history ON post_history(post_id, id);
 
+-- base de conhecimento (dashboard → Conhecimento): a IA só afirma o que aqui estiver "publicável"
+CREATE TABLE IF NOT EXISTS knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    brand TEXT NOT NULL,                 -- geral | auron | todas
+    section TEXT NOT NULL,               -- empresa | servicos | condicoes | contactos | pessoas | conquistas | faq | regras | outros
+    text TEXT NOT NULL,                  -- o facto (nas perguntas frequentes: a pergunta)
+    answer TEXT,                         -- perguntas frequentes: a resposta
+    status TEXT NOT NULL DEFAULT 'publicavel',   -- publicavel | interno | desenvolvimento
+    role TEXT,                           -- contactos: cta | alternativa | duvidas | info
+    value TEXT,                          -- contactos: link / número
+    keywords TEXT DEFAULT '[]',          -- interno/desenvolvimento: palavras que bloqueiam uma legenda
+    accounts TEXT DEFAULT '[]',          -- vazio = todas as contas da marca
+    valid_until TEXT,                    -- AAAA-MM-DD (opcional): depois disto deixa de ser usada
+    base_key TEXT,                       -- chave da ficha em config/conhecimento.yaml (se veio de lá)
+    position INTEGER DEFAULT 0,
+    updated_at TEXT,
+    updated_by INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge ON knowledge(brand, section, position);
+CREATE TABLE IF NOT EXISTS knowledge_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER,
+    brand TEXT,
+    at TEXT NOT NULL,
+    user_id INTEGER,
+    action TEXT NOT NULL,                -- criada | alterada | apagada | tom | proibidas | importada
+    old TEXT,
+    new TEXT
+);
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+
 CREATE TABLE IF NOT EXISTS metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id TEXT NOT NULL,
@@ -196,6 +230,10 @@ def connect(path: Path | None = None):
     conn.execute("PRAGMA journal_mode=WAL")   # dashboard, agendador e tarefas leem/escrevem ao mesmo tempo
     conn.executescript(SCHEMA)
     _migrate(conn)
+    if not conn.execute("SELECT 1 FROM settings WHERE key='knowledge_seeded'").fetchone():
+        from .knowledge import ensure_seeded   # 1.ª vez: fichas de partida (na mesma ligação: sem bloqueios)
+        ensure_seeded(conn)
+        conn.commit()
     try:
         yield conn
         conn.commit()

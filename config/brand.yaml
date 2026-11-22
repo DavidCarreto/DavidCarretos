@@ -39,14 +39,6 @@ voices:
   empresa: "Carretos Group: profissional, credível, nós (equipa), foco em qualidade, confiança e especialização Mercedes."
   auron: "AURON: tom por definir pelo David (dashboard → Factos → AURON). Até lá: neutro, profissional, frases curtas."
 
-# Termos que NÃO podem aparecer nas legendas (fora de links). Bloqueiam a aprovação e a publicação.
-#   todas: em todas as marcas (fornecedores/sistemas internos, funcionalidades ainda não lançadas). Deixam de
-#          ser bloqueados numa marca se o David os acrescentar aos factos dessa marca.
-#   geral: só nas contas do David e da Carretos Group (o nome AURON é só das contas da AURON)
-termos_proibidos:
-  todas: ["OfficeGest", "Typs4y", "Inovcorp", "TecAlliance", "Carretos Care"]
-  geral: ["AURON"]
-
 # Marcas com factos e tom próprios (o grupo indica-a em accounts.yaml → groups → facts)
 marcas:
   auron:

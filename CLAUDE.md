@@ -43,13 +43,15 @@ Ler `docs/VOZ.md` antes de usar qualquer áudio ou vídeo de voz. As gravações
 o conteúdo não é factual. Os vídeos do YouTube, a gravação do telemóvel e os 45 vídeos curtos partilhados **não se usam sem
 autorização explícita do David**: propor primeiro e esperar pela aprovação.
 
-## Não inventar factos
-A IA só afirma factos concretos que estejam em `config/factos.yaml` (ou na versão editada no dashboard
-→ Factos, guardada em `data/factos.yaml`, que tem prioridade); o resto sai como
-`[PREENCHER: ...]` e a publicação fica bloqueada até ser completada.
+## Não inventar factos (base de conhecimento)
+A IA só afirma factos concretos que estejam na **base de conhecimento** (dashboard → Conhecimento; fichas
+"publicáveis" e válidas da marca da conta). As fichas de partida estão em `config/conhecimento.yaml` (só
+servem para criar/propor fichas; o que vale é o que está no dashboard). O resto sai como `[PREENCHER: ...]`
+e a publicação fica bloqueada até ser completada. Fichas "interno"/"em desenvolvimento" nunca se publicam e
+as suas palavras bloqueiam a aprovação.
 
 ## Marcas separadas (AURON)
 A AURON é uma 3.ª marca (grupo `auron`, só Página de Facebook e Instagram @_auron_2026, portefólio Meta
-"RibaMotor"). Tem factos e tom próprios (`config/factos_auron.yaml` / dashboard → Factos → AURON) e a IA
+"RibaMotor"). Tem fichas e tom próprios (dashboard → Conhecimento → AURON) e a IA
 nunca mistura os factos da AURON com os do David/Carretos Group (nem o contrário).
 

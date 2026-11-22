@@ -1,0 +1,80 @@
+# BASE DE CONHECIMENTO INICIAL (fichas de partida).
+# O que vale é o que está no dashboard → Conhecimento (guardado na base de dados do servidor).
+# Este ficheiro só serve para:
+#   - criar as fichas da 1.ª vez;
+#   - propor fichas NOVAS nas atualizações (o dashboard pergunta antes de as acrescentar).
+# Cada ficha tem uma "chave" fixa (não mudar), para o sistema saber se já foi acrescentada ou apagada.
+#
+# marca:   geral (David Carreto + Carretos Group) | auron | todas (vale para todas as marcas)
+# secao:   empresa | servicos | condicoes | contactos | pessoas | conquistas | faq | regras | outros
+# estado:  publicavel (a IA pode usar) | interno (nunca se publica) | desenvolvimento (ainda não se publica)
+# funcao:  (contactos) cta = chamada à ação principal | alternativa | duvidas | info
+# palavras: (interno/desenvolvimento) palavras que, se aparecerem numa legenda, bloqueiam a aprovação
+
+marcas:
+  geral:
+    tom: >-
+      Quando falar de revisões, destacar o benefício: saber o preço na hora e marcar sem esperas.
+      A chamada à ação principal é o WhatsApp 211 45 46 46 (assistente disponível 24 horas que dá o preço
+      da revisão, explica o orçamento e os serviços e faz a marcação); o link de marcação online é a
+      alternativa para quem prefere fazer sozinho. NUNCA mencionar o nome "AURON" nas contas do David nem
+      da Carretos Group.
+    proibidas: ["AURON"]
+  auron:
+    tom: >-
+      Claro, direto e prático. Fala com donos de Mercedes-Benz que querem saber quanto custa a revisão sem
+      telefonar nem esperar por orçamento. Mensagem principal: "Sabe o preço da sua revisão na hora e marque
+      online." Frases curtas, linguagem simples, sem termos técnicos desnecessários. Tratar o cliente por
+      "você" (ou sem pronome). Transmitir transparência (preço linha a linha, sem surpresas), rapidez e
+      confiança, com um toque premium (Mercedes-Benz). Terminar sempre com chamada à ação para
+      auron.carretos.pt/schedule. Não indicar preços concretos de revisões, nem promoções que não estejam
+      nos factos, nem falar do David em nome pessoal.
+    proibidas: []
+
+fichas:
+  # ---------------- David Carreto + Carretos Group ----------------
+  - {chave: g-dono, marca: geral, secao: empresa, texto: "O dono é David Carreto."}
+  - {chave: g-empresa, marca: geral, secao: empresa, texto: "A empresa chama-se Carretos Group."}
+  - {chave: g-oficinas, marca: geral, secao: empresa, texto: "A Carretos Group tem 5 oficinas: Almada, Cacém, Lisboa, Mafra e Santarém."}
+  - {chave: g-mercedes, marca: geral, secao: empresa, texto: "As oficinas são especializadas em reparação e manutenção de Mercedes-Benz."}
+  - {chave: g-preco-hora, marca: geral, secao: servicos, texto: "Na Carretos Group pode saber o preço da revisão do seu Mercedes-Benz na hora, online."}
+  - {chave: g-preco-plano, marca: geral, secao: servicos, texto: "O preço é calculado segundo o plano de manutenção oficial da Mercedes-Benz e aparece linha a linha, sem surpresas."}
+  - {chave: g-matricula, marca: geral, secao: servicos, texto: "Basta indicar a matrícula ou o VIN e a quilometragem."}
+  - {chave: g-marcar, marca: geral, secao: servicos, texto: "A revisão pode ser marcada logo online, no mesmo momento."}
+  - {chave: g-assistente-wa, marca: geral, secao: servicos, texto: "No WhatsApp 211 45 46 46 há um assistente disponível 24 horas que dá o preço da revisão na hora, explica o orçamento e os serviços e trata da marcação, sem tempo de espera."}
+  - {chave: g-desconto, marca: geral, secao: condicoes, texto: "Quem paga online no momento da marcação tem 5% de desconto."}
+  - {chave: g-limites, marca: geral, secao: condicoes, texto: "A Carretos Group não aceita viaturas com mais de 15 anos e mais de 400.000 km."}
+  - {chave: g-whatsapp, marca: geral, secao: contactos, funcao: cta, valor: "https://wa.me/351211454646",
+     texto: "WhatsApp 211 45 46 46: preço da revisão, orçamento, serviços, marcação e dúvidas (assistente 24 horas)."}
+  - {chave: g-link-marcacao, marca: geral, secao: contactos, funcao: alternativa, valor: "auron.carretos.pt/schedule",
+     texto: "Ver o preço e marcar a revisão online, sozinho: auron.carretos.pt/schedule"}
+  - {chave: g-contas, marca: geral, secao: contactos, funcao: info,
+     texto: "Contas: Instagram @davidcarretos e @carretoclips; TikTok David Carreto e Carreto Clips; LinkedIn David Carreto e Carretos Group."}
+
+  # ---------------- AURON ----------------
+  - {chave: a-nome, marca: auron, secao: empresa, texto: "A marca chama-se AURON."}
+  - {chave: a-plataforma, marca: auron, secao: empresa, texto: "O AURON é a plataforma da Carretos Group para saber o preço da revisão do Mercedes-Benz na hora."}
+  - {chave: a-oficinas, marca: auron, secao: empresa, texto: "As revisões são feitas nas oficinas da Carretos Group."}
+  - {chave: a-plano, marca: auron, secao: servicos, texto: "O AURON calcula o preço segundo o plano de manutenção oficial da Mercedes-Benz."}
+  - {chave: a-so-mercedes, marca: auron, secao: servicos, texto: "O AURON é só para Mercedes-Benz."}
+  - {chave: a-identificacao, marca: auron, secao: servicos, texto: "O carro é identificado pela matrícula ou pelo VIN e pela quilometragem."}
+  - {chave: a-linha, marca: auron, secao: servicos, texto: "O preço aparece discriminado linha a linha, sem surpresas."}
+  - {chave: a-marcar, marca: auron, secao: servicos, texto: "A revisão pode ser marcada logo online, no mesmo sítio."}
+  - {chave: a-assistente-wa, marca: auron, secao: servicos, texto: "No WhatsApp 211 45 46 46 há um assistente integrado com o AURON, disponível 24 horas, que dá o preço, explica o orçamento e os serviços e faz a marcação."}
+  - {chave: a-limites, marca: auron, secao: condicoes, texto: "O AURON não aceita viaturas com mais de 15 anos e mais de 400.000 km."}
+  - {chave: a-desconto, marca: auron, secao: condicoes, texto: "Quem paga online no momento da marcação tem 5% de desconto."}
+  - {chave: a-link, marca: auron, secao: contactos, funcao: cta, valor: "auron.carretos.pt/schedule",
+     texto: "Ver o preço e marcar: auron.carretos.pt/schedule"}
+  - {chave: a-whatsapp, marca: auron, secao: contactos, funcao: alternativa, valor: "https://wa.me/351211454646",
+     texto: "WhatsApp 211 45 46 46: preço, orçamento e marcação com o assistente 24 horas."}
+  - {chave: a-contas, marca: auron, secao: contactos, funcao: info, texto: "Instagram: @_auron_2026. Página de Facebook: AURON."}
+
+  # ---------------- Todas as marcas: o que NÃO se publica ----------------
+  - {chave: t-sistemas, marca: todas, secao: regras, estado: interno, palavras: ["OfficeGest", "Typs4y", "Inovcorp", "TecAlliance"],
+     texto: "Fornecedores e sistemas internos (OfficeGest, Typs4y, Inovcorp, TecAlliance) não se publicam."}
+  - {chave: t-margens, marca: todas, secao: regras, estado: interno,
+     texto: "Margens e diferenças de preço entre sistemas não se publicam."}
+  - {chave: t-care, marca: todas, secao: servicos, estado: desenvolvimento, palavras: ["Carretos Care", "Contratos de Serviço"],
+     texto: "Contratos de Serviço / Carretos Care+ (ainda em desenvolvimento)."}
+  - {chave: t-pecas, marca: todas, secao: servicos, estado: desenvolvimento, palavras: ["peças equivalentes"],
+     texto: "Escolha entre peças equivalentes e originais (ainda em desenvolvimento)."}

@@ -576,82 +576,134 @@ def post_add_images(request: Request, pid: int, imagens: list[UploadFile] = File
     return RedirectResponse(f"/post/{pid}#img={len(ids)}", 303)
 
 
-@app.get("/factos", response_class=HTMLResponse)
-def facts_page(request: Request, ok: int = 0, marca: str = "geral"):
-    from ..config import facts_brand, facts_brands
-    from ..content.ai import brand_tone, verified_facts
-    if not request.state.user.is_admin:
-        return _forbidden("Só o administrador edita os factos.")
+@app.get("/factos")
+def facts_redirect(marca: str = "geral"):
+    return RedirectResponse(f"/conhecimento?marca={marca}", 303)
+
+
+# ------------------------------------------------------------------ base de conhecimento
+def _kb_brands() -> list[dict]:
+    from ..config import facts_brands
+    return [*facts_brands(), {"id": "todas", "name": "Todas as marcas", "groups": []}]
+
+
+@app.get("/conhecimento", response_class=HTMLResponse)
+def knowledge_page(request: Request, marca: str = "geral", ok: str = "", erro: str = "", editar: int = 0):
+    from .. import knowledge as kb
+    from ..config import facts_brand
     from ..content.facts_check import contradictions, usage
-    marcas = facts_brands()
-    if marca not in {m["id"] for m in marcas}:
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador edita a base de conhecimento.")
+    brands = _kb_brands()
+    if marca not in {b["id"] for b in brands}:
         marca = "geral"
-    facts = verified_facts(marca)
-    accs = {i: a for i, a in accounts().items() if facts_brand(i) == marca}   # só as contas desta marca
     with connect() as conn:
+        its = kb.items(conn, marca)
+        tone, words = kb.tone(conn, marca), kb.forbidden_words(conn, marca)
+        novos = kb.new_base_items(conn, marca)
+        hist = kb.history(conn, marca)
+        accs = {i: a for i, a in accounts().items() if marca == "todas" or facts_brand(i) == marca}
         caps = [r["caption"] or "" for r in conn.execute("SELECT account_id, caption FROM posts WHERE status != 'rejected'")
                 if r["account_id"] in accs]
-    return _render(request, "facts.html", {"factos": facts, "ok": ok, "uso": usage(facts, caps),
-                                           "contradicoes": contradictions(facts, accs), "marca": marca,
-                                           "marcas": marcas, "tom": brand_tone(marca),
-                                           "marca_nome": next(m["name"] for m in marcas if m["id"] == marca),
-                                           "novos": _new_base_facts(marca), "tom_base": _base_tone_missing(marca)})
+    texts = [i["text"] for i in its if i["status"] == "publicavel"]
+    used = {u["fact"]: u for u in usage(texts, caps)}
+    for i in its:
+        u = used.get(i["text"])
+        i["used"] = None if not u or not u["terms"] else u["used"]
+    by_section = [(sid, label, [i for i in its if i["section"] == sid]) for sid, label in kb.SECTIONS.items()]
+    return _render(request, "knowledge.html", {
+        "marca": marca, "brands": brands, "marca_nome": next(b["name"] for b in brands if b["id"] == marca),
+        "sections": by_section, "tone": tone, "words": words, "novos": novos, "hist": hist,
+        "contradicoes": contradictions(texts, accs), "accs": accs, "SECTIONS": kb.SECTIONS, "STATUS": kb.STATUS,
+        "ROLES": kb.ROLES, "ok": ok, "erro": erro, "editar": editar, "page": "conhecimento"})
 
 
-def _base_facts(marca: str) -> dict:
-    import yaml
-    from ..config import CONFIG_DIR
-    from ..content.ai import _file
-    p = CONFIG_DIR / _file(marca)
-    return (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
+@app.post("/conhecimento/ficha")
+async def knowledge_save(request: Request):
+    from urllib.parse import quote
+    from .. import knowledge as kb
+    me = request.state.user
+    if not me.is_admin:
+        return _forbidden("Só o administrador edita a base de conhecimento.")
+    form = await request.form()
+    data = {k: str(form.get(k, "")) for k in ("brand", "section", "text", "answer", "status", "role", "value",
+                                                "keywords", "valid_until")}
+    data["accounts"] = [str(a) for a in form.getlist("accounts")]
+    marca = data["brand"] if data["brand"] in {b["id"] for b in _kb_brands()} else "geral"
+    data["brand"] = marca
+    item_id = int(form.get("id") or 0)
+    try:
+        with connect() as conn:
+            row = kb.clean(data)
+            if form.get("acao") == "apagar" and item_id:
+                kb.delete(conn, item_id, me.id)
+                msg = "Ficha apagada."
+            elif item_id:
+                kb.update(conn, item_id, row, me.id)
+                msg = "Ficha guardada."
+            else:
+                kb.create(conn, row, me.id)
+                msg = "Ficha acrescentada."
+    except ValueError as exc:
+        return RedirectResponse(f"/conhecimento?marca={marca}&erro={quote(str(exc))}#{data['section']}", 303)
+    return RedirectResponse(f"/conhecimento?marca={marca}&ok={quote(msg)}#{data['section']}", 303)
 
 
-def _edited(marca: str) -> bool:
-    """Há uma versão editada no dashboard (data/) desta lista de factos?"""
-    from .. import config
-    from ..content.ai import _file
-    return (config.DATA_DIR / _file(marca)).exists()
-
-
-def _new_base_facts(marca: str) -> list[str]:
-    """Factos da lista de base (config/) que ainda não estão na versão editada no dashboard."""
-    from ..content.ai import verified_facts
-    if not _edited(marca):
-        return []
-    mine = set(verified_facts(marca))
-    return [str(f) for f in _base_facts(marca).get("factos", []) if str(f) not in mine]
-
-
-def _base_tone_missing(marca: str) -> str:
-    from ..content.ai import brand_tone
-    base = str(_base_facts(marca).get("tom") or "").strip()
-    if not _edited(marca) or not base or base in brand_tone(marca):
-        return ""
-    return base
-
-
-@app.post("/factos/juntar")
-def facts_merge(request: Request, marca: str = Form("geral")):
-    """Acrescenta à lista editada os factos novos (e o tom, se faltar) da lista de base, sem apagar nada."""
-    from ..content.ai import brand_tone, save_facts, verified_facts
+@app.post("/conhecimento/regras")
+def knowledge_rules(request: Request, marca: str = Form("geral"), tom: str = Form(""), proibidas: str = Form("")):
+    from urllib.parse import quote
+    from .. import knowledge as kb
     if not request.state.user.is_admin:
-        return _forbidden("Só o administrador edita os factos.")
-    tone = brand_tone(marca)
-    extra = _base_tone_missing(marca)
-    save_facts(verified_facts(marca) + _new_base_facts(marca), marca, (tone + "\n" + extra).strip() if extra else tone)
-    return RedirectResponse(f"/factos?ok=1&marca={marca}", 303)
+        return _forbidden("Só o administrador edita a base de conhecimento.")
+    with connect() as conn:
+        kb.save_brand_rules(conn, marca, tom, proibidas.split(","), request.state.user.id)
+    return RedirectResponse(f"/conhecimento?marca={marca}&ok={quote('Tom e palavras proibidas guardados.')}", 303)
 
 
-@app.post("/factos")
-def facts_save(request: Request, factos: str = Form(""), marca: str = Form("geral"), tom: str = Form("")):
-    from ..config import facts_brands
-    from ..content.ai import save_facts
+@app.post("/conhecimento/juntar")
+def knowledge_add_base(request: Request, marca: str = Form("geral")):
+    from urllib.parse import quote
+    from .. import knowledge as kb
     if not request.state.user.is_admin:
-        return _forbidden("Só o administrador edita os factos.")
-    if marca not in {m["id"] for m in facts_brands()}:
-        return _forbidden("Marca desconhecida.")
-    save_facts(factos.splitlines(), marca, tom)
-    return RedirectResponse(f"/factos?ok=1&marca={marca}", 303)
+        return _forbidden("Só o administrador edita a base de conhecimento.")
+    with connect() as conn:
+        n = kb.add_base_items(conn, marca, request.state.user.id)
+    return RedirectResponse(f"/conhecimento?marca={marca}&ok={quote(f'{n} ficha(s) acrescentada(s).')}", 303)
+
+
+@app.get("/conhecimento/exportar")
+def knowledge_export(request: Request):
+    import tempfile
+    from .. import knowledge as kb
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador.")
+    tmp = Path(tempfile.mkdtemp()) / f"conhecimento_{datetime.now():%Y%m%d}.xlsx"
+    with connect() as conn:
+        kb.export_xlsx(conn, tmp)
+    return FileResponse(tmp, filename=tmp.name,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.post("/conhecimento/importar")
+def knowledge_import(request: Request, ficheiro: UploadFile = File(...)):
+    import tempfile
+    from urllib.parse import quote
+    from .. import knowledge as kb
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador.")
+    data = ficheiro.file.read(10 * 1024 * 1024 + 1)
+    if len(data) > 10 * 1024 * 1024 or not (ficheiro.filename or "").lower().endswith(".xlsx"):
+        return RedirectResponse(f"/conhecimento?erro={quote('Envie um ficheiro Excel (.xlsx) até 10 MB.')}", 303)
+    tmp = Path(tempfile.mkdtemp()) / "importar.xlsx"
+    tmp.write_bytes(data)
+    try:
+        with connect() as conn:
+            created, updated, errors = kb.import_xlsx(conn, tmp, request.state.user.id)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(f"/conhecimento?erro={quote('Não consegui ler o Excel: ' + str(exc)[:150])}", 303)
+    msg = f"Importação: {created} nova(s), {updated} atualizada(s)."
+    err = "; ".join(errors[:8])
+    return RedirectResponse(f"/conhecimento?ok={quote(msg)}&erro={quote(err)}", 303)
 
 
 # ------------------------------------------------------------------ contas (ligar redes)
