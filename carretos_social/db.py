@@ -83,6 +83,27 @@ CREATE TABLE IF NOT EXISTS knowledge_history (
     old TEXT,
     new TEXT
 );
+-- caixa de entrada: comentários e mensagens recebidos das redes (webhooks da Meta) e respostas automáticas
+CREATE TABLE IF NOT EXISTS inbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT,
+    network TEXT,                        -- facebook | instagram
+    kind TEXT NOT NULL,                  -- comment | message
+    external_id TEXT UNIQUE,             -- id do comentário / mensagem na rede (evita respostas repetidas)
+    author_id TEXT,
+    author TEXT,
+    text TEXT,
+    context TEXT,                        -- id da publicação comentada
+    intent TEXT,
+    reply TEXT,
+    private_reply TEXT,
+    status TEXT NOT NULL DEFAULT 'novo', -- novo | respondido | ignorado | erro | desligado
+    note TEXT,
+    created_at TEXT NOT NULL,
+    replied_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_inbox ON inbox(account_id, created_at);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT

@@ -361,3 +361,30 @@ Escreve:
   estiverem nos FACTOS CONFIRMADOS; caso contrário escreve a legenda sem elas (ou [PREENCHER: …]).
 - hashtags: 3 a 8, relevantes."""
     return _ask(prompt, schema, max_tokens=4000, effort="low")
+
+
+INTENTS = ["pergunta", "preco", "marcacao", "elogio", "reclamacao", "spam", "outro"]
+
+
+def inbox_reply(acc: Account, kind: str, text: str, author: str, whatsapp: str) -> dict:
+    """Resposta automática a um comentário ou mensagem, sempre a encaminhar para o assistente do WhatsApp."""
+    schema = _obj({"intent": {"type": "string", "enum": INTENTS}, "reply": STR, "private_reply": STR,
+                   "alert": {"type": "boolean"}})
+    where = "comentário público numa publicação" if kind == "comment" else "mensagem privada (DM)"
+    prompt = f"""{_account_line(acc)}
+Recebemos este {where} de "{author or 'alguém'}":
+\"\"\"{text[:1500]}\"\"\"
+
+O WhatsApp {whatsapp} tem um assistente disponível 24 horas que dá o preço da revisão na hora, explica o
+orçamento e os serviços e faz a marcação. Escreve a resposta automática:
+- intent: pergunta | preco | marcacao | elogio | reclamacao | spam | outro
+- reply: resposta curta (máximo 2 frases e cerca de 250 carateres, no tom da conta, tratar por "você"), que encaminha SEMPRE para o
+  WhatsApp {whatsapp} quando há uma pergunta, pedido de preço, marcação, dúvida ou reclamação. Nunca dês preços,
+  prazos, disponibilidade nem factos que não estejam nos FACTOS CONFIRMADOS: o WhatsApp responde a isso.
+  Elogio: agradece de forma curta e calorosa (o WhatsApp é opcional). Spam, ofensas ou mensagens sem sentido:
+  reply vazio. Nunca uses [PREENCHER] aqui: se faltar informação, encaminha para o WhatsApp.
+- private_reply: (só para comentários) mensagem privada curta a enviar à pessoa, com o link {whatsapp};
+  vazio se for elogio simples ou spam.
+- alert: true se for reclamação, problema sério, urgência ou algo que o David deva ver pessoalmente."""
+    return _ask(prompt, schema, max_tokens=2000, effort="low")
+

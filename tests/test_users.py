@@ -1209,3 +1209,96 @@ def test_config_shows_telegram_bot_link(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "carretos_studio_bot")
     page = client.get("/configurar").text
     assert "@carretos_studio_bot" in page and 'href="https://t.me/carretos_studio_bot"' in page and "/start" in page
+
+
+def _signed(body: bytes, secret: str) -> dict:
+    import hashlib
+    import hmac
+    return {"x-hub-signature-256": "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest(),
+            "content-type": "application/json"}
+
+
+def test_inbox_webhook_auto_replies_and_safeguards(client, monkeypatch):
+    import json as _json
+    from carretos_social import inbox, notify
+    import carretos_social.http as http
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    secret = "0123456789abcdef0123456789abcdef"
+    monkeypatch.setenv("META_APP_SECRET", secret)
+    monkeypatch.setenv("META_WEBHOOK_VERIFY_TOKEN", "cs-verifica")
+    monkeypatch.setenv("FB_CARRETOSGROUP_PAGE_TOKEN", "PAGE2"); monkeypatch.setenv("FB_CARRETOSGROUP_PAGE_ID", "222")
+    monkeypatch.setenv("IG_AURON_TOKEN", "PA"); monkeypatch.setenv("IG_AURON_USER_ID", "17841477151306262")
+    monkeypatch.delenv("SOCIAL_ANTHROPIC_API_KEY", raising=False)               # sem IA: resposta-padrão
+    # verificação do webhook (Meta)
+    assert client.get("/webhooks/meta?hub.mode=subscribe&hub.verify_token=cs-verifica&hub.challenge=123").text == "123"
+    assert client.get("/webhooks/meta?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=1").status_code == 403
+    sent, alerts = [], []
+    class R:
+        def json(self): return {"id": "ok"}
+    monkeypatch.setattr(http, "request", lambda m, u, **k: sent.append((u, k)) or R())
+    monkeypatch.setattr(notify, "send", lambda t: alerts.append(t))
+    monkeypatch.setattr(inbox.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda s: target(*args)})())
+    fb = {"object": "page", "entry": [{"id": "222", "changes": [{"field": "feed", "value": {
+        "item": "comment", "verb": "add", "comment_id": "222_1_c1", "post_id": "222_1", "message": "Quanto custa a revisão?",
+        "from": {"id": "u9", "name": "Cliente"}}}]}]}
+    body = _json.dumps(fb).encode()
+    assert client.post("/webhooks/meta", content=body, headers={"content-type": "application/json",
+                                                               "x-hub-signature-256": "sha256=errada"}).status_code == 403
+    # desligado por defeito: guarda mas não responde
+    assert client.post("/webhooks/meta", content=body, headers=_signed(body, secret)).text == "ok"
+    with connect() as conn:
+        assert conn.execute("SELECT status FROM inbox WHERE external_id='222_1_c1'").fetchone()[0] == "desligado"
+    assert not sent
+    # ligar e receber de novo (outro comentário)
+    client.post("/mensagens/conta/fb_carretosgroup", data={"enabled": "1", "private": "1"})
+    fb["entry"][0]["changes"][0]["value"]["comment_id"] = "222_1_c2"
+    body = _json.dumps(fb).encode()
+    client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
+    urls = [u for u, _ in sent]
+    assert any(u.endswith("/222_1_c2/comments") for u in urls) and any(u.endswith("/me/messages") for u in urls)
+    reply = next(k["data"]["message"] for u, k in sent if u.endswith("/222_1_c2/comments"))
+    assert "wa.me/351211454646" in reply and "AURON" not in reply
+    private = next(k["json"] for u, k in sent if u.endswith("/me/messages"))
+    assert private["recipient"] == {"comment_id": "222_1_c2"}
+    # o mesmo evento reenviado pela Meta não responde duas vezes
+    n = len(sent)
+    client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
+    assert len(sent) == n
+    # comentário da própria Página: ignorado
+    fb["entry"][0]["changes"][0]["value"].update(comment_id="222_1_c3", **{"from": {"id": "222", "name": "Carretos Group"}})
+    body = _json.dumps(fb).encode()
+    client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
+    assert len(sent) == n
+    # Instagram: comentário → /replies; mensagem privada → /me/messages, uma vez por pessoa em 24 h
+    client.post("/mensagens/conta/ig_auron", data={"enabled": "1"})
+    ig = {"object": "instagram", "entry": [{"id": "17841477151306262", "changes": [{"field": "comments", "value": {
+        "id": "igc1", "text": "Dá para marcar?", "from": {"id": "u7", "username": "cliente_x"}, "media": {"id": "m1"}}}],
+        "messaging": [{"sender": {"id": "u7"}, "recipient": {"id": "17841477151306262"}, "message": {"mid": "mid1", "text": "Olá, preço?"}},
+                      {"sender": {"id": "u7"}, "recipient": {"id": "17841477151306262"}, "message": {"mid": "mid2", "text": "Ainda aí?"}},
+                      {"sender": {"id": "17841477151306262"}, "message": {"mid": "mid3", "text": "eco", "is_echo": True}}]}]}
+    body = _json.dumps(ig).encode()
+    client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
+    assert any(u.endswith("/igc1/replies") for u, _ in sent)
+    dms = [k["json"] for u, k in sent if u.endswith("/me/messages") and k["json"]["recipient"] == {"id": "u7"}]
+    assert len(dms) == 1 and "wa.me" in dms[0]["message"]["text"]
+    with connect() as conn:
+        st = dict(conn.execute("SELECT external_id, status FROM inbox WHERE external_id IN ('mid1','mid2','mid3')").fetchall())
+    assert st == {"mid1": "respondido", "mid2": "ignorado"}                        # eco não entra; 2.ª DM não repete
+    page = client.get("/mensagens").text
+    assert "Respostas automáticas ligadas" in page and "Quanto custa a revisão?" in page and "/webhooks/meta" in page
+
+
+def test_inbox_compose_with_ai_spam_and_alert(monkeypatch):
+    from carretos_social import inbox, notify
+    from carretos_social.config import accounts
+    from carretos_social.content import ai
+    monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "sk-ant-teste")
+    monkeypatch.setattr(ai, "inbox_reply", lambda acc, kind, text, author, wa: {
+        "intent": "spam", "reply": "", "private_reply": "", "alert": False})
+    assert inbox.compose(accounts()["ig_auron"], "comment", "ganhe dinheiro já")["reply"] == ""
+    monkeypatch.setattr(ai, "inbox_reply", lambda acc, kind, text, author, wa: {
+        "intent": "reclamacao", "reply": "Lamentamos muito. Fale connosco no WhatsApp", "private_reply": "", "alert": True})
+    res = inbox.compose(accounts()["ig_carretosgroup"], "message", "Correu mal a revisão")
+    assert res["alert"] and res["reply"].endswith("https://wa.me/351211454646")   # o link é sempre acrescentado

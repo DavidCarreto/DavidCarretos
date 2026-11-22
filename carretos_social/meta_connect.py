@@ -22,7 +22,10 @@ from .config import DATA_DIR, Account, accounts, save_account_override
 from .http import request
 
 SCOPES = ["pages_show_list", "pages_read_engagement", "pages_manage_posts", "business_management",
-          "instagram_basic", "instagram_content_publish", "instagram_manage_insights"]
+          "instagram_basic", "instagram_content_publish", "instagram_manage_insights",
+          # respostas automáticas (comentários e mensagens): ver docs/GUIA_RESPOSTAS.md
+          "pages_manage_metadata", "pages_manage_engagement", "pages_read_user_content", "pages_messaging",
+          "instagram_manage_comments", "instagram_manage_messages"]
 MIN_VERSION = 24
 
 

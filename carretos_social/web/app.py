@@ -129,7 +129,8 @@ def _render(request: Request, name: str, ctx: dict):
 @app.middleware("http")
 async def auth(request: Request, call_next):
     request.state.user = None
-    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor", "/publico/", "/privacidade", "/termos")
+    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor", "/publico/", "/privacidade", "/termos",
+                  "/webhooks/")
     verify = os.environ.get("TIKTOK_VERIFY_FILE", "")
     if verify and request.url.path == "/" + verify:       # verificação do domínio na TikTok (sem sessão)
         return PlainTextResponse(os.environ.get("TIKTOK_VERIFY_CONTENT", ""))
@@ -1035,6 +1036,83 @@ def manual_done(request: Request, pid: int, link: str = Form("")):
             fields["remote_url"] = link.strip()
         update_post(conn, pid, _by=me.id, **fields)
     return RedirectResponse("/manual?ok=1", 303)
+
+
+# ------------------------------------------------------------------ respostas automáticas (webhooks da Meta)
+@app.get("/webhooks/meta")
+def meta_webhook_verify(request: Request):
+    from .. import inbox
+    q = request.query_params
+    if q.get("hub.mode") == "subscribe" and hmac.compare_digest(q.get("hub.verify_token", ""), inbox.verify_token()):
+        return PlainTextResponse(q.get("hub.challenge", ""))
+    return PlainTextResponse("token inválido", 403)
+
+
+@app.post("/webhooks/meta")
+async def meta_webhook(request: Request):
+    from .. import inbox
+    body = await request.body()
+    if not inbox.valid_signature(body, request.headers.get("x-hub-signature-256", "")):
+        return PlainTextResponse("assinatura inválida", 403)
+    try:
+        inbox.receive(json.loads(body or b"{}"))
+    except Exception:  # noqa: BLE001 — responder sempre 200 para a Meta não desativar o webhook
+        log.exception("webhook meta")
+    return PlainTextResponse("ok")
+
+
+@app.get("/mensagens", response_class=HTMLResponse)
+def inbox_page(request: Request, ok: str = "", erro: str = ""):
+    from .. import inbox
+    me = request.state.user
+    accs = [a for a in inbox.eligible_accounts() if me.can_see(a.id)]
+    with connect() as conn:
+        ids = [a.id for a in accounts().values() if me.can_see(a.id)]
+        rows = [dict(r) for r in conn.execute(
+            f"SELECT * FROM inbox WHERE account_id IN ({','.join('?' * len(ids)) or 'NULL'}) "
+            "ORDER BY id DESC LIMIT 100", ids)] if ids else []
+    names = {a.id: a.name for a in accounts().values()}
+    return _render(request, "mensagens.html", {
+        "accs": [(a, inbox.account_settings(a.id)) for a in accs], "rows": rows, "names": names, "ok": ok,
+        "erro": erro, "page": "mensagens", "callback": _base_url(request) + "/webhooks/meta",
+        "verify": inbox.verify_token() if me.is_admin else "", "test": None})
+
+
+@app.post("/mensagens/conta/{acc_id}")
+def inbox_toggle(request: Request, acc_id: str, enabled: str = Form(""), private: str = Form("")):
+    from urllib.parse import quote
+    from .. import inbox
+    me = request.state.user
+    if not me.can_approve(acc_id):
+        return _forbidden("Ligar respostas automáticas é para quem aprova nesta conta.")
+    inbox.save_account_settings(acc_id, enabled=bool(enabled), private=bool(private))
+    state = "ligadas" if enabled else "desligadas"
+    return RedirectResponse(f"/mensagens?ok={quote(accounts()[acc_id].name + ': respostas automáticas ' + state + '.')}", 303)
+
+
+@app.post("/mensagens/subscrever/{acc_id}")
+def inbox_subscribe(request: Request, acc_id: str):
+    from urllib.parse import quote
+    from .. import inbox
+    if not request.state.user.is_admin or acc_id not in accounts():
+        return _forbidden()
+    try:
+        pid = inbox.subscribe(accounts()[acc_id])
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(f"/mensagens?erro={quote(accounts()[acc_id].name + ': ' + str(exc))}", 303)
+    return RedirectResponse(f"/mensagens?ok={quote(accounts()[acc_id].name + f': a Meta passa a enviar os comentários e as mensagens (Página {pid}).')}", 303)
+
+
+@app.post("/mensagens/testar", response_class=HTMLResponse)
+def inbox_test(request: Request, conta: str = Form(...), tipo: str = Form("comment"), texto: str = Form("")):
+    from .. import inbox
+    me = request.state.user
+    if conta not in accounts() or not me.can_see(conta):
+        return _forbidden()
+    res = inbox.compose(accounts()[conta], "message" if tipo == "message" else "comment", texto, "Teste")
+    page = inbox_page(request)
+    page.context["test"] = {"conta": conta, "tipo": tipo, "texto": texto, **res}
+    return tpl.TemplateResponse(request, "mensagens.html", page.context)
 
 
 @app.get("/media/{mid}")
