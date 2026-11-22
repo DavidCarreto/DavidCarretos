@@ -9,6 +9,8 @@ de analytics) podem ser alimentadas por importação de CSV — ver `import_csv`
 """
 from __future__ import annotations
 
+from ..linkedin_connect import api_version as linkedin_api_version
+
 import csv
 import os
 import re
@@ -26,7 +28,7 @@ LINKEDIN = "https://api.linkedin.com/rest"
 def _linkedin_headers(token: str) -> dict:
     return {
         "Authorization": f"Bearer {token}",
-        "LinkedIn-Version": os.environ.get("LINKEDIN_VERSION", "202510"),
+        "LinkedIn-Version": linkedin_api_version(),
         "X-Restli-Protocol-Version": "2.0.0",
     }
 

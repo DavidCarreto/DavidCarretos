@@ -38,8 +38,19 @@ def org_enabled() -> bool:
     return configured("pagina") and _yes("LINKEDIN_ORG_API")
 
 
+def api_version() -> str:
+    """Versão da API do LinkedIn (AAAAMM). O LinkedIn lança uma por mês e desliga cada uma ao fim de ~1 ano:
+    por defeito usa a de há 2 meses (sempre ativa); LINKEDIN_VERSION no .env sobrepõe."""
+    if os.environ.get("LINKEDIN_VERSION"):
+        return os.environ["LINKEDIN_VERSION"]
+    d = datetime.now().replace(day=1)
+    for _ in range(2):
+        d = (d - timedelta(days=1)).replace(day=1)
+    return d.strftime("%Y%m")
+
+
 def _headers(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}", "LinkedIn-Version": os.environ.get("LINKEDIN_VERSION", "202510"),
+    return {"Authorization": f"Bearer {token}", "LinkedIn-Version": api_version(),
             "X-Restli-Protocol-Version": "2.0.0"}
 
 

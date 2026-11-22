@@ -1061,3 +1061,81 @@ def test_tiktok_domain_verification_file(client, monkeypatch):
     monkeypatch.setenv("TIKTOK_VERIFY_CONTENT", "tiktok-developers-site-verification=XYZ12345")
     r = client.get("/tiktokAbC123.txt")
     assert r.status_code == 200 and r.text == "tiktok-developers-site-verification=XYZ12345"
+
+
+def test_telegram_config_discover_chat_and_test(client, monkeypatch):
+    import os
+    from carretos_social import notify
+    import carretos_social.http as http
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+        monkeypatch.delenv(k, raising=False)
+    page = client.get("/configurar").text
+    assert "Telegram · token do bot" in page and "Descobrir o chat" in page and "Telegram por configurar" in page
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456789:AAH" + "x" * 32)
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+    monkeypatch.setattr(http, "request", lambda m, u, **k: R({"result": [{"message": {"chat": {"id": 987654321}}}]}))
+    r = client.post("/configurar/telegram-chat", follow_redirects=False)
+    assert r.headers["location"] == "/configurar?tg=chat" and os.environ["TELEGRAM_CHAT_ID"] == "987654321"
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t: sent.append(t))
+    assert client.post("/configurar/testar-telegram", follow_redirects=False).headers["location"] == "/configurar?tg=ok"
+    assert "está a funcionar" in sent[0] and not sent[0].startswith("📣")       # o prefixo é posto pelo notify
+
+
+def test_manual_page_and_mark_published(client, tmp_path):
+    from PIL import Image
+    from carretos_social.db import add_media, add_post, connect, get_post
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    img = tmp_path / "a.jpg"; Image.new("RGB", (1080, 1350)).save(img)
+    with connect() as conn:
+        mid = add_media(conn, "image", str(img))
+        pid = add_post(conn, account_id="fb_davidcarreto", format="image", caption="Legenda para colar",
+                       media_ids=[mid], status="assist_sent", scheduled_at="2030-01-01T10:00:00+00:00")
+    page = client.get("/manual").text
+    assert "Para publicar à mão" in page and "Legenda para colar" in page and "Copiar legenda" in page
+    assert f'href="/media/{mid}" download' in page and "Publicar à mão" in client.get("/").text
+    client.post(f"/manual/{pid}/publicado", data={"link": "https://facebook.com/p/1"}, follow_redirects=False)
+    with connect() as conn:
+        row = get_post(conn, pid)
+        assert (row["status"], row["remote_url"]) == ("published", "https://facebook.com/p/1")
+    assert "Não há nada para publicar à mão" in client.get("/manual").text
+
+
+def test_health_check_alerts_once_and_banner(client, monkeypatch):
+    from carretos_social import health
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("FB_AURON_PAGE_TOKEN", "t"); monkeypatch.setenv("FB_AURON_PAGE_ID", "900")
+    state = {"ok": True}
+    monkeypatch.setattr(health, "test_account", lambda acc: (state["ok"], "Página «AURON» ✓" if state["ok"]
+                                                             else "a ligação falhou: (#190) Error validating access token"))
+    alerts = []
+    monkeypatch.setattr(health, "_alert", lambda items: alerts.append(items))
+    res = health.check_all()
+    assert res["fb_auron"]["ok"] and not alerts and "Ligações com problemas" not in client.get("/").text
+    state["ok"] = False
+    health.check_all(); health.check_all()                                   # alerta uma só vez
+    assert len(alerts) == 1 and "AURON (Página de Facebook)" in [r["name"] for r in alerts[0]]
+    home = client.get("/").text
+    assert "Ligações com problemas" in home and "Error validating access token" in home
+    r = client.post("/contas/verificar", follow_redirects=False)
+    assert "erro=" in r.headers["location"]
+    assert "verificada" in client.get("/contas").text
+
+
+def test_linkedin_version_and_fb_carretoclips(monkeypatch):
+    from datetime import datetime
+    from carretos_social.config import accounts
+    from carretos_social.linkedin_connect import api_version
+    monkeypatch.delenv("LINKEDIN_VERSION", raising=False)
+    v = api_version()
+    assert len(v) == 6 and v < datetime.now().strftime("%Y%m")              # sempre uma versão já lançada
+    monkeypatch.setenv("LINKEDIN_VERSION", "202601")
+    assert api_version() == "202601"
+    acc = accounts()["fb_carretoclips"]
+    assert acc.platform == "facebook_page" and acc.group == "david" and not acc.connected

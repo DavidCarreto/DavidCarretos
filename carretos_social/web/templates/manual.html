@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% block body %}
+<h1>Para publicar à mão</h1>
+<p class="muted" style="font-size:14px">Publicações que as redes não deixam sair sozinhas: Facebook pessoal, página do LinkedIn (até à aprovação),
+TikTok recusado e rascunhos do TikTok à espera de serem publicados na app. Copie a legenda, descarregue os ficheiros,
+publique na rede e carregue em <b>"✓ Já publiquei"</b>.</p>
+{% if not tg_ok %}<div class="card" style="border-color:var(--gold);margin-bottom:12px">ℹ O Telegram não está configurado: estas publicações só aparecem aqui. Para as receber no telemóvel, configure-o em <a class="gold" href="/configurar">⚙ Configurar</a>.</div>{% endif %}
+{% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ Marcada como publicada.</div>{% endif %}
+{% if not posts %}<p class="muted">Não há nada para publicar à mão. ✓</p>{% endif %}
+{% for p in posts %}
+<div class="card" style="margin-bottom:12px"><div class="post">
+ {% if p.media and p.media[0].video %}<video src="/media/{{ p.media[0].id }}" controls playsinline preload="metadata"></video>
+ {% elif p.media %}<img src="/media/{{ p.media[0].id }}" alt="">{% else %}<div style="width:120px;aspect-ratio:9/16;border-radius:12px;background:#1b1b1f"></div>{% endif %}
+ <div>
+  <div class="meta">#{{ p.id }} · {{ ICON.get(p.account.platform,'') }} {{ p.account.name }}{% if p.account.handle %} (@{{ p.account.handle }}){% endif %} · {{ p.when|quando if p.when else 'sem data' }}</div>
+  <b>{{ p.title or tema(p.pillar) }}</b> <span class="pill" style="color:{{ STATUS[p.status][1] }};border-color:{{ STATUS[p.status][1] }}">{{ STATUS[p.status][0] }}</span>
+  {% if p.error %}<p class="muted" style="font-size:12px;margin:4px 0;word-break:break-word">{{ p.error }}</p>{% endif %}
+  {% if p.status == 'tiktok_draft' %}<p style="font-size:13px;margin:4px 0;color:#f2cc60">Já está nos rascunhos da app TikTok: abra a notificação da TikTok{% if p.type == 'video' %}, cole a legenda, escolha a capa{% endif %} e publique. Confirme a privacidade antes de publicar.</p>{% endif %}
+  <textarea readonly rows="5" style="margin-top:6px" id="cap{{ p.id }}">{{ p.caption or '' }}{% if p.tags %}
+
+{{ p.tags }}{% endif %}</textarea>
+  <div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">
+   <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('cap{{ p.id }}').value).then(()=>{this.textContent='✓ Copiada'})">📋 Copiar legenda</button>
+   {% for m in p.media %}<a class="btn" href="/media/{{ m.id }}" download>⬇ {{ 'Vídeo' if m.video else 'Imagem' }} {{ loop.index if p.media|length > 1 }}</a>{% endfor %}
+   {% if me.can_create(p.account_id) %}<form method="post" action="/manual/{{ p.id }}/publicado" class="row" style="gap:6px">
+    <input name="link" placeholder="link da publicação (opcional)" style="max-width:240px">
+    <button class="btn gold">✓ Já publiquei</button></form>{% endif %}
+  </div>
+ </div></div></div>
+{% endfor %}{% endblock %}

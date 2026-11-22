@@ -138,7 +138,7 @@ def _send_caption(req: PublishRequest, test: bool = False) -> list[str]:
         out.append(f"✘ Email da legenda: {type(exc).__name__}: {exc}")
     try:
         if notify.enabled():
-            notify.send("📣 Carretos Studio · " + text)
+            notify.send(text)                      # o notify já põe "📣 Carretos Studio · "
             out.append("✔ Legenda enviada pelo Telegram")
     except Exception as exc:  # noqa: BLE001
         out.append(f"✘ Telegram: {exc}")

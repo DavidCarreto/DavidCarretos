@@ -4,6 +4,10 @@
  'erro': ('#f85149', '✘ O email de teste falhou: ' ~ motivo ~ '. Confirma o servidor, a porta (587 ou 465), o utilizador e a palavra-passe de aplicação.'),
  'nao_configurado': ('#d29922', 'O envio de email ainda não está configurado: preenche os campos "Email · …" e guarda.'),
  'sem_email': ('#d29922', 'Primeiro indica o teu email em "A minha conta".')} %}
+{% set tgs = {'ok': ('#3fb950', '✓ Mensagem de teste enviada pelo Telegram. Confirme no telemóvel.'),
+ 'chat': ('#3fb950', '✓ Chat do Telegram encontrado e guardado. Carregue agora em "Enviar mensagem de teste".'),
+ 'erro': ('#f85149', '✘ Telegram: ' ~ motivo)} %}
+{% if tg in tgs %}<div class="card" style="border-color:{{ tgs[tg][0] }};margin-bottom:12px;word-break:break-word">{{ tgs[tg][1] }}</div>{% endif %}
 {% if teste in testes %}<div class="card" style="border-color:{{ testes[teste][0] }};margin-bottom:12px">{{ testes[teste][1] }}</div>{% endif %}
 {% if erros %}<div class="card" style="border-color:#f85149;margin-bottom:12px">⚠ Não guardei estes campos porque o valor não parece certo
 (o browser pode ter preenchido um utilizador ou uma palavra-passe guardada):
@@ -29,7 +33,17 @@ Os outros campos foram guardados.</div>{% endif %}
 <b>Testar o envio de email</b>
 <p class="muted" style="font-size:13px;margin:4px 0 10px">Envia um email de teste para {{ me.email or 'o teu email (indica-o em "A minha conta")' }}.
 {% if not email_ok %}Primeiro preenche e guarda os campos "Email · …".{% endif %}</p>
-<button class="btn" {{ 'disabled' if not email_ok }}>✉ Enviar email de teste</button></form>{% endif %}
+<button class="btn" {{ 'disabled' if not email_ok }}>✉ Enviar email de teste</button></form>
+<div class="card" style="margin-top:12px"><b>Telegram (posts para publicar à mão, lembretes e alertas)</b>
+<ol class="muted" style="font-size:13px;margin:6px 0 10px;padding-left:18px">
+ <li>No Telegram, abra <b>@BotFather</b> → <code>/newbot</code> → nome "Carretos Studio" → copie o <b>token</b> que ele dá.</li>
+ <li>Cole-o acima em "Telegram · token do bot" e carregue em <b>Guardar</b>.</li>
+ <li>Abra o bot que criou e carregue em <b>Iniciar</b> (ou escreva "Olá").</li>
+ <li>Carregue em <b>Descobrir o chat</b> e depois em <b>Enviar mensagem de teste</b>.</li></ol>
+<div class="row" style="gap:8px">
+<form method="post" action="/configurar/telegram-chat"><button class="btn" {{ 'disabled' if not tg_token }}>🔎 Descobrir o chat</button></form>
+<form method="post" action="/configurar/testar-telegram"><button class="btn" {{ 'disabled' if not tg_ok }}>✈ Enviar mensagem de teste</button></form>
+</div>{% if not tg_ok %}<p class="fmt-line ajustar" style="margin:8px 0 0">⚠ Telegram por configurar: os posts em modo assistido ficam só em "Para publicar à mão" no dashboard.</p>{% endif %}</div>{% endif %}
 {% if not first %}<div class="card" style="margin-top:12px">
 <b>Manutenção</b>
 <p class="muted" style="font-size:13px;margin:4px 0 10px">Atualiza o Carretos Studio para a versão mais recente (faz primeiro uma cópia de segurança da base de dados e reinicia os serviços). Não precisa da consola da Hetzner.</p>

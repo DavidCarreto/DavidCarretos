@@ -21,6 +21,14 @@ accounts:
     default_times: ["13:00", "20:30"]
     best_times: auto
 
+  fb_carretoclips:            # ponto de partida: os mesmos vídeos curtos do Instagram (Reels da Página)
+    posts_per_week: 3
+    formats: {video: 3}
+    pillar_mix: {mercedes_tecnico: 60, carretos_group: 20, conquistas: 10, pessoas: 10}
+    days: [tue, thu, sat]
+    default_times: ["20:30"]
+    best_times: auto
+
   fb_davidcarreto:
     posts_per_week: 3
     formats: {video: 2, image: 1}

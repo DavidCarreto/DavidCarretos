@@ -2,6 +2,8 @@
 (w_organization_social, requer Community Management API aprovada)."""
 from __future__ import annotations
 
+from ..linkedin_connect import api_version as linkedin_api_version
+
 import os
 import re
 from pathlib import Path
@@ -20,7 +22,7 @@ class LinkedInPublisher(Publisher):
         if not token or not author:
             raise RuntimeError(f"{req.account.id}: faltam token/URN LinkedIn no .env")
         self.h = {"Authorization": f"Bearer {token}",
-                  "LinkedIn-Version": os.environ.get("LINKEDIN_VERSION", "202510"),
+                  "LinkedIn-Version": linkedin_api_version(),
                   "X-Restli-Protocol-Version": "2.0.0", "Content-Type": "application/json"}
         self.author = author
         body = {

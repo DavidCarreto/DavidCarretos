@@ -121,6 +121,8 @@ def _render(request: Request, name: str, ctx: dict):
         from ..expiry import expiring
         ctx.setdefault("reboot", system.reboot_notice())
         ctx.setdefault("expiring", expiring())
+        from .. import health
+        ctx.setdefault("health_bad", health.failing())
     return tpl.TemplateResponse(request, name, ctx)
 
 
@@ -731,7 +733,9 @@ def accounts_page(request: Request, msg: str = "", erro: str = ""):
         rows.append((g, items))
     from .. import linkedin_connect as lc
     from .. import tiktok_connect as tc
+    from .. import health
     return _render(request, "accounts.html", {"rows": rows, "found": found, "configured": mc.configured(),
+                                              "health": health.results(),
                                               "li": {"configured": lc.configured(), "org": lc.org_enabled(),
                                                      "org_app": lc.configured("pagina"),
                                                      "saved": lc.saved(),
@@ -809,16 +813,25 @@ async def meta_associate(request: Request):
 @app.post("/contas/{acc_id}/testar")
 def account_test(request: Request, acc_id: str):
     from urllib.parse import quote
-    from .. import linkedin_connect as lc
-    from .. import meta_connect as mc
-    from .. import tiktok_connect as tc
+    from .. import health
     if not request.state.user.is_admin or acc_id not in accounts():
         return _forbidden()
     acc = accounts()[acc_id]
-    tester = {"tiktok": tc.test, "linkedin_member": lc.test, "linkedin_org": lc.test}.get(acc.platform, mc.test)
-    ok, text = tester(acc)
+    ok, text = health.test_account(acc)
     key = "msg" if ok else "erro"
     return RedirectResponse(f"/contas?{key}={quote(accounts()[acc_id].name + ': ' + text)}", 303)
+
+
+@app.post("/contas/verificar")
+def accounts_check_all(request: Request):
+    from urllib.parse import quote
+    from .. import health
+    if not request.state.user.is_admin:
+        return _forbidden()
+    res = health.check_all(alert=False)
+    bad = [r["name"] for r in res.values() if not r["ok"]]
+    text = f"Verificadas {len(res)} ligações: " + ("todas a funcionar." if not bad else f"com problemas: {', '.join(bad)}.")
+    return RedirectResponse(f"/contas?{'msg' if not bad else 'erro'}={quote(text)}", 303)
 
 
 @app.post("/contas/{acc_id}/desligar")
@@ -993,6 +1006,35 @@ def public_file(name: str):
     if not f.exists():
         return HTMLResponse("não encontrado", 404)
     return FileResponse(f)
+
+
+# ------------------------------------------------------------------ para publicar à mão
+@app.get("/manual", response_class=HTMLResponse)
+def manual_page(request: Request, ok: str = ""):
+    """Posts em modo assistido (Facebook pessoal, página LinkedIn, TikTok recusado) e rascunhos do TikTok por
+    publicar: legenda para copiar, ficheiros para descarregar e "Já publiquei"."""
+    me = request.state.user
+    clause, args = _visible_clause(me)
+    with connect() as conn:
+        rows = [_post_view(conn, r) for r in conn.execute(
+            f"SELECT * FROM posts WHERE status IN ('assist_sent','tiktok_draft') AND {clause} "
+            "ORDER BY scheduled_at DESC, id DESC LIMIT 60", args)]
+    return _render(request, "manual.html", {"posts": rows, "ok": ok, "page": "manual",
+                                            "tg_ok": notify_enabled()})
+
+
+@app.post("/manual/{pid}/publicado")
+def manual_done(request: Request, pid: int, link: str = Form("")):
+    me = request.state.user
+    with connect() as conn:
+        row = get_post(conn, pid)
+        if not me.can_create(row["account_id"]):
+            return _forbidden("Nesta conta só tens acesso para ver.")
+        fields = {"status": "published", "error": None}
+        if link.strip().startswith("http"):
+            fields["remote_url"] = link.strip()
+        update_post(conn, pid, _by=me.id, **fields)
+    return RedirectResponse("/manual?ok=1", 303)
 
 
 @app.get("/media/{mid}")
@@ -1273,6 +1315,9 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("SMTP_USER", "Email · utilizador (endereço de envio)", False),
     ("SMTP_PASSWORD", "Email · palavra-passe de aplicação (NÃO usar a 'carretos-avaliacoes')", True),
     ("SMTP_FROM", "Email · remetente (opcional, ex.: Redes Sociais <endereco@…>)", False),
+    # Telegram: recebe o modo assistido (posts para publicar à mão), lembretes e alertas
+    ("TELEGRAM_BOT_TOKEN", "Telegram · token do bot (dado pelo @BotFather)", True),
+    ("TELEGRAM_CHAT_ID", "Telegram · chat (preenche-se sozinho com o botão \"Descobrir o chat\")", False),
     # ligação às Páginas de Facebook e aos Instagrams (app da Meta; ver docs/GUIA_META.md)
     ("META_APP_ID", "Meta · App ID (da app em developers.facebook.com)", False),
     ("META_APP_SECRET", "Meta · App Secret", True),
@@ -1301,6 +1346,8 @@ KEY_FORMATS = {
     "ELEVENLABS_API_KEY": (_re.compile(r"^(sk_)?[0-9a-fA-F]{32,64}$"), "começa por sk_ seguido de letras/números"),
     "ELEVENLABS_VOICE_ID": (_re.compile(r"^[A-Za-z0-9]{15,40}$"), "só letras e números, sem espaços (~20)"),
     "PIXABAY_API_KEY": (_re.compile(r"^\d+-[0-9a-fA-F]{20,}$"), "números, um hífen e letras/números"),
+    "TELEGRAM_BOT_TOKEN": (_re.compile(r"^\d{6,12}:[A-Za-z0-9_\-]{30,}$"), "números, dois pontos e letras (ex.: 123456:ABC…)"),
+    "TELEGRAM_CHAT_ID": (_re.compile(r"^-?\d{4,20}$"), "só números (pode começar por -)"),
     "META_APP_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
     "META_APP_SECRET": (_re.compile(r"^[0-9a-fA-F]{32}$"), "32 letras/números (0-9, a-f)"),
     "META_LOGIN_CONFIG_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
@@ -1332,8 +1379,13 @@ def _bad_key(key: str, value: str) -> str | None:
     return None
 
 
+def notify_enabled() -> bool:
+    from .. import notify
+    return notify.enabled()
+
+
 @app.get("/configurar", response_class=HTMLResponse)
-def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "", motivo: str = ""):
+def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "", motivo: str = "", tg: str = ""):
     first = users.count() == 0
     me = _current_user(request) if not first else None
     if not first and not (me and me.is_admin):
@@ -1343,7 +1395,9 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     labels = {k: label for k, label, _ in CONFIG_FIELDS}
     erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
     return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok, "erros": erros,
-                                            "teste": teste, "motivo": motivo, "email_ok": mailer.configured()})
+                                            "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),
+                                            "tg": tg, "tg_ok": notify_enabled(),
+                                            "tg_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN"))})
 
 
 @app.post("/configurar")
@@ -1434,6 +1488,49 @@ def reboot_seen(request: Request):
     if _admin_only(request):
         system.dismiss_reboot()
     return RedirectResponse(request.headers.get("referer") or "/", 303)
+
+
+@app.post("/configurar/telegram-chat")
+def config_telegram_chat(request: Request):
+    """Descobre o chat do Telegram: depois de escrever uma mensagem ao bot, lê-a e guarda o número do chat."""
+    from urllib.parse import quote
+    from .. import envfile
+    from ..http import request as http
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        return RedirectResponse("/configurar?tg=erro&motivo=" + quote("primeiro guarde o token do bot"), 303)
+    try:
+        updates = http("GET", f"https://api.telegram.org/bot{token}/getUpdates", retries=1).json().get("result", [])
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse("/configurar?tg=erro&motivo=" + quote(str(exc).replace(token, "***")), 303)
+    chats = [u.get("message", u.get("my_chat_member", {})).get("chat", {}) for u in updates]
+    chats = [c for c in chats if c.get("id")]
+    if not chats:
+        return RedirectResponse("/configurar?tg=erro&motivo=" + quote(
+            "ainda não há mensagens: abra o bot no Telegram, carregue em Iniciar (ou escreva Olá) e tente de novo"), 303)
+    envfile.set_env({"TELEGRAM_CHAT_ID": str(chats[-1]["id"])}, root=ROOT)
+    return RedirectResponse("/configurar?tg=chat", 303)
+
+
+@app.post("/configurar/testar-telegram")
+def config_test_telegram(request: Request):
+    from urllib.parse import quote
+    from .. import notify
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    if not notify.enabled():
+        return RedirectResponse("/configurar?tg=erro&motivo=" + quote("falta o token do bot ou o chat"), 303)
+    try:
+        notify.send("Teste: o Telegram do Carretos Studio está a funcionar. Aqui vão chegar os posts para publicar "
+                    "à mão, os lembretes e os alertas.")
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).replace(os.environ.get("TELEGRAM_BOT_TOKEN", "\0"), "***")
+        return RedirectResponse("/configurar?tg=erro&motivo=" + quote(msg), 303)
+    return RedirectResponse("/configurar?tg=ok", 303)
 
 
 @app.post("/configurar/testar-email")

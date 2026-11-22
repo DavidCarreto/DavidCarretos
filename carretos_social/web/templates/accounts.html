@@ -53,6 +53,8 @@
 </div>
 </div>
 
+<form method="post" action="/contas/verificar" style="margin:0 0 12px"><button class="btn">🩺 Verificar todas as ligações agora</button>
+<span class="muted" style="font-size:12px">Também é feito sozinho uma vez por dia; se alguma deixar de funcionar, avisa aqui, por email e pelo Telegram.</span></form>
 <form method="post" action="/contas/meta/associar">
 {% for g, items in rows %}<div class="ghead"><span class="gtag {{ g.id }}">{{ g.short }}</span></div>
 {% for it in items %}{% set a = it.a %}
@@ -60,7 +62,8 @@
  <div style="flex:1;min-width:220px">
   <b>{{ ICON.get(a.platform,'') }} {{ a.name }}</b>{% if a.handle %} <span class="muted">@{{ a.handle }}</span>{% endif %}<br>
   {% if a.has_credentials %}<span class="pill" style="color:#3fb950;border-color:#3fb950">✓ Ligada</span>{% if it.over.meta_name %} <span class="muted" style="font-size:12px">{{ it.over.meta_name }}{% if it.over.linked_at %} · desde {{ it.over.linked_at.replace('T',' ') }}{% endif %}</span>{% endif %}
-   {% if it.over.token_expires %}<span class="muted" style="font-size:12px"> · volte a ligar antes de {{ it.over.token_expires }}</span>{% endif %}<br>{% endif %}
+   {% if it.over.token_expires %}<span class="muted" style="font-size:12px"> · volte a ligar antes de {{ it.over.token_expires }}</span>{% endif %}
+   {% set h = health.get(a.id) %}{% if h %}<span style="font-size:12px;color:{{ '#8ddb8c' if h.ok else '#ff9b93' }}"> · verificada {{ h.at.replace('T',' ') }} {{ '✓' if h.ok else '✕ ' ~ h.text }}</span>{% endif %}<br>{% endif %}
   {% if a.mode == 'draft' %}<span class="pill" style="color:#25F4EE;border-color:#25F4EE">Rascunhos no TikTok</span> <span class="muted" style="font-size:12px">Vai para os rascunhos da app TikTok; publica-se lá.</span>
   {% elif a.assist_reason %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span> <span class="muted" style="font-size:12px">{{ a.assist_reason }}</span>
   {% elif not a.has_credentials %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Por ligar</span>

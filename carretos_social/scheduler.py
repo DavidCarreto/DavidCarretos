@@ -127,6 +127,7 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     env_file = ROOT / ".env"
     env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
     last_sync = last_reminder = 0.0
+    last_health = time.time() - 23 * 3600          # 1.ª verificação das ligações ~1 h depois de arrancar
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
@@ -144,6 +145,14 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
             except Exception as exc:  # noqa: BLE001
                 print("lembrete de ligações:", exc)
             last_reminder = time.time()
+        if time.time() - last_health > 24 * 3600:
+            try:
+                from .health import check_all
+                bad = [k for k, r in check_all().items() if not r["ok"]]
+                print("ligações verificadas" + (f"; com problemas: {', '.join(bad)}" if bad else ": todas OK"))
+            except Exception as exc:  # noqa: BLE001
+                print("verificação das ligações:", exc)
+            last_health = time.time()
         if env_file.exists() and env_file.stat().st_mtime != env_mtime:
             print("Configuração alterada: a reiniciar para carregar as chaves novas.")
             raise SystemExit(0)  # o systemd volta a arrancar o serviço

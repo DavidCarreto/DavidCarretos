@@ -53,6 +53,20 @@ accounts:
       access_token_env: IG_CARRETOCLIPS_TOKEN
       user_id_env: IG_CARRETOCLIPS_USER_ID
 
+  - id: fb_carretoclips
+    group: david
+    platform: facebook_page
+    name: "Carreto Clips (Página de Facebook)"
+    handle: "Carreto Clips"
+    status: por_ligar         # liga-se em Contas → "Ligar com o Facebook" (Página «Carreto Clips»)
+    voice: marca
+    narrator: generica
+    publish_mode: auto
+    auto_approve: false
+    credentials:
+      access_token_env: FB_CARRETOCLIPS_PAGE_TOKEN
+      page_id_env: FB_CARRETOCLIPS_PAGE_ID
+
   - id: fb_davidcarreto
     group: david
     platform: facebook_profile
@@ -111,7 +125,7 @@ accounts:
     group: carretos
     platform: linkedin_org
     name: "Carretos Group (LinkedIn empresa)"
-    handle: ""                # por preencher (o David indica)
+    handle: ""                # preenchido ao ligar a conta (Contas)
     # modo assistido até o LinkedIn aprovar a Community Management API (ver docs/GUIA_LINKEDIN.md)
     voice: empresa
     narrator: generica      # voz: david | generica | nenhum
@@ -127,7 +141,7 @@ accounts:
     group: carretos
     platform: instagram
     name: "Carretos Group (Instagram)"
-    handle: ""                # por preencher (o David indica)
+    handle: ""                # preenchido ao ligar a conta (Contas)
     status: por_ligar
     voice: empresa
     narrator: generica
@@ -142,7 +156,7 @@ accounts:
     group: carretos
     platform: facebook_page
     name: "Carretos Group (Página de Facebook)"
-    handle: ""                # por preencher (o David indica)
+    handle: ""                # preenchido ao ligar a conta (Contas)
     status: por_ligar
     voice: empresa
     narrator: generica
@@ -157,7 +171,7 @@ accounts:
     group: carretos
     platform: tiktok
     name: "Carretos Group (TikTok)"
-    handle: "carretos_group"                # por preencher (o David indica)
+    handle: "carretos_group"
     status: por_ligar
     voice: empresa
     narrator: generica
@@ -172,7 +186,7 @@ accounts:
     group: carretos
     platform: youtube
     name: "Carretos Group (YouTube)"
-    handle: ""                # por preencher (o David indica)
+    handle: ""                # preenchido ao ligar a conta (Contas)
     status: por_ligar
     voice: empresa
     narrator: generica
