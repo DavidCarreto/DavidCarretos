@@ -93,6 +93,45 @@ def valid_signature(body: bytes, header: str) -> bool:
     return hmac.compare_digest(expected, header.split("=", 1)[1])
 
 
+def own_ids() -> set[str]:
+    """Ids de todas as Páginas e Instagrams ligados ao Carretos Studio (para nunca responder a contas nossas)."""
+    ids: set[str] = set()
+    for a in eligible_accounts():
+        for key in ("page_id_env", "user_id_env"):
+            if a.secret(key):
+                ids.add(str(a.secret(key)))
+    try:
+        from .meta_connect import discovered
+        for p in discovered().get("pages", []):
+            ids.add(str(p["id"]))
+            if p.get("ig"):
+                ids.add(str(p["ig"]["id"]))
+    except Exception:  # noqa: BLE001
+        pass
+    return ids
+
+
+def own_handles() -> set[str]:
+    out = {"davidcarretos", "carretoclips", "carretos_group", "_auron_2026"}
+    for a in accounts().values():
+        if a.platform in ("instagram", "facebook_page") and a.handle:
+            out.add(a.handle.lower().lstrip("@"))
+    try:
+        from .meta_connect import discovered
+        for p in discovered().get("pages", []):
+            out.add((p.get("name") or "").lower())
+            if p.get("ig") and p["ig"].get("username"):
+                out.add(p["ig"]["username"].lower())
+    except Exception:  # noqa: BLE001
+        pass
+    out.discard("")
+    return out
+
+
+def is_own(author_id: str, author: str) -> bool:
+    return (bool(author_id) and author_id in own_ids()) or ((author or "").lower().lstrip("@") in own_handles())
+
+
 def _account_for(network: str, entry_id: str) -> Account | None:
     for a in eligible_accounts():
         if network == "facebook" and a.platform == "facebook_page" and a.secret("page_id_env") == entry_id:
@@ -128,10 +167,46 @@ def parse(payload: dict) -> list[dict]:
             msg = m.get("message") or {}
             if not msg or msg.get("is_echo") or not msg.get("text"):
                 continue
-            out.append({"account_id": acc.id if acc else None, "network": network, "kind": "message",
+            # a conta é a do DESTINATÁRIO (quando duas contas nossas conversam, a Meta avisa as duas)
+            recipient = str((m.get("recipient") or {}).get("id", ""))
+            racc = _account_for(network, recipient) or (acc if recipient in ("", own) else None)
+            out.append({"account_id": racc.id if racc else None, "network": network, "kind": "message",
                         "external_id": msg.get("mid"), "author_id": str((m.get("sender") or {}).get("id", "")),
-                        "author": "", "text": msg.get("text", ""), "context": "", "own": own})
+                        "author": "", "text": msg.get("text", ""), "context": "", "own": recipient or own})
     return [e for e in out if e["external_id"]]
+
+
+def log_event(payload: dict | None, signature_ok: bool) -> None:
+    """Guarda um resumo dos últimos 100 avisos recebidos da Meta (sem tokens) para diagnóstico."""
+    entries = []
+    for e in (payload or {}).get("entry", []) or []:
+        changes = [{"field": c.get("field"), "item": (c.get("value") or {}).get("item"),
+                    "verb": (c.get("value") or {}).get("verb"),
+                    "from": ((c.get("value") or {}).get("from") or {}).get("name")
+                    or ((c.get("value") or {}).get("from") or {}).get("username"),
+                    "text": ((c.get("value") or {}).get("message") or (c.get("value") or {}).get("text") or "")[:120]}
+                   for c in e.get("changes", []) or []]
+        msgs = [{"sender": str((m.get("sender") or {}).get("id", "")), "recipient": str((m.get("recipient") or {}).get("id", "")),
+                 "echo": bool((m.get("message") or {}).get("is_echo")),
+                 "text": ((m.get("message") or {}).get("text") or "")[:120]} for m in e.get("messaging", []) or []]
+        entries.append({"id": str(e.get("id", "")), "changes": changes, "messaging": msgs})
+    path = DATA_DIR / "webhooks.json"
+    try:
+        items = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    except (OSError, ValueError):
+        items = []
+    items.insert(0, {"at": now(), "signature_ok": signature_ok, "object": (payload or {}).get("object"),
+                     "entries": entries})
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(items[:100], ensure_ascii=False), encoding="utf-8")
+
+
+def recent_events() -> list[dict]:
+    path = DATA_DIR / "webhooks.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    except (OSError, ValueError):
+        return []
 
 
 def receive(payload: dict, background: bool = True) -> list[int]:
@@ -142,10 +217,12 @@ def receive(payload: dict, background: bool = True) -> list[int]:
             if conn.execute("SELECT 1 FROM inbox WHERE external_id=?", (e["external_id"],)).fetchone():
                 continue                                          # a Meta pode reenviar o mesmo evento
             status, note = "novo", None
-            if not e["account_id"]:
-                status, note = "ignorado", "conta não ligada no Carretos Studio"
-            elif e["author_id"] and e["author_id"] == e["own"]:
+            if e["author_id"] and e["author_id"] == e["own"]:
                 status, note = "ignorado", "escrito pela própria conta"
+            elif is_own(e["author_id"], e["author"]):
+                status, note = "ignorado", "conta nossa (não se responde a contas ligadas ao Carretos Studio)"
+            elif not e["account_id"]:
+                status, note = "ignorado", "conta não ligada no Carretos Studio"
             ids.append(conn.execute(
                 "INSERT INTO inbox(account_id, network, kind, external_id, author_id, author, text, context, status, "
                 "note, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -153,10 +230,58 @@ def receive(payload: dict, background: bool = True) -> list[int]:
                  e["context"], status, note, now())).lastrowid)
     for iid in ids:
         if background:
-            threading.Thread(target=process, args=(iid,), daemon=True).start()
+            threading.Thread(target=process, args=(iid, delay()), daemon=True).start()
         else:
             process(iid)
     return ids
+
+
+def delay() -> int:
+    """Segundos de espera antes de responder (para ver se o Business Suite ou alguém da equipa já respondeu)."""
+    try:
+        return max(0, int(os.environ.get("INBOX_DELAY_SECONDS", "60")))
+    except ValueError:
+        return 60
+
+
+def process_pending() -> int:
+    """No arranque do dashboard: responde aos eventos que ficaram por tratar (ex.: reinício durante a espera)."""
+    limit = (datetime.now() - timedelta(hours=24)).isoformat(timespec="seconds")
+    with connect() as conn:
+        ids = [r["id"] for r in conn.execute("SELECT id FROM inbox WHERE status='novo' AND created_at >= ?", (limit,))]
+    for iid in ids:
+        threading.Thread(target=process, args=(iid, 5), daemon=True).start()
+    return len(ids)
+
+
+def already_answered(acc: Account, row) -> bool:
+    """A conta já respondeu (automação do Meta Business Suite ou uma pessoa)? Em caso de dúvida, False."""
+    from .http import request
+    from .meta_connect import graph
+    token = acc.secret("access_token_env")
+    mine = own_ids() | {str(acc.secret("page_id_env") or ""), str(acc.secret("user_id_env") or "")}
+    handles = own_handles()
+    try:
+        if row["kind"] == "comment":
+            edge = "replies" if acc.platform == "instagram" else "comments"
+            data = request("GET", f"{graph()}/{row['external_id']}/{edge}", retries=1,
+                           params={"fields": "from,username", "limit": 25, "access_token": token}).json()
+            for c in data.get("data", []):
+                frm = c.get("from") or {}
+                if str(frm.get("id", "")) in mine or (c.get("username") or frm.get("username") or "").lower() in handles:
+                    return True
+            return False
+        platform = "instagram" if acc.platform == "instagram" else "messenger"
+        data = request("GET", f"{graph()}/me/conversations", retries=1, params={
+            "platform": platform, "user_id": row["author_id"], "access_token": token,
+            "fields": "messages.limit(5){from,created_time}"}).json()
+        for conv in data.get("data", []):
+            msgs = (conv.get("messages") or {}).get("data", [])
+            if msgs and str((msgs[0].get("from") or {}).get("id", "")) in mine:   # a mais recente é nossa
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
 
 
 # ------------------------------------------------------------------ decidir e responder
@@ -229,7 +354,10 @@ def _recent_auto_dm(conn, acc_id: str, author_id: str) -> bool:
         "AND replied_at >= ?", (acc_id, author_id, limit)).fetchone())
 
 
-def process(item_id: int) -> str:
+def process(item_id: int, wait: int = 0) -> str:
+    if wait:
+        import time
+        time.sleep(wait)
     with connect() as conn:
         row = conn.execute("SELECT * FROM inbox WHERE id=?", (item_id,)).fetchone()
         if not row or row["status"] != "novo":
@@ -243,6 +371,11 @@ def process(item_id: int) -> str:
             conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
                          ("já respondeu a esta pessoa nas últimas 24 h (a conversa segue no WhatsApp)", item_id))
             return "ignorado"
+    if already_answered(acc, row):
+        with connect() as conn:
+            conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
+                         ("já respondido por outra automação (ex.: Meta Business Suite) ou por uma pessoa", item_id))
+        return "ignorado"
     res = compose(acc, row["kind"], row["text"] or "", row["author"] or "")
     status, note = "respondido", res.get("error")
     try:

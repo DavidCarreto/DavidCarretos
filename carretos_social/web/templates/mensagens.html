@@ -42,7 +42,13 @@ verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div
 {% else %}<p class="muted" style="font-size:13px">Ainda não chegou nada. Depois de ativar na Meta, os comentários e as mensagens aparecem aqui.</p>{% endfor %}
 </div>
 
-{% if me.is_admin %}<div class="card" style="margin-top:12px;font-size:13px"><b>Configuração do webhook na app da Meta</b>
+{% if me.is_admin %}<details class="card" style="margin-top:12px;font-size:13px" {{ 'open' if not rows }}><summary><b>Avisos recebidos da Meta</b> <span class="muted">(últimos {{ events|length }}; diagnóstico)</span></summary>
+{% for ev in events %}<div class="hist"><span class="muted">{{ ev.at[:19].replace('T',' ') }}</span> · objeto <b>{{ ev.object or '?' }}</b>{% if not ev.signature_ok %} · <span style="color:#ff9b93">assinatura inválida (rejeitado)</span>{% endif %}
+ {% for en in ev.entries %}<br>conta {{ en.id }}:{% for c in en.changes %} campo <b>{{ c.field }}</b>{% if c.item %} ({{ c.item }}{% if c.verb %}, {{ c.verb }}{% endif %}){% endif %}{% if c.from %} de {{ c.from }}{% endif %}{% if c.text %} «{{ c.text }}»{% endif %};{% endfor %}
+ {% for m in en.messaging %} mensagem {{ 'eco (enviada pela conta)' if m.echo else 'recebida' }} de {{ m.sender }} para {{ m.recipient }}{% if m.text %} «{{ m.text }}»{% endif %};{% endfor %}{% endfor %}</div>
+{% else %}<p class="muted">Ainda não chegou nenhum aviso da Meta. Na app da Meta → Webhooks → objeto Page → campo "feed" → "Testar" envia um aviso de exemplo que deve aparecer aqui.</p>{% endfor %}
+</details>
+<div class="card" style="margin-top:12px;font-size:13px"><b>Configuração do webhook na app da Meta</b>
  <p class="muted" style="margin:4px 0">developers.facebook.com → app "Carretos Studio" → Webhooks:</p>
  <p style="margin:2px 0">URL de retorno: <code>{{ callback }}</code></p>
  <p style="margin:2px 0">Token de verificação: <code>{{ verify }}</code></p>

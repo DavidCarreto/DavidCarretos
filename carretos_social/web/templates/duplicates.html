@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block body %}
+<p><a class="muted" href="/configurar">‹ Configurar</a></p>
+<h1>Verificação de duplicados</h1>
+<p class="muted" style="font-size:14px">Só lê: nada é apagado nem alterado. Para corrigir, abra a publicação ou a ficha e rejeite/apague a repetida.</p>
+{% if not total %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c">✓ Não há duplicados: agenda, legendas, ficheiros, base de conhecimento, respostas automáticas e tarefas estão limpos.</div>{% endif %}
+{% set titles = {'agenda': 'Publicações da mesma conta à mesma hora', 'legendas': 'Mesma legenda na mesma conta', 'ficheiros': 'Mesmo vídeo/imagem na mesma conta',
+ 'conhecimento': 'Fichas repetidas na base de conhecimento', 'respostas': 'Respostas automáticas repetidas à mesma pessoa', 'tarefas': 'Tarefas repetidas na fila'} %}
+{% for key, items in found.items() %}<div class="card" style="margin-bottom:12px"><b>{{ titles[key] }}</b> <span class="muted">({{ items|length }})</span>
+ {% for it in items %}<div class="hist">
+  {% if key in ('agenda', 'legendas', 'ficheiros') %}{{ it.account }} · {{ it.what }}:{% for p in it.posts %} <a class="gold" href="/post/{{ p.id }}">#{{ p.id }}</a> <span class="muted">({{ STATUS[p.status][0] if p.status in STATUS else p.status }})</span>{% endfor %}
+  {% elif key == 'conhecimento' %}{{ it.brand }} · «{{ it.text }}» <span class="muted">({{ it.ids|length }} fichas: {{ it.ids|join(', ') }})</span> · <a class="gold" href="/conhecimento?marca={{ it.brand }}">abrir</a>
+  {% elif key == 'respostas' %}{{ it.account }} · {{ it.author }} · {{ it.what }} · <a class="gold" href="/mensagens">ver</a>
+  {% else %}{{ it.label }} <span class="muted">(tarefas {{ it.ids|join(', ') }})</span> · <a class="gold" href="/tarefas">ver</a>{% endif %}
+ </div>{% else %}<p class="muted" style="font-size:13px;margin:4px 0 0">✓ Nenhum.</p>{% endfor %}</div>{% endfor %}
+{% endblock %}

@@ -1052,10 +1052,16 @@ def meta_webhook_verify(request: Request):
 async def meta_webhook(request: Request):
     from .. import inbox
     body = await request.body()
-    if not inbox.valid_signature(body, request.headers.get("x-hub-signature-256", "")):
+    ok = inbox.valid_signature(body, request.headers.get("x-hub-signature-256", ""))
+    try:
+        payload = json.loads(body or b"{}")
+    except ValueError:
+        payload = None
+    inbox.log_event(payload if ok else None, ok)            # diagnóstico: o que a Meta envia (sem tokens)
+    if not ok:
         return PlainTextResponse("assinatura inválida", 403)
     try:
-        inbox.receive(json.loads(body or b"{}"))
+        inbox.receive(payload or {})
     except Exception:  # noqa: BLE001 — responder sempre 200 para a Meta não desativar o webhook
         log.exception("webhook meta")
     return PlainTextResponse("ok")
@@ -1075,7 +1081,8 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
     return _render(request, "mensagens.html", {
         "accs": [(a, inbox.account_settings(a.id)) for a in accs], "rows": rows, "names": names, "ok": ok,
         "erro": erro, "page": "mensagens", "callback": _base_url(request) + "/webhooks/meta",
-        "verify": inbox.verify_token() if me.is_admin else "", "test": None})
+        "verify": inbox.verify_token() if me.is_admin else "", "test": None,
+        "events": inbox.recent_events()[:30] if me.is_admin else []})
 
 
 @app.post("/mensagens/conta/{acc_id}")
@@ -1557,6 +1564,15 @@ def update_json(request: Request):
     return JSONResponse(system.update_report())
 
 
+@app.get("/verificacao", response_class=HTMLResponse)
+def duplicates_page(request: Request):
+    from .. import duplicates
+    if not _admin_only(request):
+        return _forbidden("Só o administrador.")
+    found = duplicates.find()
+    return _render(request, "duplicates.html", {"found": found, "total": duplicates.total(found)})
+
+
 @app.post("/configurar/post-teste")
 def create_test_post(request: Request):
     me = _admin_only(request)
@@ -1659,6 +1675,11 @@ def config_test_email(request: Request):
 @app.on_event("startup")
 def _startup():
     jobs.start_worker()
+    try:
+        from .. import inbox
+        inbox.process_pending()        # respostas que ficaram por enviar (ex.: reinício durante a espera de 60 s)
+    except Exception:  # noqa: BLE001
+        log.exception("respostas pendentes")
     try:
         from . import system
         system.check_reboot()          # aviso "O servidor reiniciou às HH:MM" (com a causa provável)

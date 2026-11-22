@@ -1231,13 +1231,14 @@ def test_inbox_webhook_auto_replies_and_safeguards(client, monkeypatch):
     monkeypatch.setenv("FB_CARRETOSGROUP_PAGE_TOKEN", "PAGE2"); monkeypatch.setenv("FB_CARRETOSGROUP_PAGE_ID", "222")
     monkeypatch.setenv("IG_AURON_TOKEN", "PA"); monkeypatch.setenv("IG_AURON_USER_ID", "17841477151306262")
     monkeypatch.delenv("SOCIAL_ANTHROPIC_API_KEY", raising=False)               # sem IA: resposta-padrão
+    monkeypatch.setenv("INBOX_DELAY_SECONDS", "0")
     # verificação do webhook (Meta)
     assert client.get("/webhooks/meta?hub.mode=subscribe&hub.verify_token=cs-verifica&hub.challenge=123").text == "123"
     assert client.get("/webhooks/meta?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=1").status_code == 403
     sent, alerts = [], []
     class R:
         def json(self): return {"id": "ok"}
-    monkeypatch.setattr(http, "request", lambda m, u, **k: sent.append((u, k)) or R())
+    monkeypatch.setattr(http, "request", lambda m, u, **k: (sent.append((u, k)) if m == "POST" else None) or R())
     monkeypatch.setattr(notify, "send", lambda t: alerts.append(t))
     monkeypatch.setattr(inbox.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda s: target(*args)})())
     fb = {"object": "page", "entry": [{"id": "222", "changes": [{"field": "feed", "value": {
@@ -1337,3 +1338,90 @@ def test_inbox_replies_identify_commenter(client, monkeypatch):
     page = client.post("/mensagens/testar", data={"conta": "ig_carretosgroup", "tipo": "comment", "texto": "Preço?",
                                                   "quem": "maria.r"}).text
     assert "Resposta como vai sair" in page and "@maria.r Para saber o preço" in page
+
+
+def test_inbox_recipient_own_accounts_already_answered_and_log(client, monkeypatch):
+    import json as _json
+    from carretos_social import inbox
+    import carretos_social.http as http
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    secret = "0123456789abcdef0123456789abcdef"
+    monkeypatch.setenv("META_APP_SECRET", secret)
+    monkeypatch.setenv("INBOX_DELAY_SECONDS", "0")
+    monkeypatch.delenv("SOCIAL_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("IG_DAVIDCARRETO_TOKEN", "T1"); monkeypatch.setenv("IG_DAVIDCARRETO_USER_ID", "111")
+    monkeypatch.setenv("IG_CARRETOSGROUP_TOKEN", "T2"); monkeypatch.setenv("IG_CARRETOSGROUP_USER_ID", "222")
+    monkeypatch.setattr(inbox.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda s: target(*args)})())
+    for acc in ("ig_davidcarreto", "ig_carretosgroup"):
+        inbox.save_account_settings(acc, enabled=True)
+    posts, replies_exist = [], {"value": False}
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+    def fake(m, u, **k):
+        if m == "POST":
+            posts.append(u)
+            return R({"id": "ok"})
+        if u.endswith("/replies"):
+            return R({"data": [{"username": "carretos_group", "from": {"id": "222"}}] if replies_exist["value"] else []})
+        return R({"data": []})
+    monkeypatch.setattr(http, "request", fake)
+    def send(payload):
+        body = _json.dumps(payload).encode()
+        return client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
+    # B + C: mensagem de @davidcarretos (111) para @carretos_group (222), entregue às duas contas
+    dm = {"sender": {"id": "111"}, "recipient": {"id": "222"}, "message": {"mid": "m-own", "text": "[TESTE] preço?"}}
+    send({"object": "instagram", "entry": [{"id": "111", "messaging": [dm]}, {"id": "222", "messaging": [dm]}]})
+    with connect() as conn:
+        row = conn.execute("SELECT account_id, status, note FROM inbox WHERE external_id='m-own'").fetchone()
+    assert row["account_id"] == "ig_carretosgroup" and row["status"] == "ignorado" and "conta nossa" in row["note"]
+    assert not posts
+    # C: comentário de @carretoclips (conta nossa) no @carretos_group
+    send({"object": "instagram", "entry": [{"id": "222", "changes": [{"field": "comments", "value": {
+        "id": "c-own", "text": "Boa!", "from": {"id": "999", "username": "carretoclips"}}}]}]})
+    with connect() as conn:
+        assert conn.execute("SELECT status FROM inbox WHERE external_id='c-own'").fetchone()[0] == "ignorado"
+    # D: um cliente comenta, mas a conta já respondeu (Business Suite ou pessoa) → não responde
+    replies_exist["value"] = True
+    send({"object": "instagram", "entry": [{"id": "222", "changes": [{"field": "comments", "value": {
+        "id": "c-cli", "text": "Quanto custa?", "from": {"id": "555", "username": "cliente_x"}}}]}]})
+    with connect() as conn:
+        row = conn.execute("SELECT status, note FROM inbox WHERE external_id='c-cli'").fetchone()
+    assert row["status"] == "ignorado" and "já respondido" in row["note"] and not posts
+    # sem resposta anterior → responde no fio, a começar por @cliente_y
+    replies_exist["value"] = False
+    send({"object": "instagram", "entry": [{"id": "222", "changes": [{"field": "comments", "value": {
+        "id": "c-cli2", "text": "Quanto custa?", "from": {"id": "556", "username": "cliente_y"}}}]}]})
+    assert any(u.endswith("/c-cli2/replies") for u in posts)
+    # A: os avisos recebidos ficam no registo (incluindo os rejeitados por assinatura)
+    client.post("/webhooks/meta", content=b'{"object":"page"}', headers={"x-hub-signature-256": "sha256=x",
+                                                                       "content-type": "application/json"})
+    ev = inbox.recent_events()
+    assert not ev[0]["signature_ok"] and ev[1]["object"] == "instagram"
+    page = client.get("/mensagens").text
+    assert "Avisos recebidos da Meta" in page and "assinatura inválida" in page and "carretoclips" in page
+
+
+def test_duplicates_check(client, tmp_path):
+    from PIL import Image
+    from carretos_social import knowledge as kb
+    from carretos_social.db import add_media, add_post, connect
+    from carretos_social.duplicates import find, total
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    assert "Não há duplicados" in client.get("/verificacao").text
+    img = tmp_path / "a.jpg"; Image.new("RGB", (1080, 1350)).save(img)
+    with connect() as conn:
+        mid = add_media(conn, "image", str(img))
+        for _ in range(2):
+            add_post(conn, account_id="ig_auron", format="image", status="draft", media_ids=[mid],
+                     caption="Saiba o preço da revisão na hora e marque online sem esperas.",
+                     scheduled_at="2030-01-01T10:00:00+00:00")
+        kb.create(conn, kb.clean({"brand": "auron", "section": "faq", "text": "A marca chama-se AURON."}))
+    f = find()
+    assert len(f["agenda"]) == 1 and len(f["legendas"]) == 1 and len(f["ficheiros"]) == 1 and len(f["conhecimento"]) == 1
+    assert total(f) == 4
+    page = client.get("/verificacao").text
+    assert "Publicações da mesma conta à mesma hora" in page and "A marca chama-se AURON." in page

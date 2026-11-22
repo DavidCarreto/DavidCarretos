@@ -129,4 +129,10 @@ def weekly_summary(now: datetime) -> None:
             f"Próximos 7 dias: {len(upcoming)} agendada(s), das quais {count('approved', upcoming)} aprovada(s) e "
             f"{sum(1 for r in upcoming if r['status'] in ('idea', 'draft'))} por aprovar.\n"
             f"Dashboard: {dashboard_url('/')}")
+    try:
+        from .duplicates import find, total
+        n = total(find())
+        text += f"\nDuplicados: {'nenhum ✓' if not n else str(n) + ' a rever em ' + dashboard_url('/verificacao')}"
+    except Exception:  # noqa: BLE001
+        pass
     notify.send(text)
