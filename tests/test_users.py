@@ -999,6 +999,13 @@ def test_tiktok_drafts_video_photos_fallback_and_status(client, monkeypatch, tmp
         return R({})
     monkeypatch.setattr(tiktok, "request", fake)
     monkeypatch.setattr(notify, "send", lambda t: texts.append(t))
+    monkeypatch.setattr(notify, "enabled", lambda: True)
+    monkeypatch.setattr(notify, "send_file", lambda *a, **k: None)
+    from carretos_social.web import mailer
+    mails = []
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    monkeypatch.setattr(mailer, "send", lambda to, subj, body: mails.append((to, subj, body)))
+    monkeypatch.setenv("TIKTOK_CAPTION_EMAIL", "legendas@exemplo.pt")
     video = tmp_path / "v.mp4"
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=540x960:d=4", "-pix_fmt",
                     "yuv420p", str(video)], check=True)
@@ -1007,6 +1014,17 @@ def test_tiktok_drafts_video_photos_fallback_and_status(client, monkeypatch, tmp
     init = next(j for u, j in calls if u.endswith("/inbox/video/init/"))
     assert init["source_info"]["source"] == "FILE_UPLOAD" and "post_info" not in init        # sem legenda nem capa
     assert any("Legenda do vídeo" in t and "@clips.do.carreto" in t for t in texts)          # legenda enviada
+    assert mails and mails[0][0] == "legendas@exemplo.pt" and mails[0][1] == "Legenda TikTok – @clips.do.carreto"
+    assert "Confirme a privacidade antes de publicar" in mails[0][2]
+    assert "✔ Email da legenda enviado para legendas@exemplo.pt" in res.note and "Confirme a privacidade" in res.note
+    # erro SMTP completo no resultado
+    from carretos_social.publishers.tiktok import _send_caption
+    def smtp_fail(to, subj, body):
+        raise OSError("535 5.7.8 Username and Password not accepted")
+    monkeypatch.setattr(mailer, "send", smtp_fail)
+    lines = _send_caption(PublishRequest(account=acc, format="video", caption="x", media=[str(video)]), test=True)
+    assert lines[0] == "✘ Email da legenda: OSError: 535 5.7.8 Username and Password not accepted"
+    monkeypatch.setattr(mailer, "send", lambda to, subj, body: mails.append((to, subj, body)))
     imgs = []
     for i in range(2):
         p = tmp_path / f"f{i}.jpg"; Image.new("RGB", (1080, 1920)).save(p); imgs.append(str(p))

@@ -26,6 +26,8 @@ API = "https://open.tiktokapis.com/v2"
 CHUNK = 10 * 1024 * 1024
 DRAFT_NOTE = "Enviado para os rascunhos do TikTok – falta publicar na app"
 DONE = ("SEND_TO_USER_INBOX", "PUBLISH_COMPLETE")
+PRIVACY = ("Confirme a privacidade antes de publicar: a TikTok abre o rascunho com «Todos podem ver esta publicação» "
+           "já escolhido.")
 
 
 def _yes(env: str) -> bool:
@@ -57,10 +59,11 @@ class TikTokPublisher(Publisher):
             return PublishResult(remote_id=res.remote_id, status="assist_sent",
                                  note=f"A TikTok recusou o rascunho: {exc} → enviado para o telemóvel (modo assistido).")
         if kind == "video":
-            _send_caption(req)
-            note = f"{DRAFT_NOTE}. Legenda e capa a definir na app TikTok (abra a notificação da TikTok para continuar)."
+            sent = "; ".join(_send_caption(req))
+            note = (f"{DRAFT_NOTE}. Legenda e capa a definir na app TikTok (abra a notificação da TikTok para continuar). "
+                    f"{PRIVACY} {sent}")
         else:
-            note = f"{DRAFT_NOTE}. Abra a notificação da TikTok para rever e publicar."
+            note = f"{DRAFT_NOTE}. Abra a notificação da TikTok para rever e publicar. {PRIVACY}"
         return PublishResult(remote_id=publish_id, status="tiktok_draft", note=note)
 
     # ---------------------------------------------------------------- vídeo (sem legenda nem capa)
@@ -95,36 +98,51 @@ class TikTokPublisher(Publisher):
                 "post_mode": "MEDIA_UPLOAD", "media_type": "PHOTO"}
         return request("POST", f"{API}/post/publish/content/init/", headers=self.h, json=body).json()["data"]["publish_id"]
 
-    def _wait(self, publish_id: str, timeout: int = 600) -> None:
-        start = time.time()
+    def _wait(self, publish_id: str, timeout: int = 600) -> dict:
+        """Espera pelo estado final da TikTok (só então é "enviado"). Devolve o último estado."""
+        start, seen = time.time(), []
         while time.time() - start < timeout:
             st = request("POST", f"{API}/post/publish/status/fetch/", headers=self.h,
                          json={"publish_id": publish_id}).json().get("data", {})
-            if st.get("status") in DONE:
-                return
-            if st.get("status") == "FAILED":
-                raise ApiError(f"TikTok: {st.get('fail_reason') or st}")
+            status = st.get("status") or "?"
+            if not seen or seen[-1] != status:
+                seen.append(status)
+            if status in DONE:
+                return {**st, "publish_id": publish_id, "trace": seen}
+            if status == "FAILED":
+                raise ApiError(f"TikTok recusou (publish_id {publish_id}, estados: {' → '.join(seen)}): "
+                               f"{st.get('fail_reason') or st}")
             time.sleep(5)
-        raise ApiError("A TikTok demorou demasiado a receber o rascunho (mais de 10 minutos).")
+        raise ApiError(f"A TikTok não confirmou em 10 minutos (publish_id {publish_id}, estados: {' → '.join(seen)}).")
 
 
-def _send_caption(req: PublishRequest) -> None:
-    """O rascunho de vídeo não leva legenda: envia-a pronta ao David (email e Telegram)."""
+def _send_caption(req: PublishRequest, test: bool = False) -> list[str]:
+    """O rascunho de vídeo não leva legenda: envia-a pronta ao David (email e Telegram).
+    Devolve o resultado de cada envio ("✔ Email da legenda enviado para …" ou o erro completo)."""
     from .. import notify
     text = (f"Legenda para o TikTok ({req.account.name} · @{req.account.handle}).\n"
             "O vídeo já está nos rascunhos da app TikTok: abra a notificação da TikTok, cole esta legenda, "
-            f"escolha a capa e publique.\n\n{req.caption}")
-    try:
-        notify.send("📣 Carretos Studio · " + text)
-    except Exception:  # noqa: BLE001
-        pass
+            f"escolha a capa e publique.\n{PRIVACY}\n\n{req.caption}")
+    out = []
     try:
         from ..web import mailer
         to = os.environ.get("TIKTOK_CAPTION_EMAIL") or _admin_emails()
-        if to and mailer.configured():
-            mailer.send(to, f"Legenda para o TikTok · @{req.account.handle}", text)
-    except Exception:  # noqa: BLE001
-        pass
+        if not to:
+            out.append("✘ Email da legenda: não há email definido (⚙ Configurar → TikTok · email para as legendas)")
+        elif not mailer.configured():
+            out.append("✘ Email da legenda: o envio de email (SMTP) não está configurado em ⚙ Configurar")
+        else:
+            mailer.send(to, f"Legenda TikTok – @{req.account.handle}" + (" – [TESTE]" if test else ""), text)
+            out.append(f"✔ Email da legenda enviado para {to}")
+    except Exception as exc:  # noqa: BLE001
+        out.append(f"✘ Email da legenda: {type(exc).__name__}: {exc}")
+    try:
+        if notify.enabled():
+            notify.send("📣 Carretos Studio · " + text)
+            out.append("✔ Legenda enviada pelo Telegram")
+    except Exception as exc:  # noqa: BLE001
+        out.append(f"✘ Telegram: {exc}")
+    return out
 
 
 def _admin_emails() -> str:

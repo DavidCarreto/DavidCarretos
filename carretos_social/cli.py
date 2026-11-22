@@ -517,36 +517,61 @@ def cmd_tiktok_test(a):
     """Envia para os rascunhos do TikTok um vídeo curto e um carrossel de 2 fotos de TESTE (nada é publicado)."""
     import subprocess
     from PIL import Image, ImageDraw
+    from .media import image_gen
     from .publishers.base import PublishRequest
-    from .publishers.tiktok import TikTokPublisher
+    from .publishers.tiktok import PRIVACY, TikTokPublisher, _send_caption
     from .tiktok_connect import ensure_fresh
     acc = account(a.account)
-    out = _out_dir("teste_tiktok")
+    out = _out_dir("teste_tiktok", acc.id)
     video = out / "teste_tiktok.mp4"
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1080x1920:d=5:r=30",
                     "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-shortest", "-c:v", "libx264",
                     "-pix_fmt", "yuv420p", "-c:a", "aac", str(video)], check=True)
     photos = []
-    for i in (1, 2):
+    for i in (1, 2):                                   # com texto, no tipo de letra das imagens reais
         im = Image.new("RGB", (1080, 1920), (17, 17, 17))
-        ImageDraw.Draw(im).rectangle([60, 60, 1020, 1860], outline=(212, 175, 55), width=12)
+        d = ImageDraw.Draw(im)
+        d.rectangle([60, 60, 1020, 1860], outline=(212, 175, 55), width=12)
+        big, small = image_gen._font(True, 120), image_gen._font(False, 52)
+        for text, font, y, fill in ((f"[TESTE] {i}/2", big, 820, (255, 255, 255)),
+                                    ("Carretos Studio", small, 1000, (212, 175, 55))):
+            w = d.textlength(text, font=font)
+            d.text(((1080 - w) / 2, y), text, font=font, fill=fill)
         p = out / f"teste_tiktok_{i}.jpg"
         im.save(p, quality=92)
         photos.append(str(p))
+    print(f"Tipo de letra usado: {getattr(big, 'path', '?')}")
+    # pré-visualização no dashboard: uma publicação [TESTE] com o que foi enviado (sem data: nunca é publicada)
+    with connect() as conn:
+        ids = [add_media(conn, "image", p) for p in photos]
+        vid = add_media(conn, "video", str(video))
+        pv_photos = add_post(conn, account_id=acc.id, format="carousel", status="tiktok_draft", media_ids=ids,
+                             title="[TESTE] Carrossel enviado para os rascunhos do TikTok",
+                             caption="[TESTE] Carrossel de teste do Carretos Studio.")
+        pv_video = add_post(conn, account_id=acc.id, format="video", status="tiktok_draft", media_ids=[vid],
+                            title="[TESTE] Vídeo enviado para os rascunhos do TikTok",
+                            caption="[TESTE] Legenda de teste do vídeo do Carretos Studio.")
     pub = TikTokPublisher()
     pub.h = {"Authorization": f"Bearer {ensure_fresh(acc)}", "Content-Type": "application/json; charset=UTF-8"}
     ok = True
-    for label, run in (("Vídeo", lambda: pub._video(video)),
-                       ("Carrossel de 2 fotos", lambda: pub._photos(photos, PublishRequest(
-                           account=acc, format="carousel", caption="[TESTE] Carrossel de teste do Carretos Studio.",
-                           media=photos, title="[TESTE] Carrossel de teste")))):
+    for label, pv, run in (("Vídeo", pv_video, lambda: pub._video(video)),
+                           ("Carrossel de 2 fotos", pv_photos, lambda: pub._photos(photos, PublishRequest(
+                               account=acc, format="carousel", caption="[TESTE] Carrossel de teste do Carretos Studio.",
+                               media=photos, title="[TESTE] Carrossel de teste")))):
         try:
             pid = run()
-            pub._wait(pid)
-            print(f"✔ {label}: enviado para os rascunhos do TikTok ({acc.name} · @{acc.handle}) – falta publicar na app.")
+            st = pub._wait(pid)
+            print(f"✔ {label}: a TikTok confirmou ({' → '.join(st['trace'])}; publish_id {pid}) – está nos rascunhos "
+                  f"de @{acc.handle}; pode demorar alguns minutos a aparecer completo na app. Pré-visualização: /post/{pv}")
+            if label == "Vídeo":
+                for line in _send_caption(PublishRequest(account=acc, format="video", media=[str(video)],
+                                                         caption="[TESTE] Legenda de teste do vídeo do Carretos Studio."),
+                                          test=True):
+                    print(line)
         except Exception as exc:  # noqa: BLE001
             ok = False
-            print(f"✘ {label}: a TikTok recusou: {exc}")
+            print(f"✘ {label}: {exc}")
+    print(PRIVACY)
     if not ok:
         raise SystemExit("Pelo menos um envio foi recusado (ver acima). Os posts desta conta seguem em modo assistido.")
 
