@@ -138,6 +138,11 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
         if time.time() - last_reminder > 12 * 3600:
             with connect() as conn:
                 remind_pending(conn)
+            try:
+                from .expiry import remind
+                remind()                       # ligações a renovar (LinkedIn, Meta, TikTok)
+            except Exception as exc:  # noqa: BLE001
+                print("lembrete de ligações:", exc)
             last_reminder = time.time()
         if env_file.exists() and env_file.stat().st_mtime != env_mtime:
             print("Configuração alterada: a reiniciar para carregar as chaves novas.")

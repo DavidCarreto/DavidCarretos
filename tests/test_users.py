@@ -805,44 +805,31 @@ def test_tone_update_voce_applied_once_and_sintra_fact(tmp_path):
                    for i in kb.items(conn, "geral"))
 
 
-def test_instagram_without_page_from_portfolio(client, monkeypatch):
-    import os
+def test_meta_no_unsupported_portfolio_instagram_calls_and_full_errors(client, monkeypatch):
     from carretos_social import meta_connect
-    from carretos_social.config import accounts
     _setup_admin(client)
     _login(client, "david", "segredo123")
+    calls = []
+    long_err = "Erro longo da Meta: " + "x" * 400 + " FIM"
     class R:
         def __init__(self, d): self._d = d
         def json(self): return self._d
     def fake(method, url, **kw):
+        calls.append(url)
         if url.endswith("/me"):
             return R({"id": "u1", "name": "David Carreto"})
         if url.endswith("/me/businesses"):
             return R({"data": [{"id": "959299140915335", "name": "Carreto's"}]})
-        if url.endswith("/959299140915335/owned_instagram_accounts"):
-            return R({"data": [{"id": "1781", "username": "davidcarretos"}, {"id": "1782", "username": "carretoclips"}]})
-        if url.endswith("/959299140915335/instagram_accounts"):
-            return R({"data": [{"id": "1781", "username": "davidcarretos"}]})            # repetido: não duplica
-        if url.endswith("/1781"):
-            return R({"username": "davidcarretos"})
+        if url.endswith("/owned_pages"):
+            raise RuntimeError(long_err)
         return R({"data": []})
     monkeypatch.setattr(meta_connect, "request", fake)
-    for k in ("IG_DAVIDCARRETO_TOKEN", "IG_DAVIDCARRETO_USER_ID"):
-        monkeypatch.delenv(k, raising=False)
-    found = meta_connect.discover("USERTOKEN")
-    assert [i["username"] for i in found["igs"]] == ["carretoclips", "davidcarretos"]
-    acc = accounts()["ig_davidcarreto"]
-    opts = meta_connect.options_for(acc, found)
-    assert any(o["label"] == "Instagram @davidcarretos · portefólio Carreto's (sem Página)" for o in opts)
-    assert meta_connect.suggestion(acc, found) == "igb:1781"
-    page = client.get("/contas").text
-    assert "Instagram @davidcarretos · portefólio Carreto&#39;s (sem Página)" in page and "USERTOKEN" not in page
-    client.post("/contas/meta/associar", data={"acc_ig_davidcarreto": "igb:1781"})
-    assert os.environ["IG_DAVIDCARRETO_TOKEN"] == "USERTOKEN" and os.environ["IG_DAVIDCARRETO_USER_ID"] == "1781"
-    assert accounts()["ig_davidcarreto"].connected
-    assert "volte a ligar antes de" in client.get("/contas").text                      # o token dura ~60 dias
-    ok, text = meta_connect.test(accounts()["ig_davidcarreto"])
-    assert ok and text == "Instagram @davidcarretos ✓"
+    monkeypatch.setenv("META_APP_ID", "1234567890123")
+    monkeypatch.setenv("META_APP_SECRET", "0123456789abcdef0123456789abcdef")
+    found = meta_connect.discover("T")
+    assert not any("instagram_accounts" in u for u in calls)                 # "Unsupported get request"
+    assert found["igs"] == [] and any(e.endswith(" FIM") for e in found["errors"])   # aviso completo
+    assert "x" * 400 + " FIM" in client.get("/contas").text
 
 
 def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
@@ -882,12 +869,18 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
     q = parse_qs(urlparse(loc).query)
     assert loc.startswith("https://www.linkedin.com/oauth/v2/authorization") and q["scope"] == ["openid profile w_member_social"]
     r = client.get(f"/contas/linkedin/callback?code=c&state={q['state'][0]}", follow_redirects=False)
-    assert "modo assistido" in r.headers["location"].replace("%20", " ")
+    assert "LinkedIn de David Carreto ligado." in r.headers["location"].replace("%20", " ")
     assert os.environ["LI_DAVIDCARRETO_URN"] == "urn:li:person:abc123" and accounts()["li_davidcarreto"].connected
     assert lc.test(accounts()["li_davidcarreto"]) == (True, "LinkedIn de David Carreto ✓")
-    # com a Community Management API aprovada: pede os scopes da página e liga-a
+    # página: 2.ª app só para a Community Management API (e aprovada)
     monkeypatch.setenv("LINKEDIN_ORG_API", "sim")
-    assert "w_organization_social" in client.get("/contas/linkedin/ligar", follow_redirects=False).headers["location"]
+    assert not lc.org_enabled()                                            # falta a 2.ª app
+    monkeypatch.setenv("LINKEDIN_ORG_CLIENT_ID", "77orgapp12345")
+    monkeypatch.setenv("LINKEDIN_ORG_CLIENT_SECRET", "segredo-org-123")
+    loc = client.get("/contas/linkedin/ligar?app=pagina", follow_redirects=False).headers["location"]
+    q2 = parse_qs(urlparse(loc).query)
+    assert q2["client_id"] == ["77orgapp12345"] and "w_organization_social" in q2["scope"][0]
+    assert "openid" not in q2["scope"][0]
     def li_fake2(method, url, **kw):
         if url.endswith("/accessToken"):
             return R({"access_token": "LITOKEN2", "expires_in": 5184000,
@@ -900,8 +893,7 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
             return R({"localizedName": "Carretos Group"})
         raise AssertionError(url)
     monkeypatch.setattr(lc, "request", li_fake2)
-    updates, info = lc.connect_member({"access_token": "LITOKEN2", "expires_in": 100,
-                                       "scope": "openid,profile,w_member_social,w_organization_social"})
+    updates, info = lc.connect_org({"access_token": "LITOKEN2", "expires_in": 100})
     assert updates["LI_CARRETOSGROUP_URN"] == "urn:li:organization:777"
     from carretos_social import envfile
     envfile.set_env(updates, root=__import__("carretos_social.web.app", fromlist=["ROOT"]).ROOT)
@@ -918,7 +910,8 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
                           "refresh_expires_in": 31536000, "open_id": "o1"})
             return R({"access_token": "TT2", "refresh_token": "RF2", "expires_in": 86400, "refresh_expires_in": 31536000})
         if url.endswith("/user/info/"):
-            return R({"data": {"user": {"username": "carretoclips", "display_name": "Carreto Clips"}}})
+            assert kw["params"]["fields"] == "open_id,union_id,avatar_url,display_name"   # só user.info.basic
+            return R({"data": {"user": {"display_name": "Carreto Clips"}}})
         raise AssertionError(url)
     monkeypatch.setattr(tc, "request", tt_fake)
     loc = client.get("/contas/tiktok/ligar?conta=tt_carretoclips", follow_redirects=False).headers["location"]
@@ -928,7 +921,8 @@ def test_linkedin_member_org_assist_and_tiktok_refresh(client, monkeypatch):
     assert "ligada" in r.headers["location"].replace("%20", " ")
     assert os.environ["TT_CARRETOCLIPS_TOKEN"] == "TT1" and os.environ["TT_CARRETOCLIPS_REFRESH"] == "RF1"
     ok, text = tc.test(accounts()["tt_carretoclips"])
-    assert ok and "TikTok @carretoclips ✓" in text and "só publica em privado" in text
+    assert ok and "TikTok «Carreto Clips» ✓" in text and "só publica em privado" in text
+    assert accounts()["tt_carretoclips"].handle == "carretoclips" and accounts()["tt_davidcarreto"].handle == "davidcarretos"
     save_account_override("tt_carretoclips", access_expires=(datetime.now() - timedelta(minutes=1)).isoformat())
     assert tc.ensure_fresh(accounts()["tt_carretoclips"]) == "TT2" and os.environ["TT_CARRETOCLIPS_REFRESH"] == "RF2"
     # Testar mostra a mensagem completa do erro
@@ -948,3 +942,23 @@ def test_public_legal_pages(client):
     for path in ("/privacidade", "/termos"):
         r = client.get(path)
         assert r.status_code == 200 and "Carretos Studio" in r.text and "palavra-passe" not in r.text[:0]
+
+
+
+def test_expiring_connections_banner_and_reminder(client, monkeypatch):
+    from datetime import date, timedelta
+    from carretos_social import expiry, notify
+    from carretos_social.config import save_account_override
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("LI_DAVIDCARRETO_TOKEN", "t"); monkeypatch.setenv("LI_DAVIDCARRETO_URN", "urn:li:person:1")
+    save_account_override("li_davidcarreto", token_expires=(date.today() + timedelta(days=5)).isoformat())
+    items = expiry.expiring()
+    assert items and items[0]["account"] == "li_davidcarreto" and items[0]["days"] == 5
+    assert "Ligações a renovar" in client.get("/").text and "faltam 5 dias" in client.get("/").text
+    sent = []
+    monkeypatch.setattr(notify, "enabled", lambda: True)
+    monkeypatch.setattr(notify, "send", lambda t: sent.append(t))
+    assert expiry.remind() and "📣 Carretos Studio · Ligações a renovar" in sent[0] and "LinkedIn" in sent[0]
+    save_account_override("li_davidcarreto", token_expires=(date.today() + timedelta(days=60)).isoformat())
+    assert expiry.expiring() == []

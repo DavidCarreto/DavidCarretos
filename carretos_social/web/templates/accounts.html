@@ -25,10 +25,14 @@
   <p class="muted" style="font-size:13px">Primeiro crie a app em linkedin.com/developers e preencha o <b>Client ID</b> e o
   <b>Client Secret</b> em <a class="gold" href="/configurar">⚙ Configurar</a> (guia: <code>docs/GUIA_LINKEDIN.md</code>).</p>
  {% else %}
-  <p class="muted" style="font-size:13px;margin:4px 0 10px">Liga o seu perfil pessoal{% if li.org %} e a página da Carretos Group{% endif %}.
-  {% if not li.org %}A página da empresa fica em <b>modo assistido</b> até o LinkedIn aprovar a Community Management API.{% endif %}</p>
-  <a class="btn gold" href="/contas/linkedin/ligar">in Ligar com o LinkedIn</a>
-  {% if li.saved.at %}<p class="muted" style="font-size:12px;margin:8px 0 0">Ligado por {{ li.saved.name }} · {{ li.saved.at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.expires }}</p>{% endif %}
+  <p class="muted" style="font-size:13px;margin:4px 0 10px">Perfil pessoal com a app atual; a página da Carretos Group com
+  uma <b>2.ª app só para ela</b> (Community Management API).</p>
+  <a class="btn gold" href="/contas/linkedin/ligar">in Ligar o perfil pessoal</a>
+  {% if li.org %}<a class="btn gold" href="/contas/linkedin/ligar?app=pagina" style="margin-left:6px">in Ligar a página da empresa</a>
+  {% elif li.org_app %}<p class="fmt-line ajustar" style="margin:6px 0 0">⚠ 2.ª app configurada: quando o LinkedIn aprovar a Community Management API, escreva <b>sim</b> em ⚙ Configurar → "Community Management API aprovada?".</p>
+  {% else %}<p class="muted" style="font-size:12px;margin:6px 0 0">Página da empresa: em modo assistido até haver a 2.ª app aprovada (guia: <code>docs/GUIA_LINKEDIN.md</code>).</p>{% endif %}
+  {% if li.saved.at %}<p class="muted" style="font-size:12px;margin:8px 0 0">Perfil ligado por {{ li.saved.name }} · {{ li.saved.at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.expires }}</p>{% endif %}
+  {% if li.saved.org_at %}<p class="muted" style="font-size:12px;margin:2px 0 0">Página ligada a {{ li.saved.org_at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.org_expires }}</p>{% endif %}
  {% endif %}
  <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno: <code>{{ li.redirect }}</code></p>
 </div>
@@ -58,7 +62,7 @@
   {% if a.assist_reason %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span> <span class="muted" style="font-size:12px">{{ a.assist_reason }}</span>
   {% elif not a.has_credentials %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Por ligar</span>
    {% if a.platform == 'youtube' %}<span class="muted" style="font-size:12px">YouTube: ligação numa próxima fase.</span>
-   {% elif a.platform == 'linkedin_member' %}<span class="muted" style="font-size:12px">Use "Ligar com o LinkedIn" acima.</span>{% endif %}
+   {% elif a.platform == 'linkedin_member' %}<span class="muted" style="font-size:12px">Use "Ligar o perfil pessoal" acima.</span>{% endif %}
   {% endif %}
  </div>
  <div class="acc-actions">

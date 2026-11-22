@@ -13,10 +13,9 @@ Uma vez, ~20 minutos, **sem custos**. Depois, tudo se faz no dashboard → **Con
 ## 1. Preparar as contas (na app do Instagram e no Facebook)
 1. Cada Instagram tem de ser **profissional**: Instagram → Definições → Tipo de conta e ferramentas →
    **Mudar para conta profissional** (Criador ou Empresa).
-2. **De preferência**, cada Instagram está **ligado a uma Página de Facebook** (cada Página só leva um Instagram).
-   Os Instagrams **sem Página** que estejam num portefólio (ex.: @davidcarretos e @carretoclips no "Carreto's")
-   também aparecem na ligação ("sem Página") e publicam com o token do utilizador, que dura ~60 dias (a página
-   Contas mostra até quando; basta voltar a "Ligar com o Facebook"):
+2. Cada Instagram tem de estar **ligado a uma Página de Facebook** (cada Página só leva um Instagram): com o
+   "Facebook Login for Business" a Meta só mostra os Instagrams ligados a uma Página. (Um Instagram que fique sem
+   Página precisa de outra forma de ligação, "Instagram Login", que ainda não está ativa.)
    Instagram → Editar perfil → Página → escolher/criar a Página.
    - @davidcarretos → Página "David Carreto" (criar uma Página pública, se ainda não houver)
    - @carretoclips → Página "Carreto Clips"

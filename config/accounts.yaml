@@ -70,7 +70,7 @@ accounts:
     group: david
     platform: tiktok
     name: "David Carreto (TikTok pessoal)"
-    handle: "davidcarreto"
+    handle: "davidcarretos"
     voice: pessoal
     narrator: david_elevenlabs  # a tua voz (ElevenLabs); sem chave/Voice ID configurados sai sem narração
     theme: pessoal          # identidade: pessoal (preto e dourado, "DAVID CARRETO") | carretos (azul)

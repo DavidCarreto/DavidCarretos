@@ -23,6 +23,6 @@ def request(method: str, url: str, *, retries: int = 3, timeout: int = 120, **kw
             time.sleep(int(resp.headers.get("retry-after", 2 ** (attempt + 1))))
             continue
         if resp.status_code >= 400:
-            raise ApiError(f"{method} {url.split('?')[0]} -> {resp.status_code}: {resp.text[:500]}")
+            raise ApiError(f"{method} {url.split('?')[0]} -> {resp.status_code}: {resp.text[:4000]}")
         return resp
     raise ApiError(f"{method} {url.split('?')[0]} falhou: {last_exc}")

@@ -110,7 +110,7 @@ def discover(user_token: str) -> dict:
                                                           "access_token": user_token})
     except Exception as exc:  # noqa: BLE001
         businesses = []
-        errors.append(f"portefólios: {str(exc)[:120]}")
+        errors.append(f"portefólios: {exc}")
     for biz in businesses:
         for edge in ("owned_pages", "client_pages"):
             try:
@@ -118,7 +118,7 @@ def discover(user_token: str) -> dict:
                                                                    "access_token": user_token}):
                     add(p, biz.get("name", ""))
             except Exception as exc:  # noqa: BLE001
-                errors.append(f"{biz.get('name')}/{edge}: {str(exc)[:120]}")
+                errors.append(f"{biz.get('name')}/{edge}: {exc}")
     # Página sem token (vista pelo portefólio): tentar pedir o token diretamente
     for p in pages.values():
         if not p["token"]:
@@ -132,20 +132,10 @@ def discover(user_token: str) -> dict:
                     p["ig"] = {"id": ig["id"], "username": ig.get("username", "")}
             except Exception:  # noqa: BLE001
                 pass
-    # Instagrams do portefólio SEM Página de Facebook (ex.: @davidcarretos e @carretoclips no "Carreto's"):
-    # publicam pelo id do Instagram com o token de utilizador (instagram_content_publish)
-    with_page = {p["ig"]["id"] for p in pages.values() if p.get("ig")}
+    # Instagrams SEM Página: com o "Facebook Login for Business" a Meta só expõe os Instagrams ligados a uma
+    # Página (os pedidos /{portefólio}/owned_instagram_accounts dão "Unsupported get request"). Para esses
+    # Instagrams: ligá-los a uma Página, ou usar a ligação "Instagram Login" (a decidir; ver docs/GUIA_META.md).
     igs: dict[str, dict] = {}
-    for biz in businesses:
-        for edge in ("owned_instagram_accounts", "instagram_accounts"):
-            try:
-                for ig in _paged(f"{graph()}/{biz['id']}/{edge}", {"fields": "id,username", "limit": 100,
-                                                                   "access_token": user_token}):
-                    if ig.get("id") and ig["id"] not in with_page and ig["id"] not in igs:
-                        igs[ig["id"]] = {"id": ig["id"], "username": ig.get("username", ""),
-                                         "business": biz.get("name", "")}
-            except Exception as exc:  # noqa: BLE001
-                errors.append(f"{biz.get('name')}/{edge}: {str(exc)[:120]}")
     expires = datetime.now().timestamp() + LAST_EXPIRES_IN
     found = {"user": me.get("name", ""), "user_id": me.get("id", ""),
              "at": datetime.now().isoformat(timespec="minutes"), "businesses": [b.get("name", "") for b in businesses],
@@ -269,7 +259,7 @@ def test(acc: Account) -> tuple[bool, str]:
                         params={"fields": "username", "access_token": token}).json()
             return True, f"Instagram @{r.get('username')} ✓"
     except Exception as exc:  # noqa: BLE001
-        return False, f"a ligação falhou: {str(exc)[:200]}"
+        return False, f"a ligação falhou: {exc}"
     return False, "esta rede não se liga pela Meta"
 
 

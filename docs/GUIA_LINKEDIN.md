@@ -28,16 +28,21 @@ Uma vez, ~20 minutos, **sem custos**. Depois liga-se no dashboard → **Contas �
 ## 2. No Carretos Studio
 1. **⚙ Configurar** → **LinkedIn · Client ID**, **LinkedIn · Client Secret** → Guardar.
    Em **LinkedIn · Community Management API aprovada?** escrever `não` (por agora).
-2. **Contas** → **in Ligar com o LinkedIn** → autorizar → **Testar** na conta pessoal.
+2. **Contas** → **in Ligar o perfil pessoal** → autorizar → **Testar** na conta pessoal.
    (Os tokens do LinkedIn duram ~60 dias: a página Contas mostra até quando; basta voltar a ligar.)
 
-## 3. Página da empresa (Community Management API)
-1. Na app, separador **Products** → **Community Management API** → **Request access** e preencher o
-   formulário (empresa: Carretos Group; utilização: publicar e gerir as publicações da nossa própria página).
-   Se o LinkedIn disser que esta API tem de estar numa app só para ela, crie uma 2.ª app igual (passos 1.1 a 1.5)
-   só com este produto e diga ao Claude Code (o sistema passa a usar essa).
-2. A aprovação pode demorar dias ou semanas. Até lá a página fica em **modo assistido** (os posts vão para o
-   telemóvel, para publicar à mão).
-3. Quando for aprovada: **⚙ Configurar → LinkedIn · Community Management API aprovada? → `sim`**, depois
-   **Contas → Ligar com o LinkedIn** outra vez (passa a pedir também a página) → escolher a página Carretos
-   Group → **Testar**.
+## 3. Página da empresa: 2.ª app só para a Community Management API
+O LinkedIn não deixa juntar a Community Management API à app do perfil (Share on LinkedIn + OpenID Connect).
+Por isso a página usa uma **2.ª app**, só com esse produto:
+1. linkedin.com/developers/apps → **Create app**: nome `Carretos Studio · Página`, página **Carretos Group**,
+   a mesma política de privacidade e logótipo → verificar com a página (Settings → Verify).
+2. **Products** → **Community Management API** → **Request access** e preencher o formulário (empresa:
+   Carretos Group; utilização: publicar e gerir as publicações da nossa própria página). O LinkedIn pode
+   demorar dias ou semanas a aprovar. Até lá a página fica em **modo assistido** (os posts vão para o telemóvel).
+3. **Auth** → acrescentar o mesmo endereço de retorno:
+   `https://carretosstudio.duckdns.org/contas/linkedin/callback` → copiar o Client ID e o Client Secret.
+4. **⚙ Configurar** → **LinkedIn (2.ª app, página da empresa) · Client ID / Client Secret** → Guardar.
+5. Quando o LinkedIn aprovar: **⚙ Configurar → Community Management API aprovada? → `sim`** →
+   **Contas → "Ligar a página da empresa"** → autorizar → a página Carretos Group fica ligada → **Testar**.
+
+As ligações do LinkedIn duram ~60 dias: o dashboard avisa 14 dias antes (e pelo Telegram, se estiver ativo).

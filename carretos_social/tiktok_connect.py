@@ -49,7 +49,8 @@ def exchange(code: str, redirect_uri: str) -> dict:
 
 
 def user_info(token: str) -> dict:
-    r = request("GET", f"{API}/user/info/", params={"fields": "open_id,display_name,username"},
+    # só os campos do scope user.info.basic (pedir "username" exige user.info.profile → 401 scope_not_authorized)
+    r = request("GET", f"{API}/user/info/", params={"fields": "open_id,union_id,avatar_url,display_name"},
                 headers={"Authorization": f"Bearer {token}"}).json()
     return (r.get("data") or {}).get("user") or {}
 
@@ -61,8 +62,8 @@ def _expiry(seconds) -> str:
 def link(acc: Account, tok: dict) -> dict[str, str]:
     """Liga a conta com o resultado da autorização. Devolve as variáveis a guardar no .env."""
     user = user_info(tok["access_token"])
-    save_account_override(acc.id, status="ligada", handle=user.get("username") or acc.handle,
-                          meta_name=user.get("display_name") or user.get("username") or "",
+    save_account_override(acc.id, status="ligada",                  # o @ fica o de accounts.yaml
+                          meta_name=user.get("display_name") or "",
                           access_expires=_expiry(tok.get("expires_in", 86400)),
                           refresh_expires=_expiry(tok.get("refresh_expires_in", 365 * 86400))[:10],
                           linked_at=datetime.now().isoformat(timespec="minutes"))
@@ -92,7 +93,7 @@ def test(acc: Account) -> tuple[bool, str]:
     try:
         user = user_info(ensure_fresh(acc))
         note = "" if audited() else " (app por auditar: só publica em privado; os posts públicos vão para o telemóvel)"
-        return True, f"TikTok @{user.get('username') or user.get('display_name') or '?'} ✓{note}"
+        return True, f"TikTok «{user.get('display_name') or acc.handle or '?'}» ✓{note}"
     except Exception as exc:  # noqa: BLE001
         return False, f"a ligação falhou: {exc}"
 

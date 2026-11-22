@@ -2,8 +2,9 @@
 
 - Perfil pessoal: "Sign In with LinkedIn using OpenID Connect" + "Share on LinkedIn" (w_member_social).
 - Página da Carretos Group: precisa da "Community Management API" (w_organization_social), que o LinkedIn
-  tem de aprovar. Até lá a página fica em modo assistido (o post vai para o telemóvel).
-Chaves em ⚙ Configurar: LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET e, depois da aprovação, LINKEDIN_ORG_API=sim.
+  só deixa ter numa app SÓ para ela e tem de aprovar. Até lá a página fica em modo assistido.
+Chaves em ⚙ Configurar: app do perfil (LINKEDIN_CLIENT_ID/SECRET), 2.ª app da página
+(LINKEDIN_ORG_CLIENT_ID/SECRET) e, depois da aprovação, LINKEDIN_ORG_API=sim.
 Guia: docs/GUIA_LINKEDIN.md. Os tokens duram ~60 dias: o dashboard avisa para voltar a ligar.
 """
 from __future__ import annotations
@@ -23,12 +24,18 @@ MEMBER_SCOPES = ["openid", "profile", "w_member_social"]
 ORG_SCOPES = ["w_organization_social", "r_organization_social", "rw_organization_admin"]
 
 
-def configured() -> bool:
-    return bool(os.environ.get("LINKEDIN_CLIENT_ID") and os.environ.get("LINKEDIN_CLIENT_SECRET"))
+APPS = {"perfil": ("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"),
+        "pagina": ("LINKEDIN_ORG_CLIENT_ID", "LINKEDIN_ORG_CLIENT_SECRET")}
+
+
+def configured(app: str = "perfil") -> bool:
+    cid, secret = APPS[app]
+    return bool(os.environ.get(cid) and os.environ.get(secret))
 
 
 def org_enabled() -> bool:
-    return _yes("LINKEDIN_ORG_API")
+    """Página da empresa: 2.ª app configurada e Community Management API aprovada."""
+    return configured("pagina") and _yes("LINKEDIN_ORG_API")
 
 
 def _headers(token: str) -> dict:
@@ -36,16 +43,17 @@ def _headers(token: str) -> dict:
             "X-Restli-Protocol-Version": "2.0.0"}
 
 
-def login_url(redirect_uri: str, state: str) -> str:
-    scopes = MEMBER_SCOPES + (ORG_SCOPES if org_enabled() else [])
-    return AUTH + "?" + urlencode({"response_type": "code", "client_id": os.environ["LINKEDIN_CLIENT_ID"],
+def login_url(redirect_uri: str, state: str, app: str = "perfil") -> str:
+    scopes = MEMBER_SCOPES if app == "perfil" else ORG_SCOPES
+    return AUTH + "?" + urlencode({"response_type": "code", "client_id": os.environ[APPS[app][0]],
                                    "redirect_uri": redirect_uri, "state": state, "scope": " ".join(scopes)})
 
 
-def exchange(code: str, redirect_uri: str) -> dict:
+def exchange(code: str, redirect_uri: str, app: str = "perfil") -> dict:
+    cid, secret = APPS[app]
     return request("POST", TOKEN, data={
         "grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri,
-        "client_id": os.environ["LINKEDIN_CLIENT_ID"], "client_secret": os.environ["LINKEDIN_CLIENT_SECRET"]}).json()
+        "client_id": os.environ[cid], "client_secret": os.environ[secret]}).json()
 
 
 def member(token: str) -> dict:
@@ -80,39 +88,53 @@ def saved() -> dict:
         return {}
 
 
+def _save(**fields) -> dict:
+    info = {**saved(), **fields}
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _path().write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
+    _path().chmod(0o600)                                   # tem tokens: só o utilizador da app lê
+    return info
+
+
+def _expires(token_data: dict) -> str:
+    return (datetime.now() + timedelta(seconds=int(token_data.get("expires_in") or 60 * 86400))).date().isoformat()
+
+
 def connect_member(token_data: dict) -> tuple[dict[str, str], dict]:
-    """Depois da autorização: liga o perfil pessoal e guarda as páginas encontradas. Devolve (variáveis .env, info)."""
+    """App do perfil: liga o LinkedIn pessoal. Devolve (variáveis .env, info)."""
     token = token_data["access_token"]
     me = member(token)
     acc = accounts()["li_davidcarreto"]
-    expires = (datetime.now() + timedelta(seconds=int(token_data.get("expires_in") or 60 * 86400))).date().isoformat()
+    expires = _expires(token_data)
     updates = {acc.credentials["access_token_env"]: token, acc.credentials["author_urn_env"]: f"urn:li:person:{me['sub']}"}
     save_account_override(acc.id, status="ligada", meta_name=me.get("name", ""), token_expires=expires,
                           linked_at=datetime.now().isoformat(timespec="minutes"))
-    scopes = set((token_data.get("scope") or "").replace(",", " ").split())
-    orgs: list[dict] = []
-    if org_enabled() and "w_organization_social" in scopes:
-        orgs = organizations(token)
-    info = {"name": me.get("name", ""), "orgs": orgs, "at": datetime.now().isoformat(timespec="minutes"),
-            "expires": expires, "token": token}
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _path().write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
-    _path().chmod(0o600)
-    if len(orgs) == 1 or any("carretos" in o["name"].lower() for o in orgs):   # liga já a página da empresa
+    info = _save(name=me.get("name", ""), at=datetime.now().isoformat(timespec="minutes"), expires=expires)
+    return updates, info
+
+
+def connect_org(token_data: dict) -> tuple[dict[str, str], dict]:
+    """2.ª app (Community Management API): encontra as páginas e liga a da Carretos Group (se for clara)."""
+    token = token_data["access_token"]
+    orgs = organizations(token)
+    info = _save(orgs=orgs, org_token=token, org_expires=_expires(token_data),
+                 org_at=datetime.now().isoformat(timespec="minutes"))
+    updates: dict[str, str] = {}
+    if len(orgs) == 1 or any("carretos" in o["name"].lower() for o in orgs):
         org = next((o for o in orgs if "carretos" in o["name"].lower()), orgs[0])
-        updates.update(link_org(org["urn"], info))
+        updates = link_org(org["urn"], info)
     return updates, info
 
 
 def link_org(urn: str, info: dict | None = None) -> dict[str, str]:
     info = info or saved()
     org = next((o for o in info.get("orgs", []) if o["urn"] == urn), None)
-    if not org or not info.get("token"):
-        raise ValueError("Essa página não está na lista autorizada. Volte a 'Ligar com o LinkedIn'.")
+    if not org or not info.get("org_token"):
+        raise ValueError("Essa página não está na lista autorizada. Volte a 'Ligar a página da empresa'.")
     acc = accounts()["li_carretosgroup"]
     save_account_override(acc.id, status="ligada", handle=acc.handle or org["name"], meta_name=f"Página «{org['name']}»",
-                          token_expires=info.get("expires"), linked_at=datetime.now().isoformat(timespec="minutes"))
-    return {acc.credentials["access_token_env"]: info["token"], acc.credentials["author_urn_env"]: urn}
+                          token_expires=info.get("org_expires"), linked_at=datetime.now().isoformat(timespec="minutes"))
+    return {acc.credentials["access_token_env"]: info["org_token"], acc.credentials["author_urn_env"]: urn}
 
 
 def test(acc: Account) -> tuple[bool, str]:

@@ -14,7 +14,7 @@ import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -32,7 +32,7 @@ log = __import__("logging").getLogger("carretos.web")
 
 def _back_with_error(pid: int, msg: str) -> RedirectResponse:
     from urllib.parse import quote
-    return RedirectResponse(f"/post/{pid}?falha={quote(msg[:300])}", 303)
+    return RedirectResponse(f"/post/{pid}?falha={quote(msg[:2000])}", 303)
 
 
 @app.exception_handler(Exception)
@@ -117,7 +117,9 @@ def _render(request: Request, name: str, ctx: dict):
     ctx["me"] = request.state.user
     if ctx["me"] and getattr(ctx["me"], "is_admin", False):
         from . import system
+        from ..expiry import expiring
         ctx.setdefault("reboot", system.reboot_notice())
+        ctx.setdefault("expiring", expiring())
     return tpl.TemplateResponse(request, name, ctx)
 
 
@@ -727,6 +729,7 @@ def accounts_page(request: Request, msg: str = "", erro: str = ""):
     from .. import tiktok_connect as tc
     return _render(request, "accounts.html", {"rows": rows, "found": found, "configured": mc.configured(),
                                               "li": {"configured": lc.configured(), "org": lc.org_enabled(),
+                                                     "org_app": lc.configured("pagina"),
                                                      "saved": lc.saved(),
                                                      "redirect": _base_url(request) + "/contas/linkedin/callback"},
                                               "tt": {"configured": tc.configured(), "audited": tc.audited(),
@@ -764,7 +767,7 @@ def meta_callback(request: Request, code: str = "", state: str = "", error_descr
         found = mc.discover(token)
     except Exception as exc:  # noqa: BLE001
         log.exception("meta callback")
-        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar: ' + str(exc)[:200])}", 303)
+        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar: ' + str(exc))}", 303)
     n = len(found["pages"])
     n_ig = sum(1 for p in found["pages"] if p.get("ig"))
     text = (f"Autorizado por {found['user']}: {n} Página(s) e {n_ig} Instagram(s). "
@@ -832,15 +835,17 @@ def account_unlink(request: Request, acc_id: str):
 
 # ---------------- LinkedIn
 @app.get("/contas/linkedin/ligar")
-def linkedin_login(request: Request):
+def linkedin_login(request: Request, app_: str = Query("perfil", alias="app")):
     from .. import linkedin_connect as lc
     if not request.state.user.is_admin:
         return _forbidden("Só o administrador liga as contas.")
-    if not lc.configured():
-        return RedirectResponse("/contas?erro=Primeiro+preencha+o+Client+ID+e+o+Client+Secret+do+LinkedIn+em+⚙+Configurar", 303)
+    app_ = "pagina" if app_ == "pagina" else "perfil"
+    if not lc.configured(app_):
+        what = "da 2.ª app (página)" if app_ == "pagina" else "do LinkedIn"
+        return RedirectResponse(f"/contas?erro=Primeiro+preencha+o+Client+ID+e+o+Client+Secret+{what.replace(' ', '+')}+em+⚙+Configurar", 303)
     state = secrets.token_urlsafe(24)
-    r = RedirectResponse(lc.login_url(_base_url(request) + "/contas/linkedin/callback", state), 303)
-    r.set_cookie("li_state", state, max_age=900, httponly=True, samesite="lax",
+    r = RedirectResponse(lc.login_url(_base_url(request) + "/contas/linkedin/callback", state, app_), 303)
+    r.set_cookie("li_state", f"{state}|{app_}", max_age=900, httponly=True, samesite="lax",
                  secure=os.environ.get("DASHBOARD_HTTPS", "") == "1")
     return r
 
@@ -854,17 +859,25 @@ def linkedin_callback(request: Request, code: str = "", state: str = "", error: 
         return _forbidden("Só o administrador liga as contas.")
     if error or not code:
         return RedirectResponse(f"/contas?erro={quote('O LinkedIn não autorizou: ' + (error_description or error or 'cancelado'))}", 303)
-    if not state or not hmac.compare_digest(state, request.cookies.get("li_state", "")):
+    saved_state, _, app_ = request.cookies.get("li_state", "").partition("|")
+    if not state or not hmac.compare_digest(state, saved_state):
         return RedirectResponse("/contas?erro=Pedido+expirado:+carregue+outra+vez+em+Ligar+com+o+LinkedIn", 303)
+    redirect = _base_url(request) + "/contas/linkedin/callback"
     try:
-        updates, info = lc.connect_member(lc.exchange(code, _base_url(request) + "/contas/linkedin/callback"))
+        if app_ == "pagina":
+            updates, info = lc.connect_org(lc.exchange(code, redirect, "pagina"))
+            text = ("Páginas encontradas: " + ", ".join(o["name"] for o in info["orgs"]) + "."
+                    if info["orgs"] else "Não encontrei páginas de que seja administrador.")
+            if updates:
+                text += " Página da Carretos Group ligada."
+        else:
+            updates, info = lc.connect_member(lc.exchange(code, redirect, "perfil"))
+            text = f"LinkedIn de {info['name']} ligado."
         envfile.set_env(updates, root=ROOT)
     except Exception as exc:  # noqa: BLE001
         log.exception("linkedin callback")
-        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar o LinkedIn: ' + str(exc)[:300])}", 303)
-    extra = (f" Páginas encontradas: {', '.join(o['name'] for o in info['orgs'])}." if info["orgs"] else
-             " A página da empresa fica em modo assistido até o LinkedIn aprovar a Community Management API.")
-    r = RedirectResponse(f"/contas?msg={quote('LinkedIn de ' + info['name'] + ' ligado.' + extra)}", 303)
+        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar o LinkedIn: ' + str(exc))}", 303)
+    r = RedirectResponse(f"/contas?msg={quote(text)}", 303)
     r.delete_cookie("li_state")
     return r
 
@@ -917,7 +930,7 @@ def tiktok_callback(request: Request, code: str = "", state: str = "", error: st
         envfile.set_env(tc.link(acc, tc.exchange(code, _base_url(request) + "/contas/tiktok/callback")), root=ROOT)
     except Exception as exc:  # noqa: BLE001
         log.exception("tiktok callback")
-        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar ' + acc.name + ': ' + str(exc)[:300])}", 303)
+        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar ' + acc.name + ': ' + str(exc))}", 303)
     handle = accounts()[conta].handle
     r = RedirectResponse(f"/contas?msg={quote(acc.name + ' ligada (@' + handle + ').')}", 303)
     r.delete_cookie("tt_state")
@@ -1251,8 +1264,10 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("META_APP_SECRET", "Meta · App Secret", True),
     ("META_LOGIN_CONFIG_ID", "Meta · Configuration ID (só se a app usar 'Facebook Login for Business')", False),
     # LinkedIn (ver docs/GUIA_LINKEDIN.md)
-    ("LINKEDIN_CLIENT_ID", "LinkedIn · Client ID", False),
-    ("LINKEDIN_CLIENT_SECRET", "LinkedIn · Client Secret", True),
+    ("LINKEDIN_CLIENT_ID", "LinkedIn (perfil pessoal) · Client ID", False),
+    ("LINKEDIN_CLIENT_SECRET", "LinkedIn (perfil pessoal) · Client Secret", True),
+    ("LINKEDIN_ORG_CLIENT_ID", "LinkedIn (2.ª app, página da empresa) · Client ID", False),
+    ("LINKEDIN_ORG_CLIENT_SECRET", "LinkedIn (2.ª app, página da empresa) · Client Secret", True),
     ("LINKEDIN_ORG_API", "LinkedIn · Community Management API aprovada? (sim/não)", False),
     # TikTok (ver docs/GUIA_TIKTOK.md)
     ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
@@ -1274,6 +1289,8 @@ KEY_FORMATS = {
     "META_LOGIN_CONFIG_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
     "LINKEDIN_CLIENT_ID": (_re.compile(r"^[A-Za-z0-9]{8,30}$"), "letras e números, sem espaços"),
     "LINKEDIN_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_.=\-]{10,80}$"), "letras, números e símbolos, sem espaços"),
+    "LINKEDIN_ORG_CLIENT_ID": (_re.compile(r"^[A-Za-z0-9]{8,30}$"), "letras e números, sem espaços"),
+    "LINKEDIN_ORG_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_.=\-]{10,80}$"), "letras, números e símbolos, sem espaços"),
     "LINKEDIN_ORG_API": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
     "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
     "TIKTOK_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_\-]{16,80}$"), "letras e números, sem espaços"),
