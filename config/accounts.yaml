@@ -78,6 +78,7 @@ accounts:
     auto_approve: false
     credentials:
       access_token_env: TT_DAVIDCARRETO_TOKEN
+      refresh_token_env: TT_DAVIDCARRETO_REFRESH     # o token da TikTok dura 24 h: é renovado sozinho
 
   - id: tt_carretoclips
     group: david
@@ -90,6 +91,7 @@ accounts:
     auto_approve: false
     credentials:
       access_token_env: TT_CARRETOCLIPS_TOKEN
+      refresh_token_env: TT_CARRETOCLIPS_REFRESH     # o token da TikTok dura 24 h: é renovado sozinho
 
   - id: li_davidcarreto
     group: david
@@ -110,7 +112,7 @@ accounts:
     platform: linkedin_org
     name: "Carretos Group (LinkedIn empresa)"
     handle: ""                # por preencher (o David indica)
-    status: por_ligar
+    # modo assistido até o LinkedIn aprovar a Community Management API (ver docs/GUIA_LINKEDIN.md)
     voice: empresa
     narrator: generica      # voz: david | generica | nenhum
     theme: carretos         # identidade: pessoal (preto e dourado) | carretos (azul)
@@ -164,6 +166,7 @@ accounts:
     auto_approve: false
     credentials:
       access_token_env: TT_CARRETOSGROUP_TOKEN
+      refresh_token_env: TT_CARRETOSGROUP_REFRESH     # o token da TikTok dura 24 h: é renovado sozinho
 
   - id: yt_carretosgroup
     group: carretos

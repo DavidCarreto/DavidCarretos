@@ -51,13 +51,37 @@ class Account:
         return os.environ.get(env_name) if env_name else None
 
     @property
+    def has_credentials(self) -> bool:
+        return bool(self.credentials) and all(self.secret(k) for k in self.credentials)
+
+    @property
+    def mode(self) -> str:
+        """Modo efetivo: 'assist' quando a rede ainda não deixa publicar sozinho, senão 'auto'."""
+        return "assist" if self.assist_reason else "auto"
+
+    @property
+    def assist_reason(self) -> str:
+        """Porque é que esta conta publica em modo assistido (vazio = publica sozinha)."""
+        if self.platform == "facebook_profile":
+            return "A Meta não deixa publicar em perfis pessoais: vai para o telemóvel, para publicar à mão."
+        if self.publish_mode == "assist":
+            return "Configurada em modo assistido."
+        if self.platform == "tiktok" and not _yes("TIKTOK_AUDITED"):
+            return ("A TikTok ainda não auditou a app: a publicação automática só sai em privado, por isso os posts "
+                    "públicos vão para o telemóvel.")
+        if self.platform == "linkedin_org" and not (_yes("LINKEDIN_ORG_API") and self.has_credentials):
+            return ("O LinkedIn ainda não aprovou a Community Management API (necessária para publicar na página): "
+                    "vai para o telemóvel.")
+        return ""
+
+    @property
     def connected(self) -> bool:
-        """Conta ligada: não está marcada 'por ligar' e tem as credenciais (o modo assistido não precisa)."""
+        """Conta ligada: não está 'por ligar' e tem as credenciais (o modo assistido não precisa)."""
         if self.status == "por_ligar":
             return False
-        if self.publish_mode == "assist":
+        if self.mode == "assist":
             return True
-        return bool(self.credentials) and all(self.secret(k) for k in self.credentials)
+        return self.has_credentials
 
     @property
     def label(self) -> str:
@@ -95,6 +119,10 @@ def accounts() -> dict[str, Account]:
             a["status"] = ""                 # ligada no dashboard: deixa de estar "por ligar"
         out[a["id"]] = Account(**a)
     return out
+
+
+def _yes(env: str) -> bool:
+    return os.environ.get(env, "").strip().lower() in ("1", "sim", "s", "yes", "true")
 
 
 @lru_cache

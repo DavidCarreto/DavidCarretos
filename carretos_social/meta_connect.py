@@ -54,14 +54,20 @@ def login_url(redirect_uri: str, state: str) -> str:
 
 
 def exchange_code(code: str, redirect_uri: str) -> str:
-    """Código → token de utilizador de longa duração (~60 dias; os das Páginas que dele vêm não expiram)."""
+    """Código → token de utilizador de longa duração (~60 dias; os das Páginas que dele vêm não expiram).
+    A validade fica em LAST_EXPIRES_IN (usada nos Instagrams sem Página, que publicam com este token)."""
+    global LAST_EXPIRES_IN
     app_id, secret = os.environ["META_APP_ID"], os.environ["META_APP_SECRET"]
     short = request("GET", f"{graph()}/oauth/access_token", params={
         "client_id": app_id, "client_secret": secret, "redirect_uri": redirect_uri, "code": code}).json()
     long = request("GET", f"{graph()}/oauth/access_token", params={
         "grant_type": "fb_exchange_token", "client_id": app_id, "client_secret": secret,
         "fb_exchange_token": short["access_token"]}).json()
+    LAST_EXPIRES_IN = int(long.get("expires_in") or 60 * 86400)
     return long["access_token"]
+
+
+LAST_EXPIRES_IN = 60 * 86400
 
 
 PAGE_FIELDS = "id,name,access_token,tasks,instagram_business_account{id,username,name}"
@@ -126,9 +132,27 @@ def discover(user_token: str) -> dict:
                     p["ig"] = {"id": ig["id"], "username": ig.get("username", "")}
             except Exception:  # noqa: BLE001
                 pass
+    # Instagrams do portefólio SEM Página de Facebook (ex.: @davidcarretos e @carretoclips no "Carreto's"):
+    # publicam pelo id do Instagram com o token de utilizador (instagram_content_publish)
+    with_page = {p["ig"]["id"] for p in pages.values() if p.get("ig")}
+    igs: dict[str, dict] = {}
+    for biz in businesses:
+        for edge in ("owned_instagram_accounts", "instagram_accounts"):
+            try:
+                for ig in _paged(f"{graph()}/{biz['id']}/{edge}", {"fields": "id,username", "limit": 100,
+                                                                   "access_token": user_token}):
+                    if ig.get("id") and ig["id"] not in with_page and ig["id"] not in igs:
+                        igs[ig["id"]] = {"id": ig["id"], "username": ig.get("username", ""),
+                                         "business": biz.get("name", "")}
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{biz.get('name')}/{edge}: {str(exc)[:120]}")
+    expires = datetime.now().timestamp() + LAST_EXPIRES_IN
     found = {"user": me.get("name", ""), "user_id": me.get("id", ""),
              "at": datetime.now().isoformat(timespec="minutes"), "businesses": [b.get("name", "") for b in businesses],
-             "pages": sorted(pages.values(), key=lambda p: (p["business"], p["name"].lower())), "errors": errors}
+             "pages": sorted(pages.values(), key=lambda p: (p["business"], p["name"].lower())),
+             "igs": sorted(igs.values(), key=lambda i: i["username"].lower()), "errors": errors,
+             "user_token": user_token,                 # só no servidor (ficheiro 600); nunca mostrado
+             "user_token_expires": datetime.fromtimestamp(expires).date().isoformat()}
     _save(found)
     return found
 
@@ -165,6 +189,11 @@ def options_for(acc: Account, found: dict | None = None) -> list[dict]:
             out.append({"value": f"ig:{p['ig']['id']}",
                         "label": f"Instagram @{p['ig']['username']} (Página «{p['name']}»{biz}){warn}",
                         "name": p["ig"]["username"], "id": p["ig"]["id"], "ok": bool(p.get("token"))})
+    if acc.platform == "instagram":
+        for ig in found.get("igs", []):
+            biz = f" · portefólio {ig['business']}" if ig.get("business") else ""
+            out.append({"value": f"igb:{ig['id']}", "label": f"Instagram @{ig['username']}{biz} (sem Página)",
+                        "name": ig["username"], "id": ig["id"], "ok": bool(found.get("user_token"))})
     return out
 
 
@@ -193,6 +222,15 @@ def link(acc: Account, choice: str, found: dict | None = None) -> dict[str, str]
     """Liga a conta à Página/Instagram escolhido. Devolve as variáveis a guardar no .env."""
     found = found if found is not None else discovered()
     kind, _, ident = choice.partition(":")
+    if kind == "igb" and acc.platform == "instagram":
+        ig = next((i for i in found.get("igs", []) if i["id"] == ident), None)
+        if not ig or not found.get("user_token"):
+            raise ValueError("Esse Instagram não está na lista autorizada. Volte a 'Ligar com o Facebook'.")
+        save_account_override(acc.id, status="ligada", handle=ig["username"] or acc.handle,
+                              meta_name=f"@{ig['username']} · sem Página (portefólio {ig.get('business') or '?'})",
+                              token_expires=found.get("user_token_expires"),
+                              linked_at=datetime.now().isoformat(timespec="minutes"))
+        return {acc.credentials["access_token_env"]: found["user_token"], acc.credentials["user_id_env"]: ident}
     for p in found.get("pages", []):
         if ((kind == "page" and p["id"] == ident) or (kind == "ig" and (p.get("ig") or {}).get("id") == ident)) \
                 and not p.get("token"):
@@ -214,7 +252,7 @@ def link(acc: Account, choice: str, found: dict | None = None) -> dict[str, str]
 
 
 def unlink(acc: Account) -> dict[str, str]:
-    save_account_override(acc.id, status="desligada", linked_at=None, meta_name=None)
+    save_account_override(acc.id, status="desligada", linked_at=None, meta_name=None, token_expires=None)
     return {env: "" for env in acc.credentials.values()}
 
 

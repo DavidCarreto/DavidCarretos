@@ -1,24 +1,50 @@
 {% extends "base.html" %}{% block body %}
 <h1>Contas</h1>
 {% if msg %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ {{ msg }}</div>{% endif %}
-{% if erro %}<div class="card alert">✕ {{ erro }}</div>{% endif %}
+{% if erro %}<div class="card alert" style="word-break:break-word">✕ {{ erro }}</div>{% endif %}
 
-<div class="card" style="margin-bottom:14px">
- <b>Facebook e Instagram (Meta)</b>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:14px">
+<div class="card">
+ <b>ⓕ Facebook e Instagram (Meta)</b>
  {% if not configured %}
-  <p class="muted" style="font-size:14px">Para ligar, primeiro crie a app da Meta (uma vez, ~20 min, grátis) e preencha o
-  <b>App ID</b> e o <b>App Secret</b> em <a class="gold" href="/configurar">⚙ Configurar</a>. Guia passo a passo:
-  <code>docs/GUIA_META.md</code>.</p>
-  <p class="muted" style="font-size:13px">Endereço a pôr na app da Meta ("Valid OAuth Redirect URIs"):<br><code>{{ redirect }}</code></p>
+  <p class="muted" style="font-size:13px">Primeiro crie a app da Meta e preencha o <b>App ID</b> e o <b>App Secret</b> em
+  <a class="gold" href="/configurar">⚙ Configurar</a> (guia: <code>docs/GUIA_META.md</code>).</p>
  {% else %}
-  <p class="muted" style="font-size:14px;margin:4px 0 10px">Entre com o Facebook e autorize as Páginas e os Instagrams profissionais
-  <b>de todos os portefólios</b> (ex.: Carreto's e RibaMotor): na janela do Facebook, em "Editar acesso", marque tudo.
-  Depois confirme abaixo a que conta corresponde cada um. As chaves ficam guardadas no servidor e nunca são mostradas.</p>
+  <p class="muted" style="font-size:13px;margin:4px 0 10px">Autorize as Páginas e os Instagrams <b>de todos os portefólios</b>
+  (Carreto's e RibaMotor; na janela do Facebook use "Editar acesso" e marque tudo). Os Instagrams sem Página também aparecem.</p>
   <a class="btn gold" href="/contas/meta/ligar">ⓕ Ligar com o Facebook</a>
-  {% if found.at %}<span class="muted" style="font-size:12px;margin-left:8px">Última autorização: {{ found.user }} · {{ found.at.replace('T',' ') }} · {{ found.pages|length }} Página(s){% if found.businesses %} · portefólios: {{ found.businesses|join(', ') }}{% endif %}</span>{% endif %}
-  {% for e in found.errors or [] %}<p class="fmt-line ajustar" style="margin:4px 0 0">⚠ {{ e }}</p>{% endfor %}
-  <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno configurado na app: <code>{{ redirect }}</code></p>
+  {% if found.at %}<p class="muted" style="font-size:12px;margin:8px 0 0">Última autorização: {{ found.user }} · {{ found.at.replace('T',' ') }} · {{ found.pages|length }} Página(s), {{ (found.igs or [])|length }} Instagram(s) sem Página{% if found.businesses %} · portefólios: {{ found.businesses|join(', ') }}{% endif %}</p>{% endif %}
+  {% for e in found.errors or [] %}<p class="fmt-line ajustar" style="margin:4px 0 0;word-break:break-word">⚠ {{ e }}</p>{% endfor %}
  {% endif %}
+ <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno: <code>{{ redirect }}</code></p>
+</div>
+
+<div class="card">
+ <b>in LinkedIn</b>
+ {% if not li.configured %}
+  <p class="muted" style="font-size:13px">Primeiro crie a app em linkedin.com/developers e preencha o <b>Client ID</b> e o
+  <b>Client Secret</b> em <a class="gold" href="/configurar">⚙ Configurar</a> (guia: <code>docs/GUIA_LINKEDIN.md</code>).</p>
+ {% else %}
+  <p class="muted" style="font-size:13px;margin:4px 0 10px">Liga o seu perfil pessoal{% if li.org %} e a página da Carretos Group{% endif %}.
+  {% if not li.org %}A página da empresa fica em <b>modo assistido</b> até o LinkedIn aprovar a Community Management API.{% endif %}</p>
+  <a class="btn gold" href="/contas/linkedin/ligar">in Ligar com o LinkedIn</a>
+  {% if li.saved.at %}<p class="muted" style="font-size:12px;margin:8px 0 0">Ligado por {{ li.saved.name }} · {{ li.saved.at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.expires }}</p>{% endif %}
+ {% endif %}
+ <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno: <code>{{ li.redirect }}</code></p>
+</div>
+
+<div class="card">
+ <b>♪ TikTok</b>
+ {% if not tt.configured %}
+  <p class="muted" style="font-size:13px">Primeiro crie a app em developers.tiktok.com e preencha o <b>Client key</b> e o
+  <b>Client secret</b> em <a class="gold" href="/configurar">⚙ Configurar</a> (guia: <code>docs/GUIA_TIKTOK.md</code>).</p>
+ {% else %}
+  <p class="muted" style="font-size:13px;margin:4px 0 6px">Cada conta liga-se à parte, no botão "Ligar esta conta" abaixo.
+  <b>Antes, abra tiktok.com com essa conta</b> (o TikTok autoriza a conta que estiver aberta).</p>
+ {% endif %}
+ {% if not tt.audited %}<p class="fmt-line ajustar" style="margin:4px 0 0">⚠ A TikTok ainda não auditou a app: a publicação automática só sai em <b>privado</b>. Até lá, os posts públicos seguem em modo assistido.</p>{% endif %}
+ <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno: <code>{{ tt.redirect }}</code></p>
+</div>
 </div>
 
 <form method="post" action="/contas/meta/associar">
@@ -27,25 +53,32 @@
 <div class="card acc-row">
  <div style="flex:1;min-width:220px">
   <b>{{ ICON.get(a.platform,'') }} {{ a.name }}</b>{% if a.handle %} <span class="muted">@{{ a.handle }}</span>{% endif %}<br>
-  {% if a.publish_mode == 'assist' or a.platform == 'facebook_profile' %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span>
-   <span class="muted" style="font-size:12px">A Meta não deixa publicar em perfis pessoais: vai para o telemóvel, para publicar à mão.</span>
-  {% elif a.connected %}<span class="pill" style="color:#3fb950;border-color:#3fb950">✓ Ligada</span>{% if it.over.meta_name %} <span class="muted" style="font-size:12px">{{ it.over.meta_name }}{% if it.over.linked_at %} · desde {{ it.over.linked_at.replace('T',' ') }}{% endif %}</span>{% endif %}
-  {% else %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Por ligar</span>
-   {% if not it.meta %}<span class="muted" style="font-size:12px">{{ {'tiktok':'TikTok','linkedin_member':'LinkedIn','linkedin_org':'LinkedIn','youtube':'YouTube'}.get(a.platform, a.platform) }}: ligação numa próxima fase.</span>{% endif %}
+  {% if a.has_credentials %}<span class="pill" style="color:#3fb950;border-color:#3fb950">✓ Ligada</span>{% if it.over.meta_name %} <span class="muted" style="font-size:12px">{{ it.over.meta_name }}{% if it.over.linked_at %} · desde {{ it.over.linked_at.replace('T',' ') }}{% endif %}</span>{% endif %}
+   {% if it.over.token_expires %}<span class="muted" style="font-size:12px"> · volte a ligar antes de {{ it.over.token_expires }}</span>{% endif %}<br>{% endif %}
+  {% if a.assist_reason %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span> <span class="muted" style="font-size:12px">{{ a.assist_reason }}</span>
+  {% elif not a.has_credentials %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Por ligar</span>
+   {% if a.platform == 'youtube' %}<span class="muted" style="font-size:12px">YouTube: ligação numa próxima fase.</span>
+   {% elif a.platform == 'linkedin_member' %}<span class="muted" style="font-size:12px">Use "Ligar com o LinkedIn" acima.</span>{% endif %}
   {% endif %}
  </div>
- {% if it.meta and a.platform != 'facebook_profile' %}
  <div class="acc-actions">
-  {% if not a.connected %}
-   {% if it.options %}<select name="acc_{{ a.id }}"><option value="">— escolher —</option>{% for o in it.options %}<option value="{{ o.value }}" {{ 'selected' if o.value == it.suggest }}>{{ o.label }}</option>{% endfor %}</select>
-   {% elif found.at %}<span class="muted" style="font-size:12px">{{ 'Nenhum Instagram profissional ligado a uma Página autorizada.' if a.platform == 'instagram' else 'Nenhuma Página autorizada.' }}</span>{% endif %}
-  {% else %}
+  {% if a.has_credentials %}
    <button class="btn" formaction="/contas/{{ a.id }}/testar">Testar</button>
+   {% if a.platform == 'tiktok' %}<a class="btn" href="/contas/tiktok/ligar?conta={{ a.id }}">Voltar a ligar</a>{% endif %}
    <button class="btn red" formaction="/contas/{{ a.id }}/desligar" onclick="return confirm('Desligar {{ a.name }}? Deixa de publicar automaticamente.')">Desligar</button>
+  {% elif it.meta and a.platform != 'facebook_profile' %}
+   {% if it.options %}<select name="acc_{{ a.id }}"><option value="">— escolher —</option>{% for o in it.options %}<option value="{{ o.value }}" {{ 'selected' if o.value == it.suggest }}>{{ o.label }}</option>{% endfor %}</select>
+   {% elif found.at %}<span class="muted" style="font-size:12px">{{ 'Nenhum Instagram profissional autorizado com este nome.' if a.platform == 'instagram' else 'Nenhuma Página autorizada.' }}</span>{% endif %}
+  {% elif a.platform == 'tiktok' and tt.configured %}
+   <a class="btn gold" href="/contas/tiktok/ligar?conta={{ a.id }}">♪ Ligar esta conta</a>
+  {% elif a.platform == 'linkedin_org' and li.org and li.saved.orgs %}
+   <select name="urn" form="li-org"><option value="">— escolher página —</option>{% for o in li.saved.orgs %}<option value="{{ o.urn }}">{{ o.name }}</option>{% endfor %}</select>
+   <button class="btn gold" form="li-org">Ligar página</button>
   {% endif %}
- </div>{% endif %}
+ </div>
 </div>
 {% endfor %}{% endfor %}
-{% if found.at %}<p><button class="btn gold">Guardar ligações</button> <span class="muted" style="font-size:12px">Só liga as contas onde escolheu uma Página/Instagram.</span></p>{% endif %}
+{% if found.at %}<p><button class="btn gold">Guardar ligações (Facebook/Instagram)</button> <span class="muted" style="font-size:12px">Só liga as contas onde escolheu uma Página/Instagram.</span></p>{% endif %}
 </form>
+<form id="li-org" method="post" action="/contas/linkedin/associar"></form>
 {% endblock %}

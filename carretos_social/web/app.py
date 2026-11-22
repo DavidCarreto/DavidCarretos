@@ -124,7 +124,7 @@ def _render(request: Request, name: str, ctx: dict):
 @app.middleware("http")
 async def auth(request: Request, call_next):
     request.state.user = None
-    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor", "/publico/")
+    open_paths = ("/login", "/static", "/configurar", "/recuperar", "/repor", "/publico/", "/privacidade", "/termos")
     users.bootstrap_admin()
     if users.count() == 0:  # ainda não há administrador: 1.ª configuração
         if not request.url.path.startswith(open_paths):
@@ -723,7 +723,14 @@ def accounts_page(request: Request, msg: str = "", erro: str = ""):
                           "options": mc.options_for(a, found) if meta else [],
                           "suggest": mc.suggestion(a, found) if meta and not a.connected else ""})
         rows.append((g, items))
+    from .. import linkedin_connect as lc
+    from .. import tiktok_connect as tc
     return _render(request, "accounts.html", {"rows": rows, "found": found, "configured": mc.configured(),
+                                              "li": {"configured": lc.configured(), "org": lc.org_enabled(),
+                                                     "saved": lc.saved(),
+                                                     "redirect": _base_url(request) + "/contas/linkedin/callback"},
+                                              "tt": {"configured": tc.configured(), "audited": tc.audited(),
+                                                     "redirect": _base_url(request) + "/contas/tiktok/callback"},
                                               "redirect": _base_url(request) + "/contas/meta/callback",
                                               "msg": msg, "erro": erro, "page": "contas"})
 
@@ -795,10 +802,14 @@ async def meta_associate(request: Request):
 @app.post("/contas/{acc_id}/testar")
 def account_test(request: Request, acc_id: str):
     from urllib.parse import quote
+    from .. import linkedin_connect as lc
     from .. import meta_connect as mc
+    from .. import tiktok_connect as tc
     if not request.state.user.is_admin or acc_id not in accounts():
         return _forbidden()
-    ok, text = mc.test(accounts()[acc_id])
+    acc = accounts()[acc_id]
+    tester = {"tiktok": tc.test, "linkedin_member": lc.test, "linkedin_org": lc.test}.get(acc.platform, mc.test)
+    ok, text = tester(acc)
     key = "msg" if ok else "erro"
     return RedirectResponse(f"/contas?{key}={quote(accounts()[acc_id].name + ': ' + text)}", 303)
 
@@ -810,8 +821,140 @@ def account_unlink(request: Request, acc_id: str):
     from .. import meta_connect as mc
     if not request.state.user.is_admin or acc_id not in accounts():
         return _forbidden()
-    envfile.set_env(mc.unlink(accounts()[acc_id]), root=ROOT)
+    acc = accounts()[acc_id]
+    if acc.platform == "tiktok":
+        from .. import tiktok_connect as tc
+        envfile.set_env(tc.unlink(acc), root=ROOT)
+    else:
+        envfile.set_env(mc.unlink(acc), root=ROOT)
     return RedirectResponse(f"/contas?msg={quote(accounts()[acc_id].name + ': desligada.')}", 303)
+
+
+# ---------------- LinkedIn
+@app.get("/contas/linkedin/ligar")
+def linkedin_login(request: Request):
+    from .. import linkedin_connect as lc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    if not lc.configured():
+        return RedirectResponse("/contas?erro=Primeiro+preencha+o+Client+ID+e+o+Client+Secret+do+LinkedIn+em+⚙+Configurar", 303)
+    state = secrets.token_urlsafe(24)
+    r = RedirectResponse(lc.login_url(_base_url(request) + "/contas/linkedin/callback", state), 303)
+    r.set_cookie("li_state", state, max_age=900, httponly=True, samesite="lax",
+                 secure=os.environ.get("DASHBOARD_HTTPS", "") == "1")
+    return r
+
+
+@app.get("/contas/linkedin/callback")
+def linkedin_callback(request: Request, code: str = "", state: str = "", error: str = "", error_description: str = ""):
+    from urllib.parse import quote
+    from .. import envfile
+    from .. import linkedin_connect as lc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    if error or not code:
+        return RedirectResponse(f"/contas?erro={quote('O LinkedIn não autorizou: ' + (error_description or error or 'cancelado'))}", 303)
+    if not state or not hmac.compare_digest(state, request.cookies.get("li_state", "")):
+        return RedirectResponse("/contas?erro=Pedido+expirado:+carregue+outra+vez+em+Ligar+com+o+LinkedIn", 303)
+    try:
+        updates, info = lc.connect_member(lc.exchange(code, _base_url(request) + "/contas/linkedin/callback"))
+        envfile.set_env(updates, root=ROOT)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("linkedin callback")
+        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar o LinkedIn: ' + str(exc)[:300])}", 303)
+    extra = (f" Páginas encontradas: {', '.join(o['name'] for o in info['orgs'])}." if info["orgs"] else
+             " A página da empresa fica em modo assistido até o LinkedIn aprovar a Community Management API.")
+    r = RedirectResponse(f"/contas?msg={quote('LinkedIn de ' + info['name'] + ' ligado.' + extra)}", 303)
+    r.delete_cookie("li_state")
+    return r
+
+
+@app.post("/contas/linkedin/associar")
+def linkedin_associate(request: Request, urn: str = Form("")):
+    from urllib.parse import quote
+    from .. import envfile
+    from .. import linkedin_connect as lc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    try:
+        envfile.set_env(lc.link_org(urn), root=ROOT)
+    except ValueError as exc:
+        return RedirectResponse(f"/contas?erro={quote(str(exc))}", 303)
+    return RedirectResponse("/contas?msg=Página+do+LinkedIn+ligada.", 303)
+
+
+# ---------------- TikTok (cada conta autoriza à parte)
+@app.get("/contas/tiktok/ligar")
+def tiktok_login(request: Request, conta: str = ""):
+    from .. import tiktok_connect as tc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    if conta not in accounts() or accounts()[conta].platform != "tiktok":
+        return _forbidden("Conta TikTok desconhecida.")
+    if not tc.configured():
+        return RedirectResponse("/contas?erro=Primeiro+preencha+o+Client+key+e+o+Client+secret+da+TikTok+em+⚙+Configurar", 303)
+    state = secrets.token_urlsafe(24)
+    r = RedirectResponse(tc.login_url(_base_url(request) + "/contas/tiktok/callback", state), 303)
+    r.set_cookie("tt_state", f"{state}|{conta}", max_age=900, httponly=True, samesite="lax",
+                 secure=os.environ.get("DASHBOARD_HTTPS", "") == "1")
+    return r
+
+
+@app.get("/contas/tiktok/callback")
+def tiktok_callback(request: Request, code: str = "", state: str = "", error: str = "", error_description: str = ""):
+    from urllib.parse import quote
+    from .. import envfile
+    from .. import tiktok_connect as tc
+    if not request.state.user.is_admin:
+        return _forbidden("Só o administrador liga as contas.")
+    if error or not code:
+        return RedirectResponse(f"/contas?erro={quote('A TikTok não autorizou: ' + (error_description or error or 'cancelado'))}", 303)
+    saved_state, _, conta = request.cookies.get("tt_state", "").partition("|")
+    if not state or not hmac.compare_digest(state, saved_state) or conta not in accounts():
+        return RedirectResponse("/contas?erro=Pedido+expirado:+carregue+outra+vez+em+Ligar+esta+conta", 303)
+    acc = accounts()[conta]
+    try:
+        envfile.set_env(tc.link(acc, tc.exchange(code, _base_url(request) + "/contas/tiktok/callback")), root=ROOT)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("tiktok callback")
+        return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar ' + acc.name + ': ' + str(exc)[:300])}", 303)
+    handle = accounts()[conta].handle
+    r = RedirectResponse(f"/contas?msg={quote(acc.name + ' ligada (@' + handle + ').')}", 303)
+    r.delete_cookie("tt_state")
+    return r
+
+
+_LEGAL = {
+    "privacidade": ("Política de privacidade", [
+        "O Carretos Studio é a ferramenta interna da Carretos Group para criar, agendar e publicar conteúdos nas suas "
+        "próprias contas de redes sociais (Facebook, Instagram, LinkedIn e TikTok).",
+        "Quando uma conta é ligada, o Carretos Studio recebe da rede social as autorizações necessárias para publicar "
+        "nessa conta e ler as estatísticas das publicações. Essas chaves ficam guardadas apenas no servidor da Carretos "
+        "Group, não são mostradas a ninguém e não são partilhadas com terceiros.",
+        "Não são recolhidos dados de outras pessoas nem de seguidores, para além das estatísticas agregadas das "
+        "publicações das próprias contas.",
+        "O acesso pode ser retirado a qualquer momento: no Carretos Studio (Contas → Desligar) ou nas definições de "
+        "aplicações de cada rede social. Ao desligar, as chaves dessa conta são apagadas do servidor.",
+        "Contacto: WhatsApp 211 45 46 46."]),
+    "termos": ("Termos de utilização", [
+        "O Carretos Studio é uma ferramenta de uso interno da Carretos Group e só é usada pela sua equipa, com contas "
+        "pessoais protegidas por palavra-passe.",
+        "Só publica nas contas de redes sociais da própria Carretos Group, do David Carreto e das marcas do grupo, e "
+        "apenas depois de aprovação de um responsável.",
+        "A utilização das redes sociais através do Carretos Studio respeita os termos de cada rede (Meta, LinkedIn e TikTok).",
+        "Contacto: WhatsApp 211 45 46 46."]),
+}
+
+
+@app.get("/privacidade", response_class=HTMLResponse)
+@app.get("/termos", response_class=HTMLResponse)
+def legal_page(request: Request):
+    title, paras = _LEGAL[request.url.path.strip("/")]
+    body = "".join(f"<p>{_esc(p)}</p>" for p in paras)
+    return HTMLResponse(f"<!doctype html><html lang=pt-PT><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                        f"<title>{title} · Carretos Studio</title><body style='background:#000;color:#eee;font:16px/1.6 "
+                        f"system-ui;max-width:760px;margin:0 auto;padding:24px'><h1 style='color:#D4AF37'>{title}</h1>"
+                        f"<p style='color:#999'>Carretos Studio · Carretos Group</p>{body}</body></html>")
 
 
 @app.get("/publico/{name}")
@@ -1107,6 +1250,14 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("META_APP_ID", "Meta · App ID (da app em developers.facebook.com)", False),
     ("META_APP_SECRET", "Meta · App Secret", True),
     ("META_LOGIN_CONFIG_ID", "Meta · Configuration ID (só se a app usar 'Facebook Login for Business')", False),
+    # LinkedIn (ver docs/GUIA_LINKEDIN.md)
+    ("LINKEDIN_CLIENT_ID", "LinkedIn · Client ID", False),
+    ("LINKEDIN_CLIENT_SECRET", "LinkedIn · Client Secret", True),
+    ("LINKEDIN_ORG_API", "LinkedIn · Community Management API aprovada? (sim/não)", False),
+    # TikTok (ver docs/GUIA_TIKTOK.md)
+    ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
+    ("TIKTOK_CLIENT_SECRET", "TikTok · Client secret", True),
+    ("TIKTOK_AUDITED", "TikTok · app já auditada pela TikTok? (sim/não)", False),
 ]
 
 
@@ -1121,6 +1272,12 @@ KEY_FORMATS = {
     "META_APP_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
     "META_APP_SECRET": (_re.compile(r"^[0-9a-fA-F]{32}$"), "32 letras/números (0-9, a-f)"),
     "META_LOGIN_CONFIG_ID": (_re.compile(r"^\d{10,20}$"), "só números (10 a 20)"),
+    "LINKEDIN_CLIENT_ID": (_re.compile(r"^[A-Za-z0-9]{8,30}$"), "letras e números, sem espaços"),
+    "LINKEDIN_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_.=\-]{10,80}$"), "letras, números e símbolos, sem espaços"),
+    "LINKEDIN_ORG_API": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
+    "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
+    "TIKTOK_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_\-]{16,80}$"), "letras e números, sem espaços"),
+    "TIKTOK_AUDITED": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
     "PEXELS_API_KEY": (_re.compile(r"^[A-Za-z0-9]{40,64}$"), "~56 letras e números"),
     "SMTP_HOST": (_re.compile(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"), "um servidor, ex.: smtp.gmail.com"),
     "SMTP_PORT": (_re.compile(r"^(25|465|587|2525)$"), "587 ou 465"),

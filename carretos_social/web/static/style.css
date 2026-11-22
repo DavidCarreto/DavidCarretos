@@ -123,3 +123,4 @@ textarea.need-fix{border-color:#f85149}
 .kb-form{background:#141416;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;color:var(--text)}
 .kb-accs{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}.kb-accs input{width:auto}
 @media(max-width:640px){.kb-item summary{flex-direction:column}.kb-tags{max-width:100%;justify-content:flex-start}}
+.card code{word-break:break-all}

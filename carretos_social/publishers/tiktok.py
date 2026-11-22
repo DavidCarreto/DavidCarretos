@@ -18,7 +18,8 @@ CHUNK = 10 * 1024 * 1024
 
 class TikTokPublisher(Publisher):
     def publish(self, req: PublishRequest) -> PublishResult:
-        token = req.account.secret("access_token_env")
+        from ..tiktok_connect import ensure_fresh
+        token = ensure_fresh(req.account)          # o token da TikTok dura 24 h: renova-se sozinho
         if not token:
             raise RuntimeError(f"{req.account.id}: falta o token TikTok no .env")
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8"}
