@@ -68,12 +68,16 @@ SPECS: dict[str, dict[str, dict]] = {
         "video": {**_REEL, "name": "Reel", "seconds": (3, 90), "fps": (24, 60), "min_size": (540, 960)},
     },
     "tiktok": {
-        # a duração máxima real depende da conta (3, 5 ou 10 min): confirmada na API (creator_info) ao publicar.
-        # (a API também aceita posts de fotos, até 35, se um dia se quiser ativar)
-        "video": {**_REEL, "name": "Vídeo", "seconds": (3, 600), "rec_seconds": 60, "fps": (23, 60),
-                  "sides": (360, 4096),
-                  "info": ["A duração máxima depende da conta (3, 5 ou 10 min): confirmada no TikTok antes de "
-                           "publicar."]},
+        # modo "rascunho na app TikTok": vídeo (sem legenda nem capa) ou fotos (com legenda e capa)
+        "video": {**_REEL, "name": "Vídeo (rascunho na app TikTok)", "seconds": (3, 600), "rec_seconds": 60,
+                  "fps": (23, 60), "sides": (360, 4096),
+                  "info": ["Vai para os rascunhos da app TikTok sem legenda nem capa: a legenda segue por email e "
+                           "fica no dashboard para copiar."]},
+        "image": {"size": (1080, 1920), "ratio": (0.5, 1.91), "soft_ratio": True, "screen": "phone",
+                  "name": "Foto (rascunho na app TikTok)"},
+        "carousel": {"size": (1080, 1920), "ratio": (0.5, 1.91), "soft_ratio": True, "screen": "phone",
+                     "name": "Fotos (rascunho na app TikTok)", "count": (2, 35),
+                     "info": ["Vai para os rascunhos da app TikTok já com legenda e capa (1.ª foto)."]},
     },
     "linkedin_member": {
         # proporção/tamanho de imagem não confirmados em fonte oficial: só recomendação
@@ -275,6 +279,36 @@ def _measure(path: str, mtime: float) -> tuple[int, int, float, float]:
         return im.width, im.height, 0.0, 0.0
 
 
+def is_blank_video(path: str) -> bool:
+    """True se 3 imagens do vídeo (início, meio, fim) forem praticamente de uma só cor."""
+    try:
+        return _blank(str(path), Path(path).stat().st_mtime)
+    except OSError:
+        return False
+
+
+@lru_cache(maxsize=512)
+def _blank(path: str, mtime: float) -> bool:
+    import io
+    import subprocess
+    from PIL import Image, ImageStat
+    try:
+        _, _, seconds, _ = measure(path)
+    except Exception:  # noqa: BLE001
+        return False
+    flat = 0
+    for t in (seconds * 0.1, seconds * 0.5, max(0.0, seconds * 0.9)):
+        r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.2f}", "-i", path, "-frames:v", "1",
+                            "-vf", "scale=96:-1", "-f", "image2pipe", "-vcodec", "png", "-"],
+                           capture_output=True, timeout=60)
+        if r.returncode or not r.stdout:
+            return False
+        stat = ImageStat.Stat(Image.open(io.BytesIO(r.stdout)).convert("L"))
+        if stat.stddev[0] < 2.0:
+            flat += 1
+    return flat == 3
+
+
 def _screen_note(r: float, spec: dict) -> str:
     if spec.get("screen") == "phone":
         if abs(r / (9 / 16) - 1) <= 0.03:
@@ -360,6 +394,8 @@ def check_item(path: str, spec: dict) -> Item:
                 flag("ajustar", f"vídeo longo ({_dur(it.seconds)}); o recomendado é até {_dur(spec['rec_seconds'])}")
         if spec.get("fps") and it.fps and not (spec["fps"][0] - 0.5 <= it.fps <= spec["fps"][1] + 0.5):
             flag("editar", f"{it.fps:.0f} imagens por segundo; a rede aceita {spec['fps'][0]} a {spec['fps'][1]}")
+        if is_blank_video(it.path):
+            flag("editar", "o vídeo parece vazio: todas as imagens são de uma só cor (sem texto nem imagem)")
         if spec.get("ext") and not it.path.lower().endswith(spec["ext"]):
             flag("editar", f"tem de ser {', '.join(e[1:].upper() for e in spec['ext'])}")
     if spec.get("max_mb") and it.bytes > spec["max_mb"] * 1024 * 1024:

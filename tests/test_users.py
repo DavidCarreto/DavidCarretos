@@ -1007,7 +1007,7 @@ def test_tiktok_drafts_video_photos_fallback_and_status(client, monkeypatch, tmp
     monkeypatch.setattr(mailer, "send", lambda to, subj, body: mails.append((to, subj, body)))
     monkeypatch.setenv("TIKTOK_CAPTION_EMAIL", "legendas@exemplo.pt")
     video = tmp_path / "v.mp4"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=540x960:d=4", "-pix_fmt",
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=540x960:d=4", "-pix_fmt",
                     "yuv420p", str(video)], check=True)
     res = get_publisher(acc).publish(PublishRequest(account=acc, format="video", caption="Legenda do vídeo", media=[str(video)]))
     assert res.status == "tiktok_draft" and "Legenda e capa a definir na app TikTok" in res.note

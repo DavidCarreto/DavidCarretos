@@ -524,9 +524,6 @@ def cmd_tiktok_test(a):
     acc = account(a.account)
     out = _out_dir("teste_tiktok", acc.id)
     video = out / "teste_tiktok.mp4"
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1080x1920:d=5:r=30",
-                    "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-shortest", "-c:v", "libx264",
-                    "-pix_fmt", "yuv420p", "-c:a", "aac", str(video)], check=True)
     photos = []
     for i in (1, 2):                                   # com texto, no tipo de letra das imagens reais
         im = Image.new("RGB", (1080, 1920), (17, 17, 17))
@@ -541,6 +538,15 @@ def cmd_tiktok_test(a):
         im.save(p, quality=92)
         photos.append(str(p))
     print(f"Tipo de letra usado: {getattr(big, 'path', '?')}")
+    # vídeo de teste a partir das mesmas imagens (2,5 s cada), com som silencioso
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-t", "2.5", "-i", photos[0], "-loop", "1", "-t", "2.5",
+                    "-i", photos[1], "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+                    "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0,scale=1080:1920,fps=30,format=yuv420p[v]",
+                    "-map", "[v]", "-map", "2:a", "-shortest", "-c:v", "libx264", "-c:a", "aac", str(video)], check=True)
+    from .media.formats import is_blank_video
+    if is_blank_video(str(video)):
+        raise SystemExit(f"✘ Vídeo de teste: saiu vazio (uma só cor, {video.stat().st_size // 1024} KB). Não enviado.")
+    print(f"Vídeo de teste: com texto ✓ ({video.stat().st_size // 1024} KB, 5 s, 1080×1920)")
     # pré-visualização no dashboard: uma publicação [TESTE] com o que foi enviado (sem data: nunca é publicada)
     with connect() as conn:
         ids = [add_media(conn, "image", p) for p in photos]

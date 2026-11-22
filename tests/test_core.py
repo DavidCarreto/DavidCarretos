@@ -47,7 +47,7 @@ def test_publish_requires_media_and_dry_run_works(tmp_path, monkeypatch):
     monkeypatch.setenv("TT_CARRETOCLIPS_TOKEN", "token-de-teste")   # conta "ligada"
     import subprocess
     f = tmp_path / "v.mp4"   # vídeo verdadeiro (a verificação de formato lê o ficheiro)
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=540x960:d=4", "-pix_fmt",
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=540x960:d=4", "-pix_fmt",
                     "yuv420p", str(f)], check=True)
     with connect() as conn:
         pid = add_post(conn, account_id="tt_carretoclips", format="video", caption="Olá",
@@ -216,13 +216,13 @@ def test_format_check_and_fit(tmp_path):
     assert formats.check("youtube", "image", [str(ok)]).verdict == "editar"            # o YouTube não leva imagens
     assert "Um vídeo" in formats.check("tiktok", "video", [str(ok)]).problems[0]
     v = tmp_path / "longo.mp4"
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=360x640:d=200:r=5",
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=360x640:d=200:r=5",
                     "-pix_fmt", "yuv420p", str(v)], check=True)
     rep = formats.check("youtube", "video", [str(v)])
     assert rep.verdict == "editar" and any("não como Short" in n for n in rep.items[0].notes)
     assert any("imagens por segundo" in n for n in formats.check("tiktok", "video", [str(v)]).items[0].notes)
     reel = tmp_path / "reel_largo.mp4"                                                  # 2.4:1, 30 fps, 10 s
-    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1920x800:d=10:r=30",
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=1920x800:d=10:r=30",
                     "-pix_fmt", "yuv420p", str(reel)], check=True)
     assert formats.check("instagram", "reel", [str(reel)]).verdict == "ajustar"         # API aceita 0.01–10:1
     fb = formats.check("facebook_page", "video", [str(reel)])
@@ -277,3 +277,25 @@ def test_media_never_lost_history_and_safe_migration(tmp_path):
         row = conn.execute("SELECT media_ids, status, created_by FROM posts").fetchone()
         assert (row["media_ids"], row["status"], row["created_by"]) == ("[7]", "draft", None)
     assert list((tmp_path / "backups").glob("carretos-*-antes-migracao.db"))
+
+
+def test_blank_video_blocked_and_tiktok_photo_rules(tmp_path):
+    import subprocess
+    from PIL import Image, ImageDraw
+    from carretos_social.media import formats
+    blank = tmp_path / "vazio.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=540x960:d=4:r=30",
+                    "-pix_fmt", "yuv420p", str(blank)], check=True)
+    img = tmp_path / "t.jpg"
+    im = Image.new("RGB", (1080, 1920), (17, 17, 17)); ImageDraw.Draw(im).rectangle([60, 60, 1020, 1860], outline=(212, 175, 55), width=12)
+    im.save(img)
+    ok = tmp_path / "ok.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-loop", "1", "-t", "4", "-i", str(img), "-vf", "scale=540:960,fps=30,format=yuv420p",
+                    str(ok)], check=True)
+    assert formats.is_blank_video(str(blank)) and not formats.is_blank_video(str(ok))
+    rep = formats.check("instagram", "reel", [str(blank)])
+    assert rep.verdict == "editar" and any("vazio" in n for n in rep.items[0].notes)
+    # TikTok em modo rascunho aceita fotos (carrossel) com legenda
+    rep = formats.check("tiktok", "carousel", [str(img), str(img)])
+    assert rep.verdict == "ok" and "rascunho na app TikTok" in rep.target
+    assert "carousel" in formats.kinds_for("tiktok")
