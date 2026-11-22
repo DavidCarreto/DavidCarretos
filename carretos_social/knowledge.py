@@ -72,6 +72,8 @@ def ensure_seeded(conn) -> None:
         _set_setting(conn, f"tom:{brand_id}", (cfg.get("tom") or "").strip())
         _set_setting(conn, f"proibidas:{brand_id}", list(cfg.get("proibidas") or []))
     _import_old_facts(conn)
+    # numa base nova o tom já vem completo: os ajustes ficam dados como aplicados
+    _set_setting(conn, "tone_updates_done", [a["chave"] for a in (seed.get("ajustes_tom") or []) if a.get("chave")])
     _set_setting(conn, "knowledge_seeded", True)
 
 
@@ -88,6 +90,22 @@ def _import_old_facts(conn) -> None:
                 _insert(conn, {"brand": brand_id, "section": "outros", "text": str(f).strip()}, action="importada")
         if data.get("tom"):
             _set_setting(conn, f"tom:{brand_id}", str(data["tom"]).strip())
+
+
+def apply_tone_updates(conn) -> None:
+    """Ajustes ao tom pedidos pelo David (config/conhecimento.yaml → ajustes_tom), aplicados uma só vez."""
+    done = set(_setting(conn, "tone_updates_done", []))
+    pending = [a for a in (_seed().get("ajustes_tom") or []) if a.get("chave") and a["chave"] not in done]
+    for a in pending:
+        brand_id, extra = a.get("marca", "geral"), (a.get("acrescentar") or "").strip()
+        current = str(_setting(conn, f"tom:{brand_id}", "") or "").strip()
+        if extra and extra not in current:
+            new = f"{current} {extra}".strip()
+            _set_setting(conn, f"tom:{brand_id}", new)
+            _log(conn, None, brand_id, None, "tom", current, new)
+        done.add(a["chave"])
+    if pending:
+        _set_setting(conn, "tone_updates_done", sorted(done))
 
 
 def new_base_items(conn, brand_id: str) -> list[dict]:

@@ -685,7 +685,7 @@ def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
     from carretos_social.scheduler import all_problems
     _setup_admin(client)
     _login(client, "david", "segredo123")
-    assert len(verified_facts("geral")) == 14 and len(verified_facts("auron")) == 14
+    assert len(verified_facts("geral")) == 15 and len(verified_facts("auron")) == 14
     link = "auron.carretos.pt/schedule"
     assert found_terms("ig_carretosgroup", f"Saiba o preço na hora: {link}") == []          # o link pode ficar
     assert found_terms("ig_carretosgroup", f"Com o AURON sabe o preço: {link}")[0][1] == \
@@ -788,3 +788,18 @@ def test_knowledge_seed_imports_old_dashboard_facts(tmp_path, monkeypatch):
     with db.connect() as conn:
         outros = [i["text"] for i in kb.items(conn, "geral") if i["section"] == "outros"]
     assert outros == ["Facto antigo editado no dashboard."]
+
+
+def test_tone_update_voce_applied_once_and_sintra_fact(tmp_path):
+    import carretos_social.db as db
+    from carretos_social import knowledge as kb
+    with db.connect() as conn:
+        # base criada antes deste ajuste: tom antigo e ajuste ainda por aplicar
+        conn.execute("UPDATE settings SET value=? WHERE key='tom:geral'", ('"Tom antigo."',))
+        conn.execute("DELETE FROM settings WHERE key='tone_updates_done'")
+        kb.apply_tone_updates(conn)
+        kb.apply_tone_updates(conn)                                   # 2.ª vez não repete
+        t = kb.tone(conn, "geral")
+        assert t.startswith("Tom antigo.") and t.count('"você"') == 1
+        assert any(i["text"].startswith("Em 2024 a oficina de Sintra mudou-se para o Cacém")
+                   for i in kb.items(conn, "geral"))

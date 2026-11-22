@@ -18,7 +18,7 @@ marcas:
       A chamada à ação principal é o WhatsApp 211 45 46 46 (assistente disponível 24 horas que dá o preço
       da revisão, explica o orçamento e os serviços e faz a marcação); o link de marcação online é a
       alternativa para quem prefere fazer sozinho. NUNCA mencionar o nome "AURON" nas contas do David nem
-      da Carretos Group.
+      da Carretos Group. Tratar o cliente sempre por "você" (ou sem pronome), nunca por "tu".
     proibidas: ["AURON"]
   auron:
     tom: >-
@@ -31,11 +31,16 @@ marcas:
       nos factos, nem falar do David em nome pessoal.
     proibidas: []
 
+# Ajustes ao tom aplicados UMA vez nas atualizações (acrescentados ao tom que já está no dashboard).
+ajustes_tom:
+  - {chave: geral-voce, marca: geral, acrescentar: 'Tratar o cliente sempre por "você" (ou sem pronome), nunca por "tu".'}
+
 fichas:
   # ---------------- David Carreto + Carretos Group ----------------
   - {chave: g-dono, marca: geral, secao: empresa, texto: "O dono é David Carreto."}
   - {chave: g-empresa, marca: geral, secao: empresa, texto: "A empresa chama-se Carretos Group."}
   - {chave: g-oficinas, marca: geral, secao: empresa, texto: "A Carretos Group tem 5 oficinas: Almada, Cacém, Lisboa, Mafra e Santarém."}
+  - {chave: g-sintra, marca: geral, secao: empresa, texto: "Em 2024 a oficina de Sintra mudou-se para o Cacém: a Carretos Group não tem oficina em Sintra."}
   - {chave: g-mercedes, marca: geral, secao: empresa, texto: "As oficinas são especializadas em reparação e manutenção de Mercedes-Benz."}
   - {chave: g-preco-hora, marca: geral, secao: servicos, texto: "Na Carretos Group pode saber o preço da revisão do seu Mercedes-Benz na hora, online."}
   - {chave: g-preco-plano, marca: geral, secao: servicos, texto: "O preço é calculado segundo o plano de manutenção oficial da Mercedes-Benz e aparece linha a linha, sem surpresas."}

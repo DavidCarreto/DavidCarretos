@@ -210,6 +210,20 @@ def _migrate(conn) -> None:
                      "WHEN can_create=1 THEN 'criar' ELSE 'ver' END WHERE level IS NULL")
 
 
+_TONE_CHECKED = False
+
+
+def _tone_updates(conn) -> None:
+    """Ajustes ao tom da base (uma vez por processo; cada ajuste só se aplica uma vez)."""
+    global _TONE_CHECKED
+    if _TONE_CHECKED:
+        return
+    _TONE_CHECKED = True
+    from .knowledge import apply_tone_updates
+    apply_tone_updates(conn)
+    conn.commit()
+
+
 def _snapshot(conn, reason: str) -> None:
     """Cópia de segurança a partir da ligação aberta (só se houver dados)."""
     try:
@@ -234,6 +248,8 @@ def connect(path: Path | None = None):
         from .knowledge import ensure_seeded   # 1.ª vez: fichas de partida (na mesma ligação: sem bloqueios)
         ensure_seeded(conn)
         conn.commit()
+    else:
+        _tone_updates(conn)
     try:
         yield conn
         conn.commit()
