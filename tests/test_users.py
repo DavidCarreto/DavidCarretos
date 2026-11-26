@@ -666,7 +666,9 @@ def test_auron_quote_signed_auron(tmp_path):
     out = image_gen.quote_card("Teste", tmp_path / "q.jpg")
     assert Image.open(out).size == (1080, 1350)
     account("ig_davidcarreto")
-    assert not brand()["visual"].get("quote_author")
+    assert brand()["visual"].get("quote_author") == "David Carreto"          # só nas contas pessoais
+    account("ig_carretosgroup")
+    assert brand()["visual"].get("quote_author") == "" and brand()["visual"]["logo"].endswith("carretos-logo-branco.png")
 
 
 def test_facts_no_false_contradiction_with_full_stop():
@@ -1778,3 +1780,25 @@ def test_published_post_has_no_approve_and_li_member_metrics_ignored(client, mon
     monkeypatch.setattr(type(acc), "secret", lambda self, k: "x")
     with pytest.raises(connectors.NotConfigured):
         connectors.fetch_linkedin(acc)
+
+
+def test_brand_logo_and_signature_settings(client):
+    from carretos_social.config import account, brand, set_theme
+    from carretos_social.media import brand_assets
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    page = client.get("/configurar").text
+    assert "Logótipo e assinatura das imagens" in page and "/configurar/marca/carretos/exemplo.jpg" in page
+    for t in ("pessoal", "carretos", "auron"):
+        r = client.get(f"/configurar/marca/{t}/exemplo.jpg")
+        assert r.status_code == 200 and r.content[:3] == b"\xff\xd8\xff"
+    r = client.post("/configurar/marca/auron", data={"assinatura": "By David Carreto"}, follow_redirects=False)
+    assert "s%C3%B3+pode" in r.headers["location"] or "pode aparecer" in r.headers["location"] or "marca=" in r.headers["location"]
+    assert brand_assets.get("auron")["signature"] == "AURON"
+    client.post("/configurar/marca/carretos", data={"assinatura": "", "sem_logo": "1"})
+    account("ig_carretosgroup")
+    assert brand()["visual"]["logo"] == "" and brand()["visual"]["quote_author"] == ""
+    client.post("/configurar/marca/carretos", data={"repor": "1"})
+    account("ig_carretosgroup")
+    assert brand()["visual"]["logo"].endswith("carretos-logo-branco.png")
+    set_theme(None)

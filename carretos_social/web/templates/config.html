@@ -46,6 +46,22 @@ Os outros campos foram guardados.</div>{% endif %}
 <form method="post" action="/configurar/telegram-chat"><button class="btn" {{ 'disabled' if not tg_token }}>🔎 Descobrir o chat</button></form>
 <form method="post" action="/configurar/testar-telegram"><button class="btn" {{ 'disabled' if not tg_ok }}>✈ Enviar mensagem de teste</button></form>
 </div>{% if not tg_ok %}<p class="fmt-line ajustar" style="margin:8px 0 0">⚠ Telegram por configurar: os posts em modo assistido ficam só em "Para publicar à mão" no dashboard.</p>{% endif %}</div>{% endif %}
+{% if not first %}<div class="card" style="margin-top:12px" id="marcas-imagem">
+<b>Logótipo e assinatura das imagens (por marca)</b>
+{% set mq = request.query_params.get('marca') %}{% if mq == 'ok' %}<p style="color:#3fb950;margin:6px 0">✓ Guardado.</p>{% elif mq %}<p class="fmt-line editar" style="margin:6px 0">✕ {{ mq }}</p>{% endif %}
+<p class="muted" style="font-size:13px;margin:4px 0 10px">Usado nas imagens geradas ("Imagem com frase", "Carrossel de frases" e carrosséis). O nome do David só aparece nas contas pessoais.</p>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+{% for t, m in marcas.items() %}<form method="post" action="/configurar/marca/{{ t }}" enctype="multipart/form-data" id="marca-{{ t }}" style="border:1px solid var(--line);border-radius:10px;padding:10px">
+ <b>{{ m.label }}</b>
+ <img src="/configurar/marca/{{ t }}/exemplo.jpg?v={{ range(100000)|random }}" alt="" loading="lazy" style="display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:8px;margin:8px 0;background:#000">
+ <p class="muted" style="font-size:12px;margin:0 0 6px">Logótipo: {% if m.custom_logo %}carregado por si{% elif m.logo %}oficial do site{% elif m.no_logo %}nenhum{% else %}{{ 'nenhum (assinatura em texto)' if t == 'pessoal' else 'nenhum: aparece «' ~ m.signature ~ '» em texto' if m.signature else 'nenhum' }}{% endif %}</p>
+ <label>Trocar o logótipo (PNG com fundo transparente)</label><input type="file" name="logo" accept="image/png,image/jpeg">
+ <label>Assinatura por baixo da frase {{ '(vazio = nenhuma)' }}</label><input name="assinatura" value="{{ m.signature }}" maxlength="60">
+ {% if t != 'pessoal' %}<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px"><input type="checkbox" name="sem_logo" value="1" {{ 'checked' if m.no_logo }} style="width:auto"> Sem logótipo</label>{% endif %}
+ <div class="row" style="margin-top:8px"><button class="btn gold" style="padding:4px 12px;font-size:12px">Guardar</button>
+ {% if m.custom_logo or m.no_logo %}<button class="btn" name="repor" value="1" style="padding:4px 12px;font-size:12px">Repor o logótipo original</button>{% endif %}</div>
+</form>{% endfor %}
+</div></div>{% endif %}
 {% if not first %}<form method="post" action="/configurar/cartao-link" enctype="multipart/form-data" class="card" id="cartao-link" style="margin-top:12px">
 <b>Cartão dos links carretos.pt (LinkedIn)</b>
 {% set cs = request.query_params.get('cartao') %}{% if cs == 'ok' %}<p style="color:#3fb950;margin:6px 0">✓ Guardado.</p>{% elif cs %}<p class="fmt-line editar" style="margin:6px 0">✕ {{ cs }}</p>{% endif %}

@@ -397,6 +397,10 @@ def post_link_preview(request: Request, pid: int):
     return JSONResponse(out)
 
 
+import threading as _threading
+_SAMPLE_LOCK = _threading.Lock()
+
+
 def _read_card_image(f: UploadFile | None) -> tuple[bytes, str] | None:
     """Imagem do cartão do link: PNG, JPG ou GIF até 5 MB (formatos aceites pelo LinkedIn)."""
     if not f or not f.filename:
@@ -469,6 +473,61 @@ def config_logs(request: Request, post: int = 0):
         return _forbidden()
     return _render(request, "logs.html", {"fails": failures(post or None), "post": post,
                                           "journal": system.agendador_log(filtro=f"#{post}" if post else "")})
+
+
+@app.get("/configurar/marca/{theme}/exemplo.jpg")
+def config_brand_sample(request: Request, theme: str):
+    """Imagem de exemplo ("Imagem com frase") com o logótipo e a assinatura atuais da marca."""
+    import hashlib
+    import threading
+    from ..config import set_theme
+    from ..media import brand_assets, image_gen
+    if not _current_user(request):
+        return _forbidden()
+    ident = brand_assets.get(theme)
+    if not ident:
+        return PlainTextResponse("marca desconhecida", status_code=404)
+    logo = ident["logo"]
+    key = hashlib.sha1(json.dumps([theme, str(logo), logo.stat().st_mtime if logo else 0, ident["signature"]])
+                       .encode()).hexdigest()[:12]
+    out = DATA_DIR / "marcas" / "exemplos" / f"{theme}-{key}.jpg"
+    if not out.exists():
+        with _SAMPLE_LOCK:
+            set_theme(theme)
+            try:
+                image_gen.quote_card("Exemplo de frase: assim fica a imagem com o logótipo e a assinatura desta marca.",
+                                     out, size=(1080, 1350))
+            finally:
+                set_theme(None)
+    return FileResponse(out, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/configurar/marca/{theme}")
+def config_brand_save(request: Request, theme: str, assinatura: str = Form(""), sem_logo: str = Form(""),
+                      repor: str = Form(""), logo: UploadFile | None = File(None)):
+    from urllib.parse import quote
+    from ..media import brand_assets
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    if theme not in brand_assets.BRANDS:
+        return _forbidden("Marca desconhecida.")
+    if repor:
+        brand_assets.reset_logo(theme)
+        return RedirectResponse(f"/configurar?marca=ok#marca-{theme}", 303)
+    try:
+        img = _read_card_image(logo)
+    except ValueError as exc:
+        return RedirectResponse(f"/configurar?marca=" + quote(str(exc)) + f"#marca-{theme}", 303)
+    if img and img[1] == ".gif":
+        return RedirectResponse(f"/configurar?marca=" + quote("o logótipo tem de ser PNG (de preferência com fundo transparente) ou JPG") + f"#marca-{theme}", 303)
+    if img:
+        brand_assets.save_logo(theme, *img)
+    sig = assinatura.strip()[:60]
+    if theme != "pessoal" and "carreto" in sig.lower() and "david" in sig.lower():
+        return RedirectResponse(f"/configurar?marca=" + quote("o nome do David só pode aparecer nas contas pessoais") + f"#marca-{theme}", 303)
+    brand_assets.save(theme, signature=sig, no_logo=bool(sem_logo) and not img)
+    return RedirectResponse(f"/configurar?marca=ok#marca-{theme}", 303)
 
 
 @app.get("/configurar/cartao-link.png")
@@ -1683,7 +1742,8 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
     from .. import linkcard
     from . import system as _system
-    return _render(request, "config.html", {"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
+    from ..media import brand_assets
+    return _render(request, "config.html", {"marcas": {t: brand_assets.get(t) for t in brand_assets.BRANDS},"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
                                             "ag": _system.agendador_status(), "web_rev": _system.git_rev(),
                                             "fields": fields, "first": first, "ok": ok, "erros": erros,
                                             "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),

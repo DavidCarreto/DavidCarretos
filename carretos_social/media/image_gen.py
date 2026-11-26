@@ -87,9 +87,17 @@ def _logo(img: Image.Image, width_ratio: float = 0.18, pos: str = "top-right") -
     m = int(W * 0.05)
     if p and path.exists():
         logo = Image.open(path).convert("RGBA")
-        logo.thumbnail((int(W * width_ratio), int(W * width_ratio)), Image.LANCZOS)
+        bbox = logo.getbbox()
+        if bbox:
+            logo = logo.crop(bbox)
+        # logótipos largos (ex.: CARRETO'S GROUP) ficam mais largos para se lerem; os quadrados numa caixa
+        wide = logo.width / max(1, logo.height) > 2.5
+        box = (int(W * 0.40), int(W * 0.08)) if wide else (int(W * width_ratio), int(W * width_ratio))
+        logo.thumbnail(box, Image.LANCZOS)
         xy = (W - logo.width - m, m) if pos == "top-right" else (m, H - logo.height - m)
         img.alpha_composite(logo, xy)
+    elif brand().get("theme_id") == "carretos":
+        return                            # Carretos Group sem logótipo escolhido: nada (nunca o nome em letra normal)
     else:  # sem logótipo: marca em texto
         d = ImageDraw.Draw(img)
         f = _font(True, int(W * 0.032))
@@ -192,8 +200,9 @@ def quote_card(text: str, out: str | Path, author: str | None = None, size=(1080
     y = _draw_lines(d, lines, font, fs, margin, y, _hex(_v()["colors"]["text"]), spacing=1.15)
     af = _font(False, int(W * 0.034))
     _accent_bar(d, margin, y + int(fs * 0.5), int(W * 0.08), max(4, SS * 3))
-    d.text((margin, y + int(fs * 0.8)), (author or _v().get("quote_author") or brand()["owner"]).upper(), font=af,
-           fill=_hex(_v()["colors"]["secondary"]))
+    sig = author if author is not None else (_v()["quote_author"] if "quote_author" in _v() else brand()["owner"])
+    if sig:                               # assinatura por baixo da frase (Carretos Group: nenhuma)
+        d.text((margin, y + int(fs * 0.8)), sig.upper(), font=af, fill=_hex(_v()["colors"]["secondary"]))
     _logo(img, pos="top-right")
     return _save(img, out, size)
 

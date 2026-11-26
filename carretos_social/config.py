@@ -179,15 +179,24 @@ def set_theme(name: str | None) -> None:
 
 
 def brand() -> dict:
-    """Configuração da marca com o tema visual ativo aplicado por cima (cores, fontes, assinatura)."""
+    """Configuração da marca com o tema visual ativo aplicado por cima (cores, fontes, assinatura) e o logótipo
+    e a assinatura das imagens escolhidos em ⚙ Configurar (media/brand_assets.py)."""
     base = _brand_base()
     theme = (base.get("themes") or {}).get(_ACTIVE_THEME or "")
-    if not theme:
+    if theme is None and _ACTIVE_THEME not in ("carretos", "pessoal", "auron"):
         return base
+    theme = theme or {}
     merged = dict(base)
     merged["visual"] = {**base["visual"], **{k: v for k, v in theme.items() if k != "colors"},
                         "colors": {**base["visual"]["colors"], **theme.get("colors", {})}}
-    merged["signature"] = theme.get("signature") or base.get("company")
+    if theme:                             # (tema "carretos" vazio: sem assinatura em texto, como antes)
+        merged["signature"] = theme.get("signature") or base.get("company")
+    from .media import brand_assets
+    ident = brand_assets.get(_ACTIVE_THEME)
+    if ident:
+        merged["visual"]["logo"] = str(ident["logo"]) if ident["logo"] else ""
+        merged["visual"]["quote_author"] = ident["signature"]      # "" = sem assinatura por baixo da frase
+        merged["theme_id"] = _ACTIVE_THEME
     return merged
 
 
