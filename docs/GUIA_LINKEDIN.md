@@ -53,7 +53,7 @@ A Posts API do LinkedIn **não lê o site** quando se publica pela API: para o l
 **artigo** com título, descrição e miniatura (carregada pela Images API; só PNG, JPG ou GIF).
 
 - Links do **carretos.pt** (e subdomínios): imagem, título e descrição definidos em ⚙ Configurar →
-  "Cartão dos links carretos.pt" (imagem de origem: `carretos_social/assets/link-card-carretos.png`, 1200×627).
+  "Cartão dos links carretos.pt" (imagem de origem: `carretos_social/assets/link-card-carretos.png`, 1200×627, símbolo «C» dourado do site em fundo preto; o símbolo original está em `carretos_social/assets/carretos-simbolo-c.png`).
 - Cada rascunho pode mudar o seu cartão (pré-visualização → "Cartão do link … (mudar)").
 - Links de outros sites: título, descrição e imagem lidos do site na altura de publicar; as imagens SVG são
   ignoradas (como o LinkedIn faz).
