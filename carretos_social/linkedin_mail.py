@@ -1,8 +1,11 @@
 """Avisos de mensagens privadas do LinkedIn (só aviso, nunca responde).
 
-A API de mensagens do LinkedIn só está aberta a parceiros. Por isso: o Hotmail do David reencaminha os emails
-de notificação do LinkedIn ("… enviou-lhe uma mensagem") para a caixa PRÓPRIA do Carretos Studio (a mesma do
-envio de emails, SMTP_* em ⚙). De N em N minutos o agendador lê essa caixa por IMAP, só os emails do LinkedIn,
+A API de mensagens do LinkedIn só está aberta a parceiros. Por isso: o Hotmail do David redireciona os emails
+de notificação do LinkedIn ("… enviou-lhe uma mensagem") para uma caixa do Carretos Studio:
+- Microsoft 365 (recomendado): caixa partilhada (ex.: studio@carretos.pt) lida pela aplicação registada
+  "Carretos Studio" (MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, LINKEDIN_EMAILS_CAIXA), que só tem acesso a ela;
+- ou IMAP com utilizador e palavra-passe (SMTP_*/IMAP_* em ⚙), para fornecedores que ainda o permitem.
+De N em N minutos o agendador lê essa caixa, só os emails do LinkedIn,
 manda um aviso pelo Telegram (e o email de parcerias, se for o caso) e apaga o email.
 Não guarda o conteúdo: só uma marca (hash) para não avisar duas vezes. Os outros emails da caixa não são tocados.
 """
@@ -76,7 +79,17 @@ def parse(msg) -> dict | None:
     """Aviso a partir de um email do LinkedIn (ou de um reencaminhado do Hotmail), ou None se não for de mensagem."""
     subject = str(make_header(decode_header(msg.get("Subject", ""))))
     sender = parseaddr(msg.get("From", ""))[1].lower()
-    body = _text(msg)
+    return parse_parts(subject, sender, _text(msg))
+
+
+def _html_to_text(t: str) -> str:
+    import html
+    t = re.sub(r"<(script|style).*?</\1>", " ", t, flags=re.S | re.I)
+    return re.sub(r"[ \t\r\f\v]+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t)))
+
+
+def parse_parts(subject: str, sender: str, body: str) -> dict | None:
+    sender = (sender or "").lower()
     from_linkedin = "linkedin.com" in sender or ("linkedin.com" in body.lower() and re.match(r"^\s*(fw|fwd|enc|reenc)", subject, re.I))
     if not from_linkedin or not MSG_WORDS.search(subject + " " + body[:600]):
         return None
@@ -98,10 +111,59 @@ def parse(msg) -> dict | None:
             "snippet": snippet}
 
 
+# ------------------------------------------------------------------ Microsoft 365 (aplicação registada)
+def graph_settings() -> dict:
+    return {"tenant": os.environ.get("MS_TENANT_ID", "").strip(), "client": os.environ.get("MS_CLIENT_ID", "").strip(),
+            "secret": os.environ.get("MS_CLIENT_SECRET", "").strip(),
+            "mailbox": os.environ.get("LINKEDIN_EMAILS_CAIXA", "").strip()}
+
+
+def graph_mode() -> bool:
+    g = graph_settings()
+    return all(g.values())
+
+
+def _graph_token(g: dict) -> str:
+    from .http import request
+    return request("POST", f"https://login.microsoftonline.com/{g['tenant']}/oauth2/v2.0/token", retries=2, data={
+        "client_id": g["client"], "client_secret": g["secret"], "grant_type": "client_credentials",
+        "scope": "https://graph.microsoft.com/.default"}).json()["access_token"]
+
+
+def _poll_graph() -> list[str]:
+    """Caixa do Microsoft 365 lida pela aplicação "Carretos Studio" (só tem acesso a essa caixa)."""
+    from urllib.parse import quote
+    from .http import request
+    g = graph_settings()
+    h = {"Authorization": f"Bearer {_graph_token(g)}"}
+    base = f"https://graph.microsoft.com/v1.0/users/{quote(g['mailbox'], safe='@')}"
+    data = request("GET", f"{base}/mailFolders/inbox/messages", headers=h, retries=2, params={
+        "$top": 50, "$select": "id,subject,from,body,internetMessageId,receivedDateTime",
+        "$orderby": "receivedDateTime desc"}).json()
+    seen, n = set(_seen()), 0
+    for m in data.get("value", []):
+        sender = ((m.get("from") or {}).get("emailAddress") or {}).get("address", "")
+        body = (m.get("body") or {}).get("content", "")
+        if (m.get("body") or {}).get("contentType", "").lower() == "html":
+            body = _html_to_text(body)
+        info = parse_parts(m.get("subject") or "", sender, body)
+        if not info:
+            continue                                   # outros emails não se tocam
+        hsh = hashlib.sha256((m.get("internetMessageId") or m.get("id", "")).encode()).hexdigest()[:24]
+        if hsh not in seen:
+            _alert(info)
+            _remember(hsh)
+            n += 1
+        request("DELETE", f"{base}/messages/{quote(m['id'])}", headers=h, retries=1)   # vai para "Itens eliminados"
+    return [f"LinkedIn mensagens (email): {n} aviso(s)"] if n else []
+
+
 def poll() -> list[str]:
     """Lê a caixa, avisa e apaga os emails de mensagem do LinkedIn. Devolve linhas para o registo (sem conteúdo)."""
     if not enabled():
         return []
+    if graph_mode():
+        return _poll_graph()
     s = imap_settings()
     if not (s["host"] and s["user"] and s["password"]):
         raise RuntimeError("falta o servidor de entrada (IMAP) ou o utilizador/palavra-passe do email do Carretos Studio")

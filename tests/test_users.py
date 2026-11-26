@@ -1964,3 +1964,36 @@ def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
     sent.clear()
     linkedin_mail.poll()
     assert sent == []                                  # não avisa duas vezes
+
+
+def test_linkedin_message_emails_via_microsoft_graph(tmp_path, monkeypatch):
+    from carretos_social import linkedin_mail, notify
+    monkeypatch.setattr(linkedin_mail._cfg, "DATA_DIR", tmp_path)
+    for k, v in {"LINKEDIN_EMAILS_ATIVO": "sim", "MS_TENANT_ID": "t", "MS_CLIENT_ID": "c", "MS_CLIENT_SECRET": "s",
+                 "LINKEDIN_EMAILS_CAIXA": "studio@carretos.pt"}.items():
+        monkeypatch.setenv(k, v)
+    calls = []
+
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+
+    def fake_request(method, url, **kw):
+        calls.append((method, url))
+        if "oauth2" in url:
+            return R({"access_token": "tok"})
+        if method == "GET":
+            return R({"value": [
+                {"id": "m1", "subject": "Ana Costa enviou-lhe uma mensagem", "internetMessageId": "<a>",
+                 "from": {"emailAddress": {"address": "messages-noreply@linkedin.com"}},
+                 "body": {"contentType": "html", "content": "<p>Olá Carretos Group</p> https://www.linkedin.com/messaging/thread/9/"}},
+                {"id": "m2", "subject": "Fatura", "from": {"emailAddress": {"address": "x@y.pt"}}, "body": {"content": "x"}}]})
+        return R({})
+    import carretos_social.http as http_mod
+    monkeypatch.setattr(http_mod, "request", fake_request)
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append(t))
+    assert linkedin_mail.poll() == ["LinkedIn mensagens (email): 1 aviso(s)"]
+    assert "de Ana Costa" in sent[0] and "página Carretos Group" in sent[0]
+    assert ("DELETE", "https://graph.microsoft.com/v1.0/users/studio@carretos.pt/messages/m1") in calls
+    assert not any("m2" in u for m, u in calls if m == "DELETE")
