@@ -57,6 +57,7 @@ def finish_update() -> None:
     if STARTED_AT <= datetime.fromisoformat(st["started"]):
         return
     log = (config.DATA_DIR / LOG).read_text(encoding="utf-8", errors="replace") if (config.DATA_DIR / LOG).exists() else ""
+    restart_agendador()                 # garante que o agendador também fica com o código novo
     st.update(done=datetime.now().isoformat(timespec="seconds"), log_final=log[-12000:], after=git_rev())
     (config.DATA_DIR / STATE).write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
 
@@ -217,3 +218,23 @@ def agendador_log(lines: int = 400, filtro: str = "") -> str:
                 keep.update(range(max(0, i - 40), min(len(rows), i + 3)))
         out = "\n".join(rows[i] for i in sorted(keep)) or f"(nenhuma linha com {filtro} nos últimos 3 dias)"
     return out
+
+
+def agendador_status() -> dict:
+    """{rev, pid, started, old}: versão que o agendador tem em memória; old=True se for diferente da do disco."""
+    try:
+        st = json.loads((config.DATA_DIR / "agendador_estado.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"rev": "", "old": False, "unknown": True}
+    st["old"] = bool(st.get("rev")) and st["rev"] != git_rev()
+    return st
+
+
+def restart_agendador() -> bool:
+    """Reinicia o carretos-agendador (permitido ao utilizador da app em /etc/sudoers.d/carretos)."""
+    try:
+        r = subprocess.run(["sudo", "-n", "/usr/bin/systemctl", "restart", "carretos-agendador"],
+                           capture_output=True, text=True, timeout=30)
+        return r.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False

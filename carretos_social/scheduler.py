@@ -171,11 +171,35 @@ def tick(dry_run: bool = False) -> list[str]:
         return [publish_post(conn, r["id"], dry_run) for r in due_posts(conn)]
 
 
+def _code_rev() -> str:
+    import subprocess
+    from .config import ROOT
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True,
+                              text=True, timeout=10).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _write_status(rev: str) -> None:
+    """Versão do código que o agendador tem em memória (o dashboard mostra-a e avisa se for antiga)."""
+    import os
+    from . import config as _cfg
+    try:
+        _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        (_cfg.DATA_DIR / "agendador_estado.json").write_text(json.dumps(
+            {"rev": rev, "pid": os.getpid(), "started": datetime.now().isoformat(timespec="seconds")}), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     from .analytics.analyzer import sync
 
     print(f"Agendador ativo (verifica a cada {interval}s). Ctrl+C para parar.")
     from .config import ROOT
+    rev = _code_rev()
+    _write_status(rev)
     env_file = ROOT / ".env"
     env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
     last_sync = 0.0
@@ -193,6 +217,11 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
                 print(datetime.now().strftime("%H:%M"), line)
         except Exception as exc:  # noqa: BLE001
             print("rotinas:", exc)
+        new_rev = _code_rev()
+        if rev and new_rev and new_rev != rev:
+            # código atualizado e este processo ainda tem o antigo em memória: sai e o systemd arranca o novo
+            print(f"Código atualizado ({rev} → {new_rev}): o agendador vai reiniciar com a versão nova.")
+            raise SystemExit(0)
         if env_file.exists() and env_file.stat().st_mtime != env_mtime:
             # chaves novas (ex.: conta ligada no dashboard, token do TikTok renovado): relê sem reiniciar
             from .envfile import reload_env

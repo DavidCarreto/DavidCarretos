@@ -60,8 +60,13 @@ Os outros campos foram guardados.</div>{% endif %}
 <div class="row" style="margin-top:8px"><button class="btn gold">Guardar</button>
 {% if lcard_custom %}<button class="btn" name="repor" value="1" onclick="return confirm('Voltar à imagem de origem?')">Repor a imagem de origem</button>{% endif %}</div>
 </form>{% endif %}
-{% if not first %}<div class="card" style="margin-top:12px">
+{% if not first %}<div class="card" style="margin-top:12px" id="manutencao">
 <b>Manutenção</b>
+{% set agq = request.query_params.get('ag') %}{% if agq == 'ok' %}<p style="color:#3fb950;margin:6px 0">✓ Agendador reiniciado (recarregue daqui a uns segundos para ver a versão).</p>{% elif agq %}<p class="fmt-line editar" style="margin:6px 0">✕ Não foi possível reiniciar o agendador a partir do dashboard.</p>{% endif %}
+<p style="margin:6px 0;font-size:13px">Versão do dashboard: <b>{{ web_rev }}</b> · Agendador (publica à hora marcada):
+{% if ag.unknown %}<span class="muted">versão desconhecida (ainda com código anterior a esta verificação)</span>{% else %}<b>{{ ag.rev }}</b>, a correr desde {{ ag.started.replace('T',' ') }}{% endif %}
+{% if ag.old or ag.unknown %}<br><span class="fmt-line editar">✕ O agendador está com uma versão diferente do dashboard: carregue em "Reiniciar o agendador".</span>{% endif %}</p>
+<form method="post" action="/configurar/reiniciar-agendador" style="margin:0 0 8px"><button class="btn">↻ Reiniciar o agendador</button></form>
 <p class="muted" style="font-size:13px;margin:4px 0 10px">Atualiza o Carretos Studio para a versão mais recente (faz primeiro uma cópia de segurança da base de dados e reinicia os serviços). Não precisa da consola da Hetzner.</p>
 <div class="row">
 <form method="post" action="/configurar/atualizar" onsubmit="return confirm('Atualizar o Carretos Studio agora? O dashboard fica indisponível durante cerca de 1 minuto.')"><button class="btn gold">⟳ Atualizar o Carretos Studio</button></form>

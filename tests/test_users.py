@@ -1738,3 +1738,18 @@ def test_failed_publish_shows_step_reason_and_retry(client, monkeypatch):
     with connect() as conn:
         row = get_post(conn, pid)
     assert row["status"] == "approved" and row["error"] is None and row["scheduled_at"] > "2026"
+
+
+def test_tiktok_metrics_skipped_without_scopes_and_agendador_status(tmp_path, monkeypatch):
+    from carretos_social.analytics import connectors
+    from carretos_social.config import accounts
+    from carretos_social.web import system
+    acc = accounts()["tt_carretoclips"]
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok")
+    with pytest.raises(connectors.NotConfigured):
+        connectors.fetch_tiktok(acc)
+    monkeypatch.setattr(system.config, "DATA_DIR", tmp_path)
+    assert system.agendador_status().get("unknown")
+    (tmp_path / "agendador_estado.json").write_text(json.dumps({"rev": "velho1", "pid": 1, "started": "2026-11-26T06:59:00"}))
+    monkeypatch.setattr(system, "git_rev", lambda: "novo222")
+    assert system.agendador_status()["old"] is True

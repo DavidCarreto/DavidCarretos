@@ -13,6 +13,8 @@ if [ "$(id -un)" != "$APP_USER" ]; then
   exec sudo -u "$APP_USER" -H bash "$APP/deploy/atualizar.sh" "$@"
 fi
 
+# tudo dentro de main(): o bash lê o script todo antes de começar (o git pull muda este ficheiro a meio)
+main() {
 cd "$APP"
 # pedido pelo dashboard: o próprio script escreve o registo (linha a linha), para a página o mostrar
 if [ -n "${CARRETOS_UPDATE_LOG:-}" ]; then
@@ -55,7 +57,11 @@ echo "==> Músicas (descarrega só as que faltam)"
 [ -f config/drive/musicas.csv ] && .venv/bin/carretos importar-drive musicas config/drive/musicas.csv || true
 
 echo "==> Reiniciar serviços"
-sudo /usr/bin/systemctl restart carretos-web carretos-agendador
+# o agendador PRIMEIRO: quando a atualização é pedida pelo dashboard, reiniciar o carretos-web termina também
+# este script (e o systemctl), por isso o que vier depois dele pode não chegar a correr
+sudo /usr/bin/systemctl restart carretos-agendador
+echo "Agendador reiniciado."
+sudo /usr/bin/systemctl restart carretos-web
 sleep 3
 
 echo "==> Estado"
@@ -66,3 +72,6 @@ if curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/login | grep -
 else
   echo "✘ O dashboard não respondeu. Ver os erros: journalctl -u carretos-web -n 50 --no-pager"
 fi
+}
+main "$@"
+exit

@@ -1678,7 +1678,9 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     labels = {k: label for k, label, _ in CONFIG_FIELDS}
     erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
     from .. import linkcard
+    from . import system as _system
     return _render(request, "config.html", {"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
+                                            "ag": _system.agendador_status(), "web_rev": _system.git_rev(),
                                             "fields": fields, "first": first, "ok": ok, "erros": erros,
                                             "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),
                                             "tg": tg, "tg_ok": notify_enabled(),
@@ -1828,6 +1830,16 @@ def config_telegram_chat(request: Request):
             f"ainda não há mensagens: {where}, envie /start e tente de novo dentro de alguns segundos"), 303)
     envfile.set_env({"TELEGRAM_CHAT_ID": str(chats[-1]["id"])}, root=ROOT)
     return RedirectResponse("/configurar?tg=chat", 303)
+
+
+@app.post("/configurar/reiniciar-agendador")
+def config_restart_scheduler(request: Request):
+    from . import system
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    ok = system.restart_agendador()
+    return RedirectResponse("/configurar?ag=" + ("ok" if ok else "erro") + "#manutencao", 303)
 
 
 @app.post("/configurar/testar-telegram")

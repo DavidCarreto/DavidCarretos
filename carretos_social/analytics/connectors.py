@@ -76,6 +76,11 @@ def fetch_instagram(acc: Account, limit: int = 50) -> dict:
 # ---------------------------------------------------------------- TikTok
 def fetch_tiktok(acc: Account, limit: int = 20) -> dict:
     (token,) = _need(acc, "access_token_env")
+    from ..tiktok_connect import SCOPES
+    if not {"user.info.stats", "video.list"} <= set(SCOPES):
+        # a app TikTok só tem rascunhos (user.info.basic + video.upload): as métricas precisam de mais autorizações
+        raise NotConfigured("métricas do TikTok precisam das autorizações user.info.stats e video.list "
+                            "(não pedidas: a app só envia rascunhos). Use a importação de CSV do TikTok Studio.")
     headers = {"Authorization": f"Bearer {token}"}
     user = request("GET", f"{TIKTOK}/user/info/", headers=headers,
                    params={"fields": "follower_count,video_count,display_name"}).json()
