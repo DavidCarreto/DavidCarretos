@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -38,20 +39,58 @@ def org_enabled() -> bool:
     return configured("pagina") and _yes("LINKEDIN_ORG_API")
 
 
-def api_version() -> str:
-    """Versão da API do LinkedIn (AAAAMM). O LinkedIn lança uma por mês e desliga cada uma ao fim de ~1 ano:
-    por defeito usa a de há 2 meses (sempre ativa); LINKEDIN_VERSION no .env sobrepõe."""
-    if os.environ.get("LINKEDIN_VERSION"):
-        return os.environ["LINKEDIN_VERSION"]
-    d = datetime.now().replace(day=1)
-    for _ in range(2):
+def _months_back(n: int, start: datetime | None = None) -> str:
+    d = (start or datetime.now()).replace(day=1)
+    for _ in range(n):
         d = (d - timedelta(days=1)).replace(day=1)
     return d.strftime("%Y%m")
 
 
+def _valid(v: str) -> bool:
+    """AAAAMM dos últimos 11 meses (o LinkedIn desliga cada versão ao fim de ~1 ano)."""
+    return bool(re.fullmatch(r"\d{6}", v or "")) and _months_back(11) <= v <= datetime.now().strftime("%Y%m")
+
+
+def api_version() -> str:
+    """Versão da API REST do LinkedIn (cabeçalho LinkedIn-Version, AAAAMM), usada em TODOS os pedidos (perfil e
+    página). Ordem: LINKEDIN_VERSION do .env, se ainda for recente; a última que funcionou (guardada); senão a
+    de há 2 meses. Um LINKEDIN_VERSION antigo (ex.: 202510 copiado do .env.example) é ignorado."""
+    env = os.environ.get("LINKEDIN_VERSION", "").strip()
+    if _valid(env):
+        return env
+    try:
+        saved = (DATA_DIR / "linkedin_version.txt").read_text().strip()
+        if _valid(saved):
+            return saved
+    except OSError:
+        pass
+    return _months_back(2)
+
+
+def rest(method: str, url: str, headers: dict | None = None, **kwargs):
+    """Pedido à API REST do LinkedIn com a versão certa. Se o LinkedIn responder que a versão não está ativa
+    (426 NONEXISTENT_VERSION), tenta as dos meses anteriores e guarda a que funcionar."""
+    from .http import ApiError
+    headers = {"X-Restli-Protocol-Version": "2.0.0", **(headers or {})}
+    version = api_version()
+    for _ in range(12):
+        headers["LinkedIn-Version"] = version
+        try:
+            resp = request(method, url, headers=headers, **kwargs)
+        except ApiError as exc:
+            if "NONEXISTENT_VERSION" not in str(exc) and "-> 426" not in str(exc):
+                raise
+            version = _months_back(1, datetime.strptime(version, "%Y%m"))
+            continue
+        if version != api_version():
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            (DATA_DIR / "linkedin_version.txt").write_text(version)
+        return resp
+    raise ApiError("O LinkedIn não aceitou nenhuma versão da API dos últimos 12 meses.")
+
+
 def _headers(token: str) -> dict:
-    return {"Authorization": f"Bearer {token}", "LinkedIn-Version": api_version(),
-            "X-Restli-Protocol-Version": "2.0.0"}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def login_url(redirect_uri: str, state: str, app: str = "perfil") -> str:
@@ -73,14 +112,14 @@ def member(token: str) -> dict:
 
 def organizations(token: str) -> list[dict]:
     """Páginas de empresa de que o utilizador é administrador (só com a Community Management API)."""
-    data = request("GET", f"{REST}/organizationAcls", headers=_headers(token),
+    data = rest("GET", f"{REST}/organizationAcls", headers=_headers(token),
                    params={"q": "roleAssignee", "role": "ADMINISTRATOR", "state": "APPROVED"}).json()
     out = []
     for el in data.get("elements", []):
         urn = el.get("organization", "")
         oid = urn.rsplit(":", 1)[-1]
         try:
-            name = request("GET", f"{REST}/organizations/{oid}", headers=_headers(token), retries=1).json() \
+            name = rest("GET", f"{REST}/organizations/{oid}", headers=_headers(token), retries=1).json() \
                 .get("localizedName", "")
         except Exception:  # noqa: BLE001
             name = ""
@@ -154,7 +193,7 @@ def test(acc: Account) -> tuple[bool, str]:
         if acc.platform == "linkedin_member":
             return True, f"LinkedIn de {member(token).get('name', '?')} ✓"
         oid = (acc.secret("author_urn_env") or "").rsplit(":", 1)[-1]
-        r = request("GET", f"{REST}/organizations/{oid}", headers=_headers(token), retries=1).json()
+        r = rest("GET", f"{REST}/organizations/{oid}", headers=_headers(token), retries=1).json()
         return True, f"Página LinkedIn «{r.get('localizedName', oid)}» ✓"
     except Exception as exc:  # noqa: BLE001
         return False, f"a ligação falhou: {exc}"

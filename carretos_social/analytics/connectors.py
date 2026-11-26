@@ -9,7 +9,7 @@ de analytics) podem ser alimentadas por importação de CSV — ver `import_csv`
 """
 from __future__ import annotations
 
-from ..linkedin_connect import api_version as linkedin_api_version
+from ..linkedin_connect import rest as li_rest
 
 import csv
 import os
@@ -27,8 +27,7 @@ LINKEDIN = "https://api.linkedin.com/rest"
 
 def _linkedin_headers(token: str) -> dict:
     return {
-        "Authorization": f"Bearer {token}",
-        "LinkedIn-Version": linkedin_api_version(),
+        "Authorization": f"Bearer {token}",           # a versão da API é posta por li_rest()
         "X-Restli-Protocol-Version": "2.0.0",
     }
 
@@ -98,20 +97,20 @@ def fetch_tiktok(acc: Account, limit: int = 20) -> dict:
 def fetch_linkedin(acc: Account, limit: int = 30) -> dict:
     token, author = _need(acc, "access_token_env", "author_urn_env")
     headers = _linkedin_headers(token)
-    posts_resp = request("GET", f"{LINKEDIN}/posts", headers=headers,
+    posts_resp = li_rest("GET", f"{LINKEDIN}/posts", headers=headers,
                          params={"q": "author", "author": author, "count": limit}).json()
     posts = []
     stats_by_share: dict = {}
     followers = None
     if acc.platform == "linkedin_org":
         try:
-            stats = request("GET", f"{LINKEDIN}/organizationalEntityShareStatistics", headers=headers,
+            stats = li_rest("GET", f"{LINKEDIN}/organizationalEntityShareStatistics", headers=headers,
                             params={"q": "organizationalEntity", "organizationalEntity": author}).json()
             for el in stats.get("elements", []):
                 key = el.get("share") or el.get("ugcPost")
                 if key:
                     stats_by_share[key] = el.get("totalShareStatistics", {})
-            followers = request("GET", f"{LINKEDIN}/networkSizes/{author}", headers=headers,
+            followers = li_rest("GET", f"{LINKEDIN}/networkSizes/{author}", headers=headers,
                                 params={"edgeType": "COMPANY_FOLLOWED_BY_MEMBER"}).json().get("firstDegreeSize")
         except ApiError:
             pass

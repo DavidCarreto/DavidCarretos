@@ -1135,8 +1135,8 @@ def test_linkedin_version_and_fb_carretoclips(monkeypatch):
     monkeypatch.delenv("LINKEDIN_VERSION", raising=False)
     v = api_version()
     assert len(v) == 6 and v < datetime.now().strftime("%Y%m")              # sempre uma versão já lançada
-    monkeypatch.setenv("LINKEDIN_VERSION", "202601")
-    assert api_version() == "202601"
+    monkeypatch.setenv("LINKEDIN_VERSION", "202510")                       # antiga (vinha do .env.example): ignorada
+    assert api_version() == v
     acc = accounts()["fb_carretoclips"]
     assert acc.platform == "facebook_page" and acc.group == "david" and not acc.connected
 
@@ -1433,3 +1433,26 @@ def test_linkedin_secret_formats_accepted():
     for key in ("LINKEDIN_CLIENT_SECRET", "LINKEDIN_ORG_CLIENT_SECRET"):
         assert not app_mod._bad_key(key, fake)
         assert app_mod._bad_key(key, "tem espaços no meio 123")
+
+
+
+def test_linkedin_rest_retries_inactive_version(monkeypatch):
+    from carretos_social import linkedin_connect as lc
+    from carretos_social.http import ApiError
+    monkeypatch.delenv("LINKEDIN_VERSION", raising=False)
+    first = lc.api_version()
+    seen = []
+    class R:
+        def json(self): return {"elements": []}
+    def fake(method, url, headers=None, **kw):
+        seen.append(headers["LinkedIn-Version"])
+        if len(seen) < 3:
+            raise ApiError('GET https://api.linkedin.com/rest/organizationAcls -> 426: {"code":"NONEXISTENT_VERSION"}')
+        return R()
+    monkeypatch.setattr(lc, "request", fake)
+    lc.rest("GET", "https://api.linkedin.com/rest/organizationAcls", headers={"Authorization": "Bearer t"})
+    assert seen[0] == first and seen[1] < seen[0] and seen[2] < seen[1]
+    assert lc.api_version() == seen[2]                                     # a versão que funcionou fica guardada
+    # a publicação usa a mesma função (perfil e página)
+    import carretos_social.publishers.linkedin as pub
+    assert pub.li_rest is lc.rest
