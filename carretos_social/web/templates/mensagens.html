@@ -27,10 +27,15 @@ verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div
 <p class="muted" style="font-size:12px;border-top:1px solid var(--line);padding-top:8px;margin-top:8px">in <b>LinkedIn pessoal (David Carreto)</b>: fica de fora. O LinkedIn só dá a leitura de comentários de perfis pessoais (r_member_social) a parceiros aprovados.
 As <b>mensagens privadas</b> do LinkedIn também não se leem pela API (só parceiros): o Carretos Studio avisa pelo Telegram a partir dos emails de aviso do LinkedIn
 que o Hotmail redireciona para o servidor ({{ 'ligado' if li_mail else 'desligado: ⚙ Configurar → "LinkedIn · avisar no Telegram as mensagens privadas" = sim' }}).</p>
-{% if me.is_admin %}<div class="kb-form" style="font-size:13px;margin-top:6px">
+{% if me.is_admin and imap_user %}<div class="kb-form" style="font-size:13px;margin-top:6px">
+ <b>Caixa que recebe os avisos (regra do Hotmail → redirecionar para):</b> <code>{{ imap_user }}</code><br>
+ O Carretos Studio lê-a de {{ li_minutes }} em {{ li_minutes }} minutos, só os emails do LinkedIn sobre mensagens (os outros não são tocados).
+ {% if li_mail %}<form method="post" action="/mensagens/linkedin/emails" style="margin:6px 0 0"><button class="btn" style="padding:3px 10px;font-size:12px">Verificar a caixa de email agora</button></form>{% endif %}
+</div>
+{% elif me.is_admin %}<div class="kb-form" style="font-size:13px;margin-top:6px">
  <b>Endereço para a regra do Hotmail</b> (secreto: não o partilhe): {% if li_mail_addr %}<code style="user-select:all">{{ li_mail_addr }}</code>
  <button type="button" class="btn" style="padding:2px 8px;font-size:12px" onclick="navigator.clipboard.writeText('{{ li_mail_addr }}').then(()=>{this.textContent='✓ Copiado'})">📋 Copiar</button>{% else %}<span class="muted">(aparece quando o dashboard tiver o endereço público)</span>{% endif %}<br>
- Recetor de email no servidor: {% if correio == 'active' %}<span style="color:#3fb950">✓ ativo</span>{% else %}<span style="color:#ff9b93">✕ não ativo</span> <span class="muted">(ativa-se uma vez na consola da Hetzner: <code>bash /opt/carretos/deploy/ativar_correio.sh</code>)</span>{% endif %}
+ Recetor de email no servidor: {% if correio == 'active' %}<span style="color:#3fb950">✓ ativo</span>{% else %}<span style="color:#ff9b93">✕ não ativo</span> <span class="muted">(precisa de root na consola da Hetzner: <code>bash /opt/carretos/deploy/ativar_correio.sh</code>. Sem isso, use uma caixa de email lida pelo Studio: ⚙ Configurar → "Caixa dedicada (alternativa)".)</span>{% endif %}
 </div>{% endif %}
 </div>
 

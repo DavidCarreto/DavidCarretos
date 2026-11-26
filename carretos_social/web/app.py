@@ -1351,7 +1351,8 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes(),
         "li_mail": __import__("carretos_social.linkedin_mail", fromlist=["x"]).enabled(),
         "li_mail_addr": _li_mail_addr() if me.is_admin else "",
-        "correio": _service_state("carretos-correio") if me.is_admin else ""})
+        "correio": _service_state("carretos-correio") if me.is_admin else "",
+        "imap_user": os.environ.get("IMAP_USER", "") if me.is_admin else ""})
 
 
 @app.post("/mensagens/conta/{acc_id}")
