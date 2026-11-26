@@ -24,12 +24,16 @@ def _api(method: str) -> str:
     return f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/{method}"
 
 
-def send(text: str) -> None:
+def send(text: str, buttons: list[tuple[str, str]] | None = None) -> None:
+    """buttons: [(texto, link)] → botões por baixo da mensagem (abrem o dashboard)."""
     if not enabled():
         print(f"[notificação] {text}")
         return
-    request("POST", _api("sendMessage"), data={"chat_id": os.environ["TELEGRAM_CHAT_ID"],
-                                                "text": (PREFIX + text)[:4000]})
+    data = {"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": (PREFIX + text)[:4000]}
+    if buttons:
+        import json
+        data["reply_markup"] = json.dumps({"inline_keyboard": [[{"text": t, "url": u} for t, u in buttons]]})
+    request("POST", _api("sendMessage"), data=data)
 
 
 def send_file(path: str | Path, caption: str = "") -> None:

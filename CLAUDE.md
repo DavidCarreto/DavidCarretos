@@ -27,7 +27,8 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
 **Emails**
 - Os emails com assunto "[Carretos] …" e "📬 Resumo diário Carretos" são do sistema de avaliações.
   Este sistema (Carretos Studio) só envia emails de convite, de reposição de palavra-passe, com as legendas dos
-  vídeos enviados para os rascunhos do TikTok e alertas de ligações às redes com problemas, com assunto
+  vídeos enviados para os rascunhos do TikTok, alertas de ligações às redes com problemas e avisos de pedidos de
+  parceria recebidos em comentários (para a lista de ⚙ Configurar), com assunto
   "Carretos Studio · …", a partir de uma conta de email PRÓPRIA (SMTP no ⚙), nunca a "carretos-avaliacoes".
 
 ## Separação entre os dois sistemas (convenções deste projeto)

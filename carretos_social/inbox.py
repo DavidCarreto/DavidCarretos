@@ -47,7 +47,10 @@ def settings() -> dict:
 
 
 def account_settings(acc_id: str) -> dict:
-    return {"enabled": False, "private": True, **(settings().get(acc_id) or {})}
+    """enabled: responder (ou propor) nesta conta; mode: "propor" (eu aprovo) ou "auto" (responde sozinho)."""
+    acc = accounts().get(acc_id)
+    default_mode = "propor" if acc and acc.platform.startswith("linkedin") else "auto"
+    return {"enabled": False, "private": True, "mode": default_mode, **(settings().get(acc_id) or {})}
 
 
 def save_account_settings(acc_id: str, **fields) -> None:
@@ -58,7 +61,52 @@ def save_account_settings(acc_id: str, **fields) -> None:
 
 
 def eligible_accounts() -> list[Account]:
-    return [a for a in accounts().values() if a.platform in ("instagram", "facebook_page") and a.has_credentials]
+    return [a for a in accounts().values()
+            if a.platform in ("instagram", "facebook_page", "linkedin_org") and a.has_credentials]
+
+
+# ------------------------------------------------------------------ respostas fixas (candidaturas e parcerias)
+def candidatura_email() -> str:
+    return os.environ.get("CANDIDATURAS_EMAIL", "").strip() or "rh@carretos.pt"
+
+
+def parcerias_email() -> str:
+    return os.environ.get("PARCERIAS_EMAIL_PUBLICO", "").strip() or "davidcarreto@carretos.pt"
+
+
+def parcerias_avisos() -> list[str]:
+    raw = os.environ.get("PARCERIAS_AVISOS_EMAILS", "").strip() or "davidcarreto@carretos.pt,marcia.palmeirao@carretos.pt"
+    return [e.strip() for e in raw.replace(";", ",").split(",") if "@" in e]
+
+
+def fixed_reply(intent: str) -> str:
+    if intent == "candidatura":
+        return (f"Obrigado pelo interesse em juntar-se à Carretos Group! Envie o seu CV para {candidatura_email()}, "
+                "com a função e a oficina que lhe interessam. Boa sorte!")
+    if intent == "parceria":
+        return (f"Obrigado pelo contacto! Para propostas de parceria, envie-nos os detalhes para {parcerias_email()}, "
+                "que respondemos com toda a atenção.")
+    return ""
+
+
+def has_contacts(text: str) -> bool:
+    """O comentário tem um telefone ou um email? (não se repetem na resposta e avisa-se pelo Telegram)"""
+    import re
+    t = text or ""
+    return bool(re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", t) or re.search(r"(?:\+?351[\s.-]?)?\b9\d(?:[\s.-]?\d){7}\b", t)
+                or re.search(r"\b2\d(?:[\s.-]?\d){7}\b", t))
+
+
+NETWORK_NAME = {"instagram": "Instagram", "facebook": "Facebook", "linkedin": "LinkedIn"}
+
+
+def post_link(row) -> str:
+    """Link para a publicação comentada (LinkedIn: o URN da publicação; Meta: o dashboard)."""
+    from .routine import dashboard_url
+    ctx = (row["context"] or "") if row is not None else ""
+    if ctx.startswith("urn:li:"):
+        return f"https://www.linkedin.com/feed/update/{ctx}/"
+    return dashboard_url("/mensagens")
 
 
 def whatsapp_link(acc: Account) -> str:
@@ -257,6 +305,9 @@ def process_pending() -> int:
 
 def already_answered(acc: Account, row) -> bool:
     """A conta já respondeu (automação do Meta Business Suite ou uma pessoa)? Em caso de dúvida, False."""
+    if acc.platform.startswith("linkedin"):
+        from .linkedin_inbox import page_replied
+        return page_replied(acc, row["external_id"])
     from .http import request
     from .meta_connect import graph
     token = acc.secret("access_token_env")
@@ -305,8 +356,15 @@ def compose(acc: Account, kind: str, text: str, author: str = "") -> dict:
     for k in ("reply", "private_reply"):
         txt = sanitize(acc.id, (res.get(k) or "").strip())
         res[k] = "" if "[PREENCHER" in txt else txt              # nunca enviar um marcador por preencher
-    if res.get("intent") != "spam" and res.get("reply") and wa not in res["reply"] and res["intent"] != "elogio":
+    if res.get("intent") in ("candidatura", "parceria"):
+        # respostas fixas: nunca pedem CV/dados no comentário, não confirmam vagas nem falam de condições
+        res["reply"], res["private_reply"] = fixed_reply(res["intent"]), ""
+    elif res.get("intent") != "spam" and res.get("reply") and wa not in res["reply"] and res["intent"] != "elogio":
         res["reply"] = f"{res['reply']} {wa}"
+    if acc.platform.startswith("linkedin"):
+        res["private_reply"] = ""                                 # no LinkedIn não há mensagem privada pela API
+    if res.get("intent") == "elogio":
+        res["private_reply"] = ""
     return personalize(acc, kind, author, res)
 
 
@@ -334,6 +392,11 @@ def personalize(acc: Account, kind: str, author: str, res: dict) -> dict:
         body = _GREETING.sub("", body, count=1)
         res["reply"] = f"@{author} {body[:1].upper() + body[1:]}".strip()
         hello = f"Olá @{author}!"
+    elif acc.platform.startswith("linkedin"):
+        # a API não dá o nome de quem comentou (só o URN): a resposta fica no fio do comentário, sem nome
+        res["reply"] = _GREETING.sub("", res["reply"], count=1)
+        res["reply"] = res["reply"][:1].upper() + res["reply"][1:]
+        hello = "Olá!"
     elif acc.platform == "facebook_page":
         name = first_name(author)
         hello = f"Olá {name}!" if name else "Olá!"
@@ -355,7 +418,7 @@ def _recent_auto_dm(conn, acc_id: str, author_id: str) -> bool:
         "AND replied_at >= ?", (acc_id, author_id, limit)).fetchone())
 
 
-def process(item_id: int, wait: int = 0) -> str:
+def process(item_id: int, wait: int = 0, force_propose: bool = False) -> str:
     if wait:
         import time
         time.sleep(wait)
@@ -364,7 +427,7 @@ def process(item_id: int, wait: int = 0) -> str:
         if not row or row["status"] != "novo":
             return row["status"] if row else "?"
         acc = accounts().get(row["account_id"])
-        if not acc or not account_settings(acc.id)["enabled"]:
+        if not acc or (not account_settings(acc.id)["enabled"] and not force_propose):
             conn.execute("UPDATE inbox SET status='desligado', note=? WHERE id=?",
                          ("respostas automáticas desligadas nesta conta", item_id))
             return "desligado"
@@ -378,24 +441,71 @@ def process(item_id: int, wait: int = 0) -> str:
                          ("já respondido por outra automação (ex.: Meta Business Suite) ou por uma pessoa", item_id))
         return "ignorado"
     res = compose(acc, row["kind"], row["text"] or "", row["author"] or "")
+    intent = res.get("intent")
+    mode = account_settings(acc.id).get("mode", "auto")
+    contacts = has_contacts(row["text"] or "")
     status, note = "respondido", res.get("error")
     try:
-        if res.get("intent") == "spam" or not res.get("reply"):
+        if intent == "spam" or not res.get("reply"):
             status, note = "ignorado", "spam ou sem resposta necessária"
+        elif intent == "candidatura" and not force_propose:
+            _send(acc, row, res)                                  # resposta fixa: sai mesmo no modo "propor"
+        elif intent in ("parceria", "reclamacao") or res.get("alert") or mode == "propor" or force_propose:
+            # parcerias, reclamações e urgências nunca saem sozinhas; no modo "propor" nada sai sem aprovação
+            status, note = "proposta", ("parceria: espera sempre pela aprovação" if intent == "parceria" else
+                                        "à espera de aprovação" + (" (reclamação/urgência)" if intent == "reclamacao"
+                                                                   or res.get("alert") else ""))
         else:
             _send(acc, row, res)
     except Exception as exc:  # noqa: BLE001
         status, note = "erro", str(exc)
+    if contacts:
+        note = ((note + " · ") if note else "") + "o comentário tem telefone/email (não repetido na resposta)"
     with connect() as conn:
         conn.execute("UPDATE inbox SET intent=?, reply=?, private_reply=?, status=?, note=?, replied_at=? WHERE id=?",
                      (res.get("intent"), res.get("reply"), res.get("private_reply"), status, note,
                       now() if status == "respondido" else None, item_id))
-    if res.get("alert") or status == "erro":
-        _alert(acc, row, res, status, note)
+    _notify(acc, row, res, status, note, contacts, item_id)
     return status
 
 
+def approve(item_id: int, text: str | None = None) -> str:
+    """Envia uma resposta proposta (com o texto editado, se houver)."""
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM inbox WHERE id=?", (item_id,)).fetchone()
+    if not row or row["status"] not in ("proposta", "erro"):
+        raise ValueError("Esta resposta já não está à espera de aprovação.")
+    acc = accounts().get(row["account_id"])
+    reply = (text if text is not None else row["reply"] or "").strip()
+    if not reply:
+        raise ValueError("A resposta está vazia.")
+    from .content.guard import found_terms
+    bad = [w for _, w in found_terms(acc.id, reply)]
+    if bad or "[PREENCHER" in reply:
+        raise ValueError("A resposta tem palavras proibidas ou partes por preencher: " + "; ".join(bad or ["[PREENCHER]"]))
+    if already_answered(acc, row):
+        with connect() as conn:
+            conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
+                         ("já respondido por outra pessoa ou automação", item_id))
+        raise ValueError("Já tinha sido respondido por outra pessoa: não enviei.")
+    _send(acc, row, {"reply": reply, "private_reply": row["private_reply"] or ""})
+    with connect() as conn:
+        conn.execute("UPDATE inbox SET reply=?, status='respondido', note=?, replied_at=? WHERE id=?",
+                     (reply, "aprovado no dashboard", now(), item_id))
+    return "respondido"
+
+
+def ignore(item_id: int) -> None:
+    with connect() as conn:
+        conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=? AND status IN ('proposta','erro','novo')",
+                     ("ignorado no dashboard", item_id))
+
+
 def _send(acc: Account, row, res: dict) -> None:
+    if acc.platform.startswith("linkedin"):
+        from .linkedin_inbox import reply as li_reply
+        li_reply(acc, row["external_id"], res["reply"])
+        return
     from .http import request
     from .meta_connect import graph
     token = acc.secret("access_token_env")
@@ -410,6 +520,47 @@ def _send(acc: Account, row, res: dict) -> None:
         request("POST", f"{graph()}/me/messages", json={
             "recipient": {"id": row["author_id"]}, "messaging_type": "RESPONSE", "message": {"text": res["reply"]}},
             params={"access_token": token})
+
+
+def _notify(acc: Account, row, res: dict, status: str, note, contacts: bool, item_id: int) -> None:
+    """Avisos pelo Telegram (e por email nas parcerias)."""
+    from . import notify
+    from .routine import dashboard_url
+    rede = NETWORK_NAME.get(row["network"] or "", row["network"] or "")
+    intent, excerpt = res.get("intent"), (row["text"] or "")[:300]
+    item_url = dashboard_url(f"/mensagens/item/{item_id}")
+    buttons = [("✓ Aprovar", item_url + "?acao=aprovar"), ("✎ Editar", item_url + "?acao=editar"),
+               ("✕ Ignorar", item_url + "?acao=ignorar")] if status == "proposta" else None
+    try:
+        if intent == "candidatura":
+            notify.send(f"Nova candidatura no {rede} ({acc.name}): {post_link(row)}\n«{excerpt}»"
+                        + ("\n⚠️ O comentário tem telefone/email: não foi repetido na resposta." if contacts else "")
+                        + (f"\nResposta enviada: {res.get('reply')}" if status == "respondido" else f"\nEstado: {status} {note or ''}"))
+        elif intent == "parceria":
+            notify.send(f"🤝 Pedido de parceria no {rede} ({acc.name}): {post_link(row)} — «{excerpt}»\n"
+                        f"Resposta proposta (espera pela sua aprovação): {res.get('reply')}", buttons=buttons)
+            _email_parceria(acc, row, rede)
+        elif status == "proposta":
+            notify.send(f"✍️ Resposta para aprovar no {rede} ({acc.name}) · {intent}:\n«{excerpt}»\n"
+                        f"Proposta: {res.get('reply')}\n{post_link(row)}", buttons=buttons)
+        elif res.get("alert") or status == "erro" or contacts:
+            _alert(acc, row, res, status, note)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _email_parceria(acc: Account, row, rede: str) -> None:
+    from .web import mailer
+    if not mailer.configured():
+        return
+    body = (f"Chegou um pedido de parceria num comentário do {rede} ({acc.name}).\n\n"
+            f"Excerto: «{(row['text'] or '')[:500]}»\n\nPublicação: {post_link(row)}\n\n"
+            "A resposta proposta está no Carretos Studio → Mensagens, à espera de aprovação (nunca sai sozinha).")
+    for to in parcerias_avisos():
+        try:
+            mailer.send(to, f"Pedido de parceria no {rede}", body)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _alert(acc: Account, row, res: dict, status: str, note) -> None:

@@ -74,6 +74,7 @@ def ensure_seeded(conn) -> None:
     _import_old_facts(conn)
     # numa base nova o tom já vem completo: os ajustes ficam dados como aplicados
     _set_setting(conn, "tone_updates_done", [a["chave"] for a in (seed.get("ajustes_tom") or []) if a.get("chave")])
+    _set_setting(conn, "auto_items_done", [f["chave"] for f in (seed.get("fichas") or []) if f.get("auto") and f.get("chave")])
     _set_setting(conn, "knowledge_seeded", True)
 
 
@@ -106,6 +107,25 @@ def apply_tone_updates(conn) -> None:
         done.add(a["chave"])
     if pending:
         _set_setting(conn, "tone_updates_done", sorted(done))
+    apply_auto_items(conn)
+
+
+def apply_auto_items(conn) -> None:
+    """Fichas marcadas com auto: true em config/conhecimento.yaml entram sozinhas, uma só vez (se alguém as apagar
+    no dashboard, não voltam)."""
+    done = set(_setting(conn, "auto_items_done", []))
+    have = {r["base_key"] for r in conn.execute("SELECT base_key FROM knowledge WHERE base_key IS NOT NULL")}
+    deleted = set(_setting(conn, "knowledge_deleted_keys", []))
+    added = False
+    for f in _seed().get("fichas") or []:
+        key = f.get("chave")
+        if f.get("auto") and key and key not in done:
+            if key not in have and key not in deleted:
+                _insert(conn, _row_from_seed(f), action="criada")
+            done.add(key)
+            added = True
+    if added:
+        _set_setting(conn, "auto_items_done", sorted(done))
 
 
 def new_base_items(conn, brand_id: str) -> list[dict]:

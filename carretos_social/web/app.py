@@ -1331,18 +1331,28 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "accs": [(a, inbox.account_settings(a.id)) for a in accs], "rows": rows, "names": names, "ok": ok,
         "erro": erro, "page": "mensagens", "callback": _base_url(request) + "/webhooks/meta",
         "verify": inbox.verify_token() if me.is_admin else "", "test": None,
-        "events": inbox.recent_events()[:30] if me.is_admin else []})
+        "events": inbox.recent_events()[:30] if me.is_admin else [],
+        "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes()})
 
 
 @app.post("/mensagens/conta/{acc_id}")
-def inbox_toggle(request: Request, acc_id: str, enabled: str = Form(""), private: str = Form("")):
+def inbox_toggle(request: Request, acc_id: str, enabled: str = Form(""), private: str = Form(""),
+                 modo: str = Form("")):
     from urllib.parse import quote
     from .. import inbox
+    from ..db import now as _now
     me = request.state.user
     if not me.can_approve(acc_id):
         return _forbidden("Ligar respostas automáticas é para quem aprova nesta conta.")
-    inbox.save_account_settings(acc_id, enabled=bool(enabled), private=bool(private))
-    state = "ligadas" if enabled else "desligadas"
+    before = inbox.account_settings(acc_id)
+    fields = {"enabled": bool(enabled), "private": bool(private)}
+    if modo in ("propor", "auto"):
+        fields["mode"] = modo
+    if enabled and not before.get("enabled"):
+        fields["enabled_at"] = _now()           # não responde a comentários anteriores a este momento
+    inbox.save_account_settings(acc_id, **fields)
+    state = ("ligadas (" + ("propõe e espera pela aprovação" if inbox.account_settings(acc_id)["mode"] == "propor"
+                            else "responde sozinho") + ")") if enabled else "desligadas"
     return RedirectResponse(f"/mensagens?ok={quote(accounts()[acc_id].name + ': respostas automáticas ' + state + '.')}", 303)
 
 
@@ -1357,6 +1367,59 @@ def inbox_subscribe(request: Request, acc_id: str):
     except Exception as exc:  # noqa: BLE001
         return RedirectResponse(f"/mensagens?erro={quote(accounts()[acc_id].name + ': ' + str(exc))}", 303)
     return RedirectResponse(f"/mensagens?ok={quote(accounts()[acc_id].name + f': a Meta passa a enviar os comentários e as mensagens (Página {pid}).')}", 303)
+
+
+@app.post("/mensagens/linkedin/existentes")
+def inbox_linkedin_existing(request: Request):
+    """Traz os comentários já existentes (últimos 30 dias) da página LinkedIn, só como propostas."""
+    from urllib.parse import quote
+    from .. import linkedin_inbox
+    me = request.state.user
+    if not me.can_approve(linkedin_inbox.ORG_ACCOUNT):
+        return _forbidden()
+    try:
+        lines = linkedin_inbox.poll(include_old=True)
+    except Exception as exc:  # noqa: BLE001
+        from ..redact import redact
+        return RedirectResponse("/mensagens?erro=" + quote("LinkedIn: " + redact(str(exc))[:500]), 303)
+    return RedirectResponse("/mensagens?ok=" + quote("LinkedIn: " + (lines[0] if lines else "nada a ler")
+                                                     + ". Os comentários trazidos ficam à espera de aprovação."), 303)
+
+
+@app.get("/mensagens/item/{iid}", response_class=HTMLResponse)
+def inbox_item(request: Request, iid: int, acao: str = ""):
+    me = request.state.user
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM inbox WHERE id=?", (iid,)).fetchone()
+    if not row or not me.can_see(row["account_id"] or ""):
+        return _forbidden()
+    from .. import inbox
+    return _render(request, "mensagem_item.html", {"r": dict(row), "acao": acao, "page": "mensagens",
+                                                   "acc": accounts().get(row["account_id"]),
+                                                   "link": inbox.post_link(row),
+                                                   "can_approve": me.can_approve(row["account_id"] or "")})
+
+
+@app.post("/mensagens/item/{iid}")
+def inbox_item_action(request: Request, iid: int, acao: str = Form(...), texto: str = Form("")):
+    from urllib.parse import quote
+    from .. import inbox
+    me = request.state.user
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM inbox WHERE id=?", (iid,)).fetchone()
+    if not row or not me.can_approve(row["account_id"] or ""):
+        return _forbidden("Aprovar respostas é para quem aprova nesta conta.")
+    try:
+        if acao == "ignorar":
+            inbox.ignore(iid)
+            msg = f"Comentário #{iid}: ignorado (não responde)."
+        else:
+            inbox.approve(iid, texto if texto.strip() else None)
+            msg = f"Comentário #{iid}: resposta enviada."
+    except Exception as exc:  # noqa: BLE001
+        from ..redact import redact
+        return RedirectResponse(f"/mensagens/item/{iid}?erro=" + quote(redact(str(exc))[:500]), 303)
+    return RedirectResponse("/mensagens?ok=" + quote(msg), 303)
 
 
 @app.post("/mensagens/testar", response_class=HTMLResponse)
@@ -1680,6 +1743,10 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("LINKEDIN_ORG_CLIENT_ID", "LinkedIn (2.ª app, página da empresa) · Client ID", False),
     ("LINKEDIN_ORG_CLIENT_SECRET", "LinkedIn (2.ª app, página da empresa) · Client Secret", True),
     ("LINKEDIN_ORG_API", "LinkedIn · Community Management API aprovada? (sim/não)", False),
+    ("LINKEDIN_COMMENTS_MINUTES", "LinkedIn · ler os comentários da página de quantos em quantos minutos (10 por omissão)", False),
+    ("CANDIDATURAS_EMAIL", "Respostas · email para candidaturas de emprego (público; rh@carretos.pt por omissão)", False),
+    ("PARCERIAS_EMAIL_PUBLICO", "Respostas · email para parcerias (público; davidcarreto@carretos.pt por omissão)", False),
+    ("PARCERIAS_AVISOS_EMAILS", "Respostas · avisos de parcerias por email (separados por vírgula; davidcarreto@carretos.pt e marcia.palmeirao@carretos.pt por omissão)", False),
     ("LINKEDIN_HEADLINE", "LinkedIn · cargo do perfil, por baixo do nome (só para a pré-visualização; ex.: CEO · Carretos Group)", False),
     # TikTok (ver docs/GUIA_TIKTOK.md)
     ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
@@ -1709,6 +1776,11 @@ KEY_FORMATS = {
     "LINKEDIN_ORG_CLIENT_ID": (_re.compile(r"^[A-Za-z0-9]{8,30}$"), "letras e números, sem espaços"),
     "LINKEDIN_ORG_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_.=/+:~\-]{10,200}$"), "letras, números e símbolos (_ . = / + - :), sem espaços"),
     "LINKEDIN_ORG_API": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
+    "LINKEDIN_COMMENTS_MINUTES": (_re.compile(r"^\d{1,3}$"), "um número de minutos (ex.: 10)"),
+    "CANDIDATURAS_EMAIL": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}$", _re.I), "um email"),
+    "PARCERIAS_EMAIL_PUBLICO": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}$", _re.I), "um email"),
+    "PARCERIAS_AVISOS_EMAILS": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}(\s*,\s*[^@\s,]+@[^@\s,]+\.[a-z]{2,})*$", _re.I),
+                                "um ou mais emails separados por vírgula"),
     "LINKEDIN_HEADLINE": (_re.compile(r"^[^\n\r\"'=#]{2,120}$"), "texto simples, até 120 caracteres, sem aspas"),
     "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
     "TIKTOK_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_\-]{16,80}$"), "letras e números, sem espaços"),

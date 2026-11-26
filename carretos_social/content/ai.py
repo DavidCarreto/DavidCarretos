@@ -363,7 +363,7 @@ Escreve:
     return _ask(prompt, schema, max_tokens=4000, effort="low")
 
 
-INTENTS = ["pergunta", "preco", "marcacao", "elogio", "reclamacao", "spam", "outro"]
+INTENTS = ["pergunta", "preco", "marcacao", "elogio", "candidatura", "parceria", "reclamacao", "spam", "outro"]
 
 
 def inbox_reply(acc: Account, kind: str, text: str, author: str, whatsapp: str) -> dict:
@@ -377,7 +377,9 @@ Recebemos este {where} de "{author or 'alguém'}":
 
 O WhatsApp {whatsapp} tem um assistente disponível 24 horas que dá o preço da revisão na hora, explica o
 orçamento e os serviços e faz a marcação. Escreve a resposta automática:
-- intent: pergunta | preco | marcacao | elogio | reclamacao | spam (inclui ofensas e insultos) | outro
+- intent: pergunta | preco | marcacao | elogio | candidatura (quer trabalhar connosco, pergunta por vagas, envia
+  CV) | parceria (empresa, fornecedor, colaboração, patrocínio, proposta comercial) | reclamacao | spam (inclui
+  ofensas e insultos) | outro. (Candidatura e parceria têm respostas fixas do sistema: escreve só uma proposta curta.)
 - reply: resposta curta (máximo 2 frases e cerca de 250 carateres, no tom da conta, tratar por "você"), que encaminha SEMPRE para o
   WhatsApp {whatsapp} quando há uma pergunta, pedido de preço, marcação, dúvida ou reclamação. Nunca dês preços,
   prazos, disponibilidade nem factos que não estejam nos FACTOS CONFIRMADOS: o WhatsApp responde a isso.

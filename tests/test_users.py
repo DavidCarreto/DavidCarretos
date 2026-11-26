@@ -687,7 +687,7 @@ def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
     from carretos_social.scheduler import all_problems
     _setup_admin(client)
     _login(client, "david", "segredo123")
-    assert len(verified_facts("geral")) == 15 and len(verified_facts("auron")) == 14
+    assert len(verified_facts("geral")) == 17 and len(verified_facts("auron")) == 14
     link = "auron.carretos.pt/schedule"
     assert found_terms("ig_carretosgroup", f"Saiba o preço na hora: {link}") == []          # o link pode ficar
     assert found_terms("ig_carretosgroup", f"Com o AURON sabe o preço: {link}")[0][1] == \
@@ -1802,3 +1802,113 @@ def test_brand_logo_and_signature_settings(client):
     account("ig_carretosgroup")
     assert brand()["visual"]["logo"].endswith("carretos-logo-branco.png")
     set_theme(None)
+
+
+def _li_setup(monkeypatch, intents):
+    """LinkedIn simulado: 1 post com comentários; IA simulada devolve a categoria pela palavra-chave."""
+    import time
+    from carretos_social import linkedin_inbox, inbox, notify
+    from carretos_social.config import accounts
+    from carretos_social.content import ai
+    acc = accounts()["li_carretosgroup"]
+    monkeypatch.setattr(type(acc), "has_credentials", property(lambda self: True))
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok" if "token" in k else "urn:li:organization:77657554")
+    monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "x")
+    now_ms = int(time.time() * 1000)
+    state = {"replies": [], "comments": [
+        ("urn:li:comment:(urn:li:activity:1,11)", "urn:li:person:A", "Adorei, parabéns à equipa!", now_ms),
+        ("urn:li:comment:(urn:li:activity:1,12)", "urn:li:person:B", "Têm vagas para mecânico? 912 345 678", now_ms),
+        ("urn:li:comment:(urn:li:activity:1,13)", "urn:li:person:C", "Somos fornecedores, queremos uma parceria", now_ms),
+        ("urn:li:comment:(urn:li:activity:1,14)", "urn:li:organization:77657554", "Obrigado!", now_ms),
+        ("urn:li:comment:(urn:li:activity:1,15)", "urn:li:person:D", "Comentário antigo", now_ms - 10 * 86400000),
+    ]}
+
+    class R:
+        def __init__(self, d=None):
+            self._d, self.headers = d or {}, {"x-restli-id": "999"}
+
+        def json(self):
+            return self._d
+
+    def fake_call(method, url, acc_, **kw):
+        if url.endswith("/posts"):
+            return R({"elements": [{"id": "urn:li:share:1", "createdAt": now_ms}]})
+        if method == "POST":
+            state["replies"].append(kw["json"])
+            return R()
+        if "urn%3Ali%3Acomment" in url:
+            return R({"elements": []})                        # ninguém da página respondeu ainda
+        return R({"elements": [{"commentUrn": u, "actor": a, "message": {"text": t}, "created": {"time": tm}}
+                               for u, a, t, tm in state["comments"]]})
+    monkeypatch.setattr(linkedin_inbox, "_call", fake_call)
+    monkeypatch.setattr(ai, "inbox_reply", lambda acc, kind, text, author, wa: {
+        "intent": next((v for k, v in intents.items() if k in text.lower()), "outro"),
+        "reply": "Muito obrigado pelo seu comentário!", "private_reply": "", "alert": False})
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append((t, buttons)))
+    return acc, state, sent
+
+
+def test_linkedin_comments_categories_modes_and_approval(client, monkeypatch):
+    from carretos_social import inbox, linkedin_inbox
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    acc, state, sent = _li_setup(monkeypatch, {"adorei": "elogio", "vagas": "candidatura", "parceria": "parceria"})
+    assert inbox.account_settings(acc.id)["mode"] == "propor"                # LinkedIn: propor por omissão
+    client.post(f"/mensagens/conta/{acc.id}", data={"enabled": "1", "modo": "propor"})
+    st = inbox.account_settings(acc.id)
+    inbox.save_account_settings(acc.id, enabled_at=(__import__("datetime").datetime.now()
+                                                    - __import__("datetime").timedelta(days=1)).isoformat())
+    lines = linkedin_inbox.poll()
+    assert "3 novos" in lines[0]                         # sem o da própria página e sem o anterior à ativação
+    with connect() as conn:
+        rows = {r["external_id"].rsplit(",", 1)[1][:2]: dict(r) for r in conn.execute("SELECT * FROM inbox")}
+    assert rows["11"]["status"] == "proposta" and rows["11"]["intent"] == "elogio"
+    assert rows["12"]["status"] == "respondido" and "rh@carretos.pt" in rows["12"]["reply"]   # candidatura sai logo
+    assert "912" not in rows["12"]["reply"] and "telefone/email" in rows["12"]["note"]
+    assert rows["13"]["status"] == "proposta" and "davidcarreto@carretos.pt" in rows["13"]["reply"]
+    assert state["replies"][0] == {"actor": "urn:li:organization:77657554", "object": "urn:li:activity:1",
+                                   "parentComment": "urn:li:comment:(urn:li:activity:1,12)",
+                                   "message": {"text": rows["12"]["reply"]}}
+    texts = " ".join(t for t, _ in sent)
+    assert "Nova candidatura no LinkedIn" in texts and "🤝 Pedido de parceria no LinkedIn" in texts
+    assert any(b and b[0][0] == "✓ Aprovar" for _, b in sent)
+    # aprovar com texto editado
+    page = client.get(f"/mensagens/item/{rows['11']['id']}").text
+    assert "Aprovar e enviar" in page
+    client.post(f"/mensagens/item/{rows['11']['id']}", data={"acao": "aprovar", "texto": "Obrigado, ficamos contentes!"})
+    assert state["replies"][-1]["message"]["text"] == "Obrigado, ficamos contentes!"
+    r = client.post(f"/mensagens/item/{rows['13']['id']}", data={"acao": "aprovar", "texto": "Fale com a AURON"},
+                    follow_redirects=False)
+    assert "erro=" in r.headers["location"]                                # palavra proibida não sai
+    client.post(f"/mensagens/item/{rows['13']['id']}", data={"acao": "ignorar"})
+    with connect() as conn:
+        assert conn.execute("SELECT status FROM inbox WHERE id=?", (rows["13"]["id"],)).fetchone()[0] == "ignorado"
+    # comentários já existentes: só como propostas (nada sai sozinho)
+    n = len(state["replies"])
+    client.post("/mensagens/linkedin/existentes")
+    with connect() as conn:
+        old = conn.execute("SELECT status FROM inbox WHERE external_id LIKE '%,15)'").fetchone()
+    assert old["status"] == "proposta" and len(state["replies"]) == n
+    page = client.get("/mensagens").text
+    assert "LinkedIn pessoal (David Carreto)" in page and "Propor e eu aprovo" in page
+
+
+def test_meta_comments_also_get_candidatura_and_parceria(monkeypatch):
+    from carretos_social import inbox
+    from carretos_social.config import accounts
+    from carretos_social.content import ai
+    monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "x")
+    acc = accounts()["ig_carretosgroup"]
+    for intent, needle in (("candidatura", "rh@carretos.pt"), ("parceria", "davidcarreto@carretos.pt")):
+        monkeypatch.setattr(ai, "inbox_reply", lambda *a, i=intent: {"intent": i, "reply": "x", "private_reply": "y", "alert": False})
+        res = inbox.compose(acc, "comment", "texto", "cliente")
+        assert needle in res["reply"] and res["reply"].startswith("@cliente") and not res["private_reply"]
+
+
+def test_knowledge_auto_items_added_once():
+    from carretos_social.db import connect
+    with connect() as conn:
+        texts = [r[0] for r in conn.execute("SELECT text FROM knowledge WHERE base_key IN ('g-candidaturas','g-parcerias')")]
+    assert any("rh@carretos.pt" in t for t in texts) and any("davidcarreto@carretos.pt" in t for t in texts)

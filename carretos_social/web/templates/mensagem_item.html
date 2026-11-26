@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block body %}
+<p><a class="muted" href="/mensagens">‹ Mensagens</a></p>
+<h1>{{ 'Comentário' if r.kind == 'comment' else 'Mensagem' }} #{{ r.id }}</h1>
+{% if request.query_params.get('erro') %}<div class="card alert" style="word-break:break-word">✕ {{ request.query_params.get('erro') }}</div>{% endif %}
+<div class="card">
+ <p class="muted" style="margin:0 0 6px">{{ acc.name if acc else r.account_id }} · {{ r.created_at[:16].replace('T',' ') }}{% if r.intent %} · categoria: <b>{{ r.intent }}</b>{% endif %} ·
+  <span class="pill" style="font-size:11px">{{ r.status }}</span> · <a class="gold" href="{{ link }}" target="_blank" rel="noopener">ver a publicação</a></p>
+ <p>«{{ r.text }}»</p>
+ {% if r.note %}<p class="muted" style="font-size:12px">{{ r.note }}</p>{% endif %}
+</div>
+{% if r.status in ('proposta', 'erro') and can_approve %}
+<form method="post" class="card" style="margin-top:12px">
+ <b>Resposta {{ 'proposta' if r.status == 'proposta' else '(falhou; pode tentar outra vez)' }}</b>
+ {% if r.intent == 'parceria' %}<p class="fmt-line ajustar" style="margin:6px 0">🤝 Pedido de parceria: nunca sai sozinho. Não aceitar, recusar nem falar de condições ou preços.</p>{% endif %}
+ <textarea name="texto" rows="4" {{ 'autofocus' if acao == 'editar' }}>{{ r.reply or '' }}</textarea>
+ <p class="muted" style="font-size:12px;margin:4px 0">Pode editar o texto antes de enviar. Sai {{ 'no fio do comentário, como página Carretos Group' if r.network == 'linkedin' else 'no fio do comentário' }}.</p>
+ <div class="row" style="gap:8px">
+  <button class="btn gold" name="acao" value="aprovar" {{ 'autofocus' if acao == 'aprovar' }}>✓ Aprovar e enviar</button>
+  <button class="btn" name="acao" value="ignorar" onclick="return confirm('Ignorar este comentário (não responde)?')" {{ 'autofocus' if acao == 'ignorar' }}>✕ Ignorar</button>
+ </div>
+</form>
+{% elif r.reply %}<div class="card" style="margin-top:12px"><b>Resposta</b><p>{{ r.reply }}</p></div>{% endif %}
+{% endblock %}

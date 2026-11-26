@@ -53,6 +53,11 @@ fichas:
      texto: "WhatsApp 211 45 46 46: preço da revisão, orçamento, serviços, marcação e dúvidas (assistente 24 horas)."}
   - {chave: g-link-marcacao, marca: geral, secao: contactos, funcao: alternativa, valor: "auron.carretos.pt/schedule",
      texto: "Ver o preço e marcar a revisão online, sozinho: auron.carretos.pt/schedule"}
+  # auto: true = entra sozinha no dashboard (uma vez) na próxima atualização; depois edita-se lá
+  - {chave: g-candidaturas, marca: geral, secao: contactos, funcao: info, auto: true,
+     texto: "Candidaturas de emprego: enviar o CV para rh@carretos.pt."}
+  - {chave: g-parcerias, marca: geral, secao: contactos, funcao: info, auto: true,
+     texto: "Propostas de parceria: davidcarreto@carretos.pt."}
   - {chave: g-contas, marca: geral, secao: contactos, funcao: info,
      texto: "Contas: Instagram @davidcarretos e @carretoclips; TikTok David Carreto e Carreto Clips; LinkedIn David Carreto e Carretos Group."}
 

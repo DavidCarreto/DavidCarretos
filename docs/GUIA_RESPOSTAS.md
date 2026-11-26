@@ -52,3 +52,25 @@ App → **Webhooks** (adicionar o produto se não existir):
 - Nunca responde à própria conta; ignora reenvios da Meta e mensagens "eco".
 - Respostas públicas até ~250 carateres, sempre com o link do WhatsApp (exceto agradecimentos a elogios).
 - Nas contas do David e da Carretos nunca aparece o nome AURON; nenhuma resposta sai com [PREENCHER].
+
+## LinkedIn · página Carretos Group (comentários)
+
+- O agendador lê os comentários dos posts da página dos últimos 30 dias de 10 em 10 minutos
+  (⚙ Configurar → "LinkedIn · ler os comentários…") e responde **como página**, no fio do comentário.
+- Mensagens → conta "Carretos Group (LinkedIn)": **Ligado** + modo **"Propor e eu aprovo"** (por omissão) ou
+  **"Responder sozinho"**. Parcerias, reclamações e urgências esperam sempre pela aprovação; as candidaturas
+  têm resposta fixa e saem logo.
+- Só comentários depois de ligar. "Trazer os comentários já existentes para aprovar" traz os dos últimos 30 dias
+  só como propostas.
+- O LinkedIn não dá o nome de quem comentou (só um identificador), por isso a resposta não menciona a pessoa:
+  fica por baixo do comentário dela.
+- Perfil pessoal: fora (r_member_social só para parceiros do LinkedIn). Mensagens privadas: não se leem pela API.
+
+## Categorias fixas (Instagram, Facebook e LinkedIn)
+
+- **Candidatura** → "Obrigado pelo interesse em juntar-se à Carretos Group! Envie o seu CV para rh@carretos.pt, com a
+  função e a oficina que lhe interessam. Boa sorte!" (sai logo; nunca pede dados no comentário; se o comentário tiver
+  telefone/email, não o repete e avisa no Telegram).
+- **Parceria** → proposta "Obrigado pelo contacto! Para propostas de parceria, envie-nos os detalhes para
+  davidcarreto@carretos.pt, que respondemos com toda a atenção." **Sempre para aprovação.** Aviso no Telegram e
+  email para a lista de ⚙ Configurar → "Respostas · avisos de parcerias por email".

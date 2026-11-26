@@ -220,9 +220,15 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     env_file = ROOT / ".env"
     env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
     last_sync = 0.0
+    last_li_poll = 0.0
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
+        from .linkedin_inbox import interval_minutes, poll_safe
+        if time.time() - last_li_poll >= interval_minutes() * 60:   # comentários da página LinkedIn
+            last_li_poll = time.time()
+            for line in poll_safe():
+                print(datetime.now().strftime("%H:%M"), line)
         if JUST_PUBLISHED and time.time() - last_sync <= sync_every_hours * 3600:
             accs, _ = sorted(JUST_PUBLISHED), JUST_PUBLISHED.clear()
             try:
