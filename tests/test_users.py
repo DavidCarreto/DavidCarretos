@@ -662,7 +662,7 @@ def test_auron_quote_signed_auron(tmp_path):
     from carretos_social.config import account, brand
     from carretos_social.media import image_gen
     account("ig_auron")
-    assert brand()["visual"].get("quote_author") == "AURON"
+    assert brand()["visual"].get("quote_author") == ""          # "AURON" só em cima (uma vez)
     out = image_gen.quote_card("Teste", tmp_path / "q.jpg")
     assert Image.open(out).size == (1080, 1350)
     account("ig_davidcarreto")
@@ -1794,7 +1794,7 @@ def test_brand_logo_and_signature_settings(client):
         assert r.status_code == 200 and r.content[:3] == b"\xff\xd8\xff"
     r = client.post("/configurar/marca/auron", data={"assinatura": "By David Carreto"}, follow_redirects=False)
     assert "s%C3%B3+pode" in r.headers["location"] or "pode aparecer" in r.headers["location"] or "marca=" in r.headers["location"]
-    assert brand_assets.get("auron")["signature"] == "AURON"
+    assert brand_assets.get("auron")["signature"] == ""
     client.post("/configurar/marca/carretos", data={"assinatura": "", "sem_logo": "1"})
     account("ig_carretosgroup")
     assert brand()["visual"]["logo"] == "" and brand()["visual"]["quote_author"] == ""

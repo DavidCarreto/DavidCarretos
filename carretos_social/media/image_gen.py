@@ -201,9 +201,12 @@ def quote_card(text: str, out: str | Path, author: str | None = None, size=(1080
     af = _font(False, int(W * 0.034))
     _accent_bar(d, margin, y + int(fs * 0.5), int(W * 0.08), max(4, SS * 3))
     sig = author if author is not None else (_v()["quote_author"] if "quote_author" in _v() else brand()["owner"])
-    if sig:                               # assinatura por baixo da frase (Carretos Group: nenhuma)
+    if sig:                               # assinatura por baixo da frase (Carretos Group e AURON: nenhuma)
         d.text((margin, y + int(fs * 0.8)), sig.upper(), font=af, fill=_hex(_v()["colors"]["secondary"]))
-    _logo(img, pos="top-right")
+    # uma só assinatura por imagem: se já assinou por baixo da frase, não repete o nome em texto no canto
+    has_logo_file = bool(_v().get("logo")) and Path(_v()["logo"]).exists()
+    if not sig or has_logo_file:
+        _logo(img, pos="top-right")
     return _save(img, out, size)
 
 

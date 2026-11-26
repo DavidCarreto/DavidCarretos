@@ -84,7 +84,7 @@ themes:
   carretos: {}                               # azul da Carretos Group (o "visual" acima)
   auron:                                     # PROVISÓRIO: cores neutras até o David definir a identidade AURON
     signature: "AURON"
-    quote_author: "AURON"                    # as frases assinam "AURON", não "David Carreto"
+    quote_author: ""                         # "AURON" só em cima (uma vez); nunca "David Carreto"
     colors:
       primary: "#0B0B0C"
       secondary: "#BFC4CC"
