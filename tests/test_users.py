@@ -1912,3 +1912,55 @@ def test_knowledge_auto_items_added_once():
     with connect() as conn:
         texts = [r[0] for r in conn.execute("SELECT text FROM knowledge WHERE base_key IN ('g-candidaturas','g-parcerias')")]
     assert any("rh@carretos.pt" in t for t in texts) and any("davidcarreto@carretos.pt" in t for t in texts)
+
+
+def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
+    from email.message import EmailMessage
+    from carretos_social import linkedin_mail, notify
+    monkeypatch.setattr(linkedin_mail._cfg, "DATA_DIR", tmp_path)
+    monkeypatch.setenv("LINKEDIN_EMAILS_ATIVO", "sim")
+    monkeypatch.setenv("SMTP_HOST", "smtp.exemplo.pt")
+    monkeypatch.setenv("SMTP_USER", "studio@exemplo.pt")
+    monkeypatch.setenv("SMTP_PASSWORD", "x")
+    assert linkedin_mail.imap_settings()["host"] == "imap.exemplo.pt"
+
+    def mk(frm, subj, body, mid):
+        m = EmailMessage()
+        m["From"], m["Subject"], m["Message-ID"], m["Date"] = frm, subj, mid, "Thu, 26 Nov 2026 10:00:00 +0000"
+        m.set_content(body)
+        return m.as_bytes()
+    msgs = {b"1": mk("LinkedIn <messages-noreply@linkedin.com>", "Ana Costa enviou-lhe uma mensagem",
+                     "Somos fornecedores e queremos uma parceria com a Carretos Group. https://www.linkedin.com/messaging/thread/123/?x=1", "<a>"),
+            b"2": mk("David <carretodavid22@hotmail.com>", "FW: Rui Lopes enviou-lhe uma mensagem",
+                     "From: messages-noreply@linkedin.com\nOlá, têm vagas para mecânico? Envio o meu CV.", "<b>"),
+            b"3": mk("Banco <info@banco.pt>", "Extrato", "nada a ver", "<c>"),
+            b"4": mk("LinkedIn <jobs-noreply@linkedin.com>", "Novas vagas para si", "sugestões de emprego linkedin.com", "<d>")}
+    deleted = []
+
+    class FakeIMAP:
+        def __init__(self, host, port, timeout=0):
+            assert host == "imap.exemplo.pt"
+
+        def login(self, u, p): pass
+        def select(self, box): pass
+        def search(self, *a): return "OK", [b"1 2 4"]
+        def fetch(self, num, what): return "OK", [(b"x", msgs[num])]
+        def store(self, num, flag, val): deleted.append(num)
+        def expunge(self): pass
+        def logout(self): pass
+    monkeypatch.setattr(linkedin_mail.imaplib, "IMAP4_SSL", FakeIMAP)
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append(t))
+    mails = []
+    from carretos_social.web import mailer
+    monkeypatch.setattr(mailer, "configured", lambda: True)
+    monkeypatch.setattr(mailer, "send", lambda to, s, b: mails.append(to))
+    assert linkedin_mail.poll() == ["LinkedIn mensagens (email): 2 aviso(s)"]
+    assert "de Ana Costa" in sent[0] and "página Carretos Group" in sent[0] and "parceria" in sent[0]
+    assert "https://www.linkedin.com/messaging/thread/123/" in sent[0] and "?x=1" not in sent[0]
+    assert "de Rui Lopes" in sent[1] and "candidatura" in sent[1]
+    assert set(mails) == {"davidcarreto@carretos.pt", "marcia.palmeirao@carretos.pt"}
+    assert deleted == [b"1", b"2"]                     # o email de vagas do LinkedIn (não é mensagem) fica
+    sent.clear()
+    linkedin_mail.poll()
+    assert sent == []                                  # não avisa duas vezes

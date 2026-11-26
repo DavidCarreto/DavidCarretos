@@ -229,6 +229,9 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
             last_li_poll = time.time()
             for line in poll_safe():
                 print(datetime.now().strftime("%H:%M"), line)
+            from .linkedin_mail import poll_safe as mail_poll   # avisos de mensagens privadas (emails do LinkedIn)
+            for line in mail_poll():
+                print(datetime.now().strftime("%H:%M"), line)
         if JUST_PUBLISHED and time.time() - last_sync <= sync_every_hours * 3600:
             accs, _ = sorted(JUST_PUBLISHED), JUST_PUBLISHED.clear()
             try:

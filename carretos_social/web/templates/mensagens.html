@@ -25,7 +25,9 @@ verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div
   {% elif me.is_admin %}<button class="btn" formaction="/mensagens/subscrever/{{ a.id }}">Ativar na Meta</button>{% endif %}
  </form></div>{% else %}<p class="muted">Nenhuma conta do Instagram, Página de Facebook ou página LinkedIn ligada.</p>{% endfor %}
 <p class="muted" style="font-size:12px;border-top:1px solid var(--line);padding-top:8px;margin-top:8px">in <b>LinkedIn pessoal (David Carreto)</b>: fica de fora. O LinkedIn só dá a leitura de comentários de perfis pessoais (r_member_social) a parceiros aprovados.
-As <b>mensagens privadas</b> do LinkedIn também não se leem pela API (só parceiros): a ideia é avisar pelo Telegram a partir dos emails de notificação do LinkedIn.</p>
+As <b>mensagens privadas</b> do LinkedIn também não se leem pela API (só parceiros): o Carretos Studio avisa pelo Telegram a partir dos emails de notificação do LinkedIn
+reencaminhados para a caixa do Carretos Studio ({{ 'ligado' if li_mail else 'desligado: ⚙ Configurar → "LinkedIn · avisar no Telegram as mensagens privadas" = sim' }}).
+{% if me.is_admin and li_mail %}</p><form method="post" action="/mensagens/linkedin/emails" style="margin:6px 0 0"><button class="btn" style="padding:3px 10px;font-size:12px">Verificar a caixa de email agora</button></form><p style="margin:0">{% endif %}</p>
 </div>
 
 <form method="post" action="/mensagens/testar" class="card" style="margin-bottom:12px"><b>Testar resposta</b> <span class="muted" style="font-size:12px">(não envia nada)</span>

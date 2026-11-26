@@ -1332,7 +1332,8 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "erro": erro, "page": "mensagens", "callback": _base_url(request) + "/webhooks/meta",
         "verify": inbox.verify_token() if me.is_admin else "", "test": None,
         "events": inbox.recent_events()[:30] if me.is_admin else [],
-        "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes()})
+        "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes(),
+        "li_mail": __import__("carretos_social.linkedin_mail", fromlist=["x"]).enabled()})
 
 
 @app.post("/mensagens/conta/{acc_id}")
@@ -1420,6 +1421,23 @@ def inbox_item_action(request: Request, iid: int, acao: str = Form(...), texto: 
         from ..redact import redact
         return RedirectResponse(f"/mensagens/item/{iid}?erro=" + quote(redact(str(exc))[:500]), 303)
     return RedirectResponse("/mensagens?ok=" + quote(msg), 303)
+
+
+@app.post("/mensagens/linkedin/emails")
+def inbox_linkedin_mail_check(request: Request):
+    """Verifica agora a caixa de email (avisos de mensagens do LinkedIn)."""
+    from urllib.parse import quote
+    from .. import linkedin_mail
+    if not request.state.user.is_admin:
+        return _forbidden()
+    if not linkedin_mail.enabled():
+        return RedirectResponse("/mensagens?erro=" + quote("Ligue primeiro em ⚙ Configurar → 'LinkedIn · avisar no Telegram as mensagens privadas' = sim."), 303)
+    try:
+        lines = linkedin_mail.poll()
+    except Exception as exc:  # noqa: BLE001
+        from ..redact import redact
+        return RedirectResponse("/mensagens?erro=" + quote("Caixa de email: " + redact(str(exc))[:400]), 303)
+    return RedirectResponse("/mensagens?ok=" + quote("Caixa de email verificada: " + (lines[0] if lines else "nenhuma mensagem nova do LinkedIn") + "."), 303)
 
 
 @app.post("/mensagens/testar", response_class=HTMLResponse)
@@ -1747,6 +1765,8 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("CANDIDATURAS_EMAIL", "Respostas · email para candidaturas de emprego (público; rh@carretos.pt por omissão)", False),
     ("PARCERIAS_EMAIL_PUBLICO", "Respostas · email para parcerias (público; davidcarreto@carretos.pt por omissão)", False),
     ("PARCERIAS_AVISOS_EMAILS", "Respostas · avisos de parcerias por email (separados por vírgula; davidcarreto@carretos.pt e marcia.palmeirao@carretos.pt por omissão)", False),
+    ("LINKEDIN_EMAILS_ATIVO", "LinkedIn · avisar no Telegram as mensagens privadas (pelos emails do LinkedIn reencaminhados)? (sim/não)", False),
+    ("IMAP_HOST", "Email · servidor de entrada IMAP (vazio = o de envio com 'imap' no lugar de 'smtp')", False),
     ("LINKEDIN_HEADLINE", "LinkedIn · cargo do perfil, por baixo do nome (só para a pré-visualização; ex.: CEO · Carretos Group)", False),
     # TikTok (ver docs/GUIA_TIKTOK.md)
     ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
@@ -1781,6 +1801,8 @@ KEY_FORMATS = {
     "PARCERIAS_EMAIL_PUBLICO": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}$", _re.I), "um email"),
     "PARCERIAS_AVISOS_EMAILS": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}(\s*,\s*[^@\s,]+@[^@\s,]+\.[a-z]{2,})*$", _re.I),
                                 "um ou mais emails separados por vírgula"),
+    "LINKEDIN_EMAILS_ATIVO": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
+    "IMAP_HOST": (_re.compile(r"^[a-z0-9.-]{4,100}$", _re.I), "só o nome do servidor (ex.: imap.exemplo.pt)"),
     "LINKEDIN_HEADLINE": (_re.compile(r"^[^\n\r\"'=#]{2,120}$"), "texto simples, até 120 caracteres, sem aspas"),
     "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
     "TIKTOK_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_\-]{16,80}$"), "letras e números, sem espaços"),
