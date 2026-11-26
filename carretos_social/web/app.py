@@ -1757,7 +1757,12 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
         set_theme(_t)
         _acc[_t] = _brand()["visual"]["colors"]["accent"]
     set_theme(None)
-    return _render(request, "config.html", {"marcas": {t: brand_assets.get(t) for t in brand_assets.BRANDS}, "marca_cor": _acc,"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
+    from ..config import _brand_base
+    _bb = _brand_base()
+    _base_cor = {t: ((_bb.get("themes") or {}).get(t) or {}).get("colors", {}).get("accent")
+                 or _bb["visual"]["colors"]["accent"] for t in brand_assets.BRANDS}
+    return _render(request, "config.html", {"marcas": {t: brand_assets.get(t) for t in brand_assets.BRANDS}, "marca_cor": _acc,
+                                            "marca_cor_base": _base_cor,"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
                                             "ag": _system.agendador_status(), "web_rev": _system.git_rev(),
                                             "fields": fields, "first": first, "ok": ok, "erros": erros,
                                             "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),
