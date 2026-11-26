@@ -52,6 +52,8 @@
  {% if can_create %}<p class="muted" style="font-size:12px;margin:4px 0 0">Ao mudar o tipo, carregue em "Guardar" para voltar a verificar o formato.</p>{% endif %}
  <label>Data e hora{% if not can_approve %} <span class="muted">(só quem aprova pode mudar)</span>{% endif %}</label>
  <input type="datetime-local" name="quando" id="quando" class="{{ 'need' if approve_error and p.error and 'sem data' in p.error }}" value="{{ p.when.strftime('%Y-%m-%dT%H:%M') if p.when else '' }}" {{ 'disabled' if not can_approve }}>
+ <input type="hidden" name="sem_data" id="sem_data" value="">
+ {% if p.when and can_approve %}<p style="margin:4px 0 0"><button type="button" class="btn" style="padding:3px 10px;font-size:12px" onclick="document.getElementById('quando').value='';document.getElementById('sem_data').value='1';this.textContent='✓ Fica sem data ao Guardar'">✕ Tirar a data</button> <span class="muted" style="font-size:12px">(depois carregue em Guardar)</span></p>{% endif %}
  {% if not p.when %}<p class="muted" style="font-size:13px;margin:4px 0 0">Sem data: não é publicada.{% if suggested and can_approve %} Hora sugerida: <b class="gold">{{ suggested|quando }}</b> <button type="button" class="btn" style="padding:3px 10px;font-size:12px" onclick="const q=document.getElementById('quando');q.value='{{ suggested.strftime('%Y-%m-%dT%H:%M') }}';q.classList.add('need');q.focus()">Usar esta hora</button> <span style="font-size:12px">(depois carregue em Guardar)</span>{% endif %}</p>{% endif %}
  <input type="hidden" name="img" value="">
  {% if p.account and p.account.platform == 'tiktok' and p.account.mode == 'draft' %}<div class="card" style="border-color:#25F4EE;margin:0 0 10px;padding:10px 12px">

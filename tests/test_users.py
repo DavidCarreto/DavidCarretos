@@ -1515,12 +1515,13 @@ def test_linkedin_preview_card_only_without_image(client, monkeypatch):
     page = client.get(f"/post/{sem}").text
     assert "Como vai aparecer no LinkedIn" in page and 'id="li-card"' in page
     assert '<span class="li-blue">#Carretos</span>' in page and "&lt;b&gt;" in page   # texto escapado
-    data = client.get(f"/post/{sem}/link-preview").json()
+    data = client.get(f"/post/{sem}/link-preview").json()["card"]
     assert data["title"] == "Oficina & Serviços" and data["image"] == "https://carretos.pt/i.jpg"
     assert data["domain"] == "carretos.pt"
     page = client.get(f"/post/{com}").text
     assert "Como vai aparecer no LinkedIn" in page and 'id="li-card"' not in page and "só como texto" in page
-    assert client.get(f"/post/{com}/link-preview").json() == {}
+    assert client.get(f"/post/{com}/link-preview").json()["card"] is None
+    assert ">Carretos Group<" in page and "(LinkedIn empresa)" not in page.split("li-name")[1][:80]
     assert "Como vai aparecer no LinkedIn" not in client.get(f"/post/{ig}").text
     assert calls == ["https://carretos.pt/servicos"]
 
@@ -1547,3 +1548,22 @@ def test_create_text_only_draft(client):
     assert row["format"] == "text" and row["status"] == "draft" and not json.loads(row["media_ids"] or "[]")
     assert 'id="li-card"' in client.get(f"/post/{pid}").text
     assert "não aceita" in client.post("/criar", data={"tipo": "texto", "conta": "ig_carretoclips", "tema": "x"}).text
+
+
+def test_og_title_with_apostrophe_and_remove_date(client):
+    from carretos_social.db import add_post, connect
+    from carretos_social.web import linkpreview
+    assert linkpreview._meta('<meta property="og:title" content="Carreto\'s Group" />', "og:title") == "Carreto's Group"
+    assert linkpreview._meta("<meta content='A \"B\"' name='description'>", "description") == 'A "B"'
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    with connect() as conn:
+        pid = add_post(conn, account_id="li_carretosgroup", format="text", caption="x", status="draft",
+                       scheduled_at="2030-12-01T09:00:00+00:00")
+    assert "Tirar a data" in client.get(f"/post/{pid}").text
+    client.post(f"/post/{pid}", data={"action": "guardar", "quando": "", "sem_data": ""})
+    with connect() as conn:
+        assert conn.execute("SELECT scheduled_at FROM posts WHERE id=?", (pid,)).fetchone()[0]   # vazio = mantém
+    client.post(f"/post/{pid}", data={"action": "guardar", "quando": "", "sem_data": "1"})
+    with connect() as conn:
+        assert conn.execute("SELECT scheduled_at FROM posts WHERE id=?", (pid,)).fetchone()[0] is None

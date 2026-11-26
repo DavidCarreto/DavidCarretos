@@ -350,32 +350,42 @@ def approve_page(request: Request):
 
 def _li_preview(p: dict) -> dict | None:
     """Pré-visualização ao estilo do LinkedIn (só contas LinkedIn). Sem publicar nada."""
+    import re as _re2
     a = p.get("account")
     if not a or a.platform not in ("linkedin_member", "linkedin_org"):
         return None
     from . import linkpreview
     from .. import linkedin_connect as lc
-    caption = p.get("caption") or ""
-    name = (lc.saved().get("name") if a.platform == "linkedin_member" else "") or a.name
-    link = linkpreview.first_url(caption)
-    return {"name": name, "org": a.platform == "linkedin_org", "html": linkpreview.li_html(caption),
-            "link": link, "card": bool(link and not p["media"]), "chars": len(caption)}
+    from ..scheduler import caption_with_tags
+    text = caption_with_tags(p)                         # o texto que vai mesmo para o LinkedIn (legenda + hashtags)
+    org = a.platform == "linkedin_org"
+    name = (lc.saved().get("name") if not org else "") or _re2.sub(r"\s*\([^)]*\)\s*$", "", a.name)
+    link = linkpreview.first_url(text)
+    return {"name": name, "org": org, "text": text, "html": linkpreview.li_html(text),
+            "sub": "" if org else os.environ.get("LINKEDIN_HEADLINE", "").strip(),
+            "link": link, "card": bool(link and not p["media"]), "chars": len(text)}
 
 
 @app.get("/post/{pid}/link-preview")
 def post_link_preview(request: Request, pid: int):
-    """Cartão do link (título/imagem/domínio) para a pré-visualização do LinkedIn; só quando o post não tem imagem."""
+    """Dados da pré-visualização do LinkedIn lidos de fora: cartão do link (só sem imagem) e seguidores da página."""
     me = request.state.user
     with connect() as conn:
         p = _post_view(conn, get_post(conn, pid))
     if not me.can_see(p["account_id"]):
         return JSONResponse({}, status_code=403)
     li = _li_preview(p)
-    if not li or not li["card"]:
+    if not li:
         return JSONResponse({})
     from . import linkpreview
-    data = {k: v for k, v in linkpreview.preview(li["link"]).items() if not k.startswith("_")}
-    return JSONResponse(data)
+    out: dict = {"card": None, "sub": ""}
+    if li["card"]:
+        out["card"] = {k: v for k, v in linkpreview.preview(li["link"]).items() if not k.startswith("_")}
+    if li["org"]:
+        from .. import linkedin_connect as lc
+        n = lc.followers(p["account"])
+        out["sub"] = f"{n:,} seguidores".replace(",", " ") if n is not None else ""
+    return JSONResponse(out)
 
 
 @app.get("/post/{pid}", response_class=HTMLResponse)
@@ -480,7 +490,7 @@ def _history_view(conn, pid: int, p: dict) -> list[dict]:
 @app.post("/post/{pid}")
 def post_action(request: Request, pid: int, action: str = Form(...), caption: str = Form(""),
                 quando: str = Form(""), tipo: str = Form(""), hist: int = Form(0), idx: int = Form(-1),
-                dir: int = Form(0), img: str = Form("")):
+                dir: int = Form(0), img: str = Form(""), sem_data: str = Form("")):
     from ..media.formats import format_for, kind_of, kinds_for
     from ..scheduler import all_problems, parse_dt
     me = request.state.user
@@ -496,6 +506,10 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
         fields: dict = {}
         if caption.strip() and caption.strip() != (row["caption"] or ""):
             fields["caption"] = caption.strip()
+        if sem_data and row["scheduled_at"] and not quando:
+            if not me.can_approve(acc):
+                return _forbidden("Agendar (mudar a data) é para quem aprova nesta conta.")
+            fields["scheduled_at"] = None
         if quando:
             new_when = parse_dt(quando).isoformat()
             if new_when[:16] != (row["scheduled_at"] or "")[:16]:
@@ -1463,6 +1477,7 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("LINKEDIN_ORG_CLIENT_ID", "LinkedIn (2.ª app, página da empresa) · Client ID", False),
     ("LINKEDIN_ORG_CLIENT_SECRET", "LinkedIn (2.ª app, página da empresa) · Client Secret", True),
     ("LINKEDIN_ORG_API", "LinkedIn · Community Management API aprovada? (sim/não)", False),
+    ("LINKEDIN_HEADLINE", "LinkedIn · cargo do perfil, por baixo do nome (só para a pré-visualização; ex.: CEO · Carretos Group)", False),
     # TikTok (ver docs/GUIA_TIKTOK.md)
     ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
     ("TIKTOK_CLIENT_SECRET", "TikTok · Client secret", True),
@@ -1491,6 +1506,7 @@ KEY_FORMATS = {
     "LINKEDIN_ORG_CLIENT_ID": (_re.compile(r"^[A-Za-z0-9]{8,30}$"), "letras e números, sem espaços"),
     "LINKEDIN_ORG_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_.=/+:~\-]{10,200}$"), "letras, números e símbolos (_ . = / + - :), sem espaços"),
     "LINKEDIN_ORG_API": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
+    "LINKEDIN_HEADLINE": (_re.compile(r"^[^\n\r\"'=#]{2,120}$"), "texto simples, até 120 caracteres, sem aspas"),
     "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
     "TIKTOK_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_\-]{16,80}$"), "letras e números, sem espaços"),
     "TIKTOK_CAPTION_EMAIL": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}(,[^@\s,]+@[^@\s,]+\.[a-z]{2,})*$", _re.I),

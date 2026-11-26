@@ -219,3 +219,24 @@ def test(acc: Account) -> tuple[bool, str]:
         return True, f"Página LinkedIn «{r.get('localizedName', oid)}» ✓"
     except Exception as exc:  # noqa: BLE001
         return False, f"a ligação falhou: {exc}"
+
+
+def followers(acc: Account) -> int | None:
+    """Nº de seguidores da página (para a pré-visualização). Guardado 24 h; None se a API não o der."""
+    info = saved()
+    at = info.get("org_followers_at", "")
+    if at and datetime.fromisoformat(at) > datetime.now() - timedelta(hours=24):
+        return info.get("org_followers")
+    token, urn = acc.secret("access_token_env"), acc.secret("author_urn_env") or ""
+    if not token or not urn:
+        return None
+    n = None
+    try:
+        from urllib.parse import quote
+        r = rest("GET", f"{REST}/networkSizes/{quote(urn, safe='')}", headers=_headers(token),
+                 params={"edgeType": "COMPANY_FOLLOWED_BY_MEMBER"}, retries=1, timeout=8).json()
+        n = int(r["firstDegreeSize"]) if "firstDegreeSize" in r else None
+    except Exception:  # noqa: BLE001
+        n = None
+    _save(org_followers=n, org_followers_at=datetime.now().isoformat(timespec="minutes"))
+    return n

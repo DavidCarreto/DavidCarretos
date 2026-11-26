@@ -63,11 +63,11 @@ def _safe_get(url: str, hops: int = 3) -> tuple[str, str]:
 
 def _meta(page: str, *names: str) -> str:
     for name in names:
-        for pat in (rf'<meta[^>]+(?:property|name)=["\']{re.escape(name)}["\'][^>]*content=["\']([^"\']*)["\']',
-                    rf'<meta[^>]+content=["\']([^"\']*)["\'][^>]*(?:property|name)=["\']{re.escape(name)}["\']'):
-            m = re.search(pat, page, re.I)
-            if m and m.group(1).strip():
-                return html.unescape(m.group(1).strip())
+        for pat in (rf'<meta[^>]+(?:property|name)=(["\']){re.escape(name)}\1[^>]*?content=(["\'])(?P<v>.*?)\2',
+                    rf'<meta[^>]+content=(["\'])(?P<v>.*?)\1[^>]*?(?:property|name)=(["\']){re.escape(name)}\3'):
+            m = re.search(pat, page, re.I | re.S)
+            if m and m.group("v").strip():
+                return html.unescape(m.group("v").strip())
     return ""
 
 
