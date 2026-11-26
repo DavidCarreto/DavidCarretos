@@ -1532,3 +1532,18 @@ def test_linkpreview_blocks_private_addresses():
         with pytest.raises(ValueError):
             linkpreview._safe_get(url)
     assert linkpreview.first_url("veja carretos.pt/a.") == "https://carretos.pt/a"
+
+
+def test_create_text_only_draft(client):
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    r = client.post("/criar", data={"tipo": "texto", "conta": "li_carretosgroup",
+                                    "tema": "[TESTE] Linha 1\nhttps://carretos.pt #Carretos"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].startswith("/post/")
+    pid = int(r.headers["location"].rsplit("/", 1)[1])
+    with connect() as conn:
+        row = conn.execute("SELECT format, status, media_ids FROM posts WHERE id=?", (pid,)).fetchone()
+    assert row["format"] == "text" and row["status"] == "draft" and not json.loads(row["media_ids"] or "[]")
+    assert 'id="li-card"' in client.get(f"/post/{pid}").text
+    assert "não aceita" in client.post("/criar", data={"tipo": "texto", "conta": "ig_carretoclips", "tema": "x"}).text

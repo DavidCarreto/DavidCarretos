@@ -1229,6 +1229,21 @@ def create(request: Request, tipo: str = Form(...), conta: str = Form(...), tema
                                {"tipo": tipo, "conta": conta, "tema": texto or tema, "quando": quando})
         args = ["--account", conta, *sum((["--frase", x] for x in frases), []), *sched]
         jobs.enqueue("carrossel-frases", args, f"Carrossel de {len(frases)} frases", user_id=me.id)
+    elif tipo == "texto":
+        # rascunho só com texto (LinkedIn e Facebook): fica logo pronto para rever, sem IA
+        from ..media.formats import kinds_for
+        acc = accounts().get(conta)
+        txt = (texto or tema).strip()
+        if not acc or "text" not in kinds_for(acc.platform):
+            return create_page(request, "Esta conta não aceita publicações só de texto (use LinkedIn ou Facebook).",
+                               {"tipo": tipo, "conta": conta, "tema": txt, "quando": quando})
+        if not txt:
+            return create_page(request, "Escreva o texto da publicação.", {"tipo": tipo, "conta": conta, "quando": quando})
+        from ..db import add_post
+        with connect() as conn:
+            pid = add_post(conn, account_id=conta, format="text", caption=txt[:3000], status="draft",
+                           title=txt.splitlines()[0][:60])
+        return RedirectResponse(f"/post/{pid}", 303)
     elif tipo == "imagem":
         jobs.enqueue("image", ["quote", "--account", conta, "--text", texto or tema], "Imagem com frase",
                      user_id=me.id)
