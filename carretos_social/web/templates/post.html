@@ -22,15 +22,17 @@
 {% for src in p.stock_sources %}{% if src.pagina %}<a class="gold" href="{{ src.pagina }}" target="_blank" rel="noopener">{{ src.fonte }}{% if src.autor %} · {{ src.autor }}{% endif %}</a>{% else %}{{ src.fonte }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
 <div>
 {% set f = p.fmt %}
-{% set v = 'editar' if p.placeholders or p.forbidden else f.verdict %}
+{% set v = 'editar' if p.placeholders or p.forbidden or p.card_problems else ('ajustar' if p.card_warn and f.verdict == 'ok' else f.verdict) %}
 <div class="card fmt {{ v }}" style="margin:0 0 12px">
  <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em">Formato para publicar</div>
  <p style="margin:4px 0 8px"><b>{{ f.target }}</b></p>
- <p class="verdict">{{ '✕ A legenda tem de ser completada antes de publicar' if p.placeholders and f.verdict != 'editar' else f.verdict_label }}</p>
+ <p class="verdict">{% if p.placeholders and f.verdict != 'editar' %}✕ A legenda tem de ser completada antes de publicar{% elif p.card_problems and f.verdict != 'editar' %}✕ O cartão do link tem de ser corrigido antes de publicar{% elif p.card_warn and f.verdict == 'ok' %}⚠ Encaixa no formato, mas veja o aviso do cartão do link{% else %}{{ f.verdict_label }}{% endif %}</p>
  {% for x in f.problems %}<p class="fmt-line editar">✕ {{ x }}</p>{% endfor %}
  {% for x in f.warnings %}<p class="fmt-line ajustar">⚠ {{ x }}</p>{% endfor %}
  {% for x in f.info %}<p class="muted" style="margin:2px 0;font-size:13px">ℹ {{ x }}</p>{% endfor %}
  {% for w in p.forbidden %}<p class="fmt-line editar" style="margin-top:6px">⚠ {{ w }}</p>{% endfor %}
+ {% for w in p.card_problems %}<p class="fmt-line editar" style="margin-top:6px">✕ {{ w }} <a class="gold" href="#li-diag" onclick="document.getElementById('li-diag').open=true">(mudar)</a></p>{% endfor %}
+ {% for w in p.card_warn %}<p class="fmt-line ajustar" style="margin-top:6px">⚠ {{ w }} <a class="gold" href="#li-diag" onclick="document.getElementById('li-diag').open=true">(mudar)</a></p>{% endfor %}
  {% if p.placeholders and f.verdict == 'editar' %}<p class="fmt-line editar" style="margin-top:6px">✕ A legenda também tem partes por preencher.</p>
  {% elif not p.caption and p.type != 'text' %}<p class="fmt-line ajustar" style="margin-top:6px">⚠ Sem legenda</p>{% endif %}
  {% if p.type == 'carousel' and f.items %}{% set vs = f.items|map(attribute='verdict')|list %}

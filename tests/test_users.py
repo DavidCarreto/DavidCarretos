@@ -1655,3 +1655,37 @@ def test_linkpreview_ignores_svg_og_image(tmp_path, monkeypatch):
     monkeypatch.setattr(linkpreview, "_safe_get", lambda u: (u, page))
     d = linkpreview.preview("https://exemplo.com/")
     assert d["image"] == "https://exemplo.com/fav.png"
+
+
+def test_card_forbidden_word_shown_before_approving_and_blocked_site(client, monkeypatch):
+    import requests
+    from carretos_social.db import add_post, connect
+    from carretos_social.web import linkpreview
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    with connect() as conn:
+        own = add_post(conn, account_id="li_carretosgroup", format="text", status="draft",
+                       caption="[TESTE] https://www.carretos.pt", scheduled_at="2030-01-01T10:00:00+00:00")
+        ext = add_post(conn, account_id="li_carretosgroup", format="text", status="draft",
+                       caption="[TESTE] https://bloqueado.example.com", scheduled_at="2030-01-01T11:00:00+00:00")
+    client.post(f"/post/{own}/cartao", data={"titulo": "Orçamento pelo AURON", "descricao": ""})
+    page = client.get(f"/post/{own}").text
+    assert "O cartão do link tem de ser corrigido" in page and "cartão do link:" in page and "AURON" in page
+    assert "Pronto a publicar" not in page
+    lista = client.get("/aprovar").text
+    assert "✕ cartão do link:" in lista
+
+    # site que recusa (403): 2.ª tentativa com cabeçalhos de browser; se falhar, aviso
+    tries = []
+
+    def refuse(url, max_bytes=0, hops=3, headers=None):
+        tries.append((headers or {}).get("Accept-Language", ""))
+        resp = requests.Response()
+        resp.status_code = 403
+        raise requests.HTTPError("403 Client Error: Forbidden", response=resp)
+    monkeypatch.setattr(linkpreview, "_safe_fetch", refuse)
+    data = client.get(f"/post/{ext}/link-preview").json()["card"]
+    assert tries == ["", "pt-PT,pt;q=0.9,en;q=0.8"] and data["error"] == "o site não deixa ler o link (erro 403)"
+    page = client.get(f"/post/{ext}").text
+    assert "o site não deixa ler o link – defina o título e a imagem" in page and "veja o aviso do cartão" in page
+    assert "⚠ cartão do link: o site não deixa ler" in client.get("/aprovar").text

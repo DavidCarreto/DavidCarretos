@@ -39,7 +39,16 @@ def _public(host: str) -> bool:
     return True
 
 
-def _safe_fetch(url: str, max_bytes: int = MAX_BYTES, hops: int = 3) -> tuple[str, bytes, str]:
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
+}
+
+
+def _safe_fetch(url: str, max_bytes: int = MAX_BYTES, hops: int = 3,
+                headers: dict | None = None) -> tuple[str, bytes, str]:
     """(url final, conteúdo, tipo) só de endereços públicos http/https, seguindo até 3 redirecionamentos verificados."""
     import requests
     for _ in range(hops + 1):
@@ -49,7 +58,7 @@ def _safe_fetch(url: str, max_bytes: int = MAX_BYTES, hops: int = 3) -> tuple[st
         if not _public(p.hostname):
             raise ValueError("endereço não público")
         r = requests.get(url, timeout=5, allow_redirects=False, stream=True,
-                         headers={"User-Agent": "Mozilla/5.0 (CarretosStudio link preview)"})
+                         headers=headers or {"User-Agent": "Mozilla/5.0 (CarretosStudio link preview)"})
         if r.is_redirect or r.status_code in (301, 302, 303, 307, 308):
             url = urljoin(url, r.headers.get("location", ""))
             continue
@@ -66,6 +75,30 @@ def _safe_fetch(url: str, max_bytes: int = MAX_BYTES, hops: int = 3) -> tuple[st
 def _safe_get(url: str, hops: int = 3) -> tuple[str, str]:
     final, body, _ = _safe_fetch(url, MAX_BYTES, hops)
     return final, body.decode("utf-8", errors="replace")
+
+
+def _safe_get_browser(url: str) -> tuple[str, str]:
+    """2.ª tentativa, com os cabeçalhos de um Chrome (há sites que recusam leitores automáticos)."""
+    final, body, _ = _safe_fetch(url, MAX_BYTES, headers=BROWSER_HEADERS)
+    return final, body.decode("utf-8", errors="replace")
+
+
+def _friendly(exc: Exception) -> str:
+    code = getattr(getattr(exc, "response", None), "status_code", None)
+    if code in (401, 403, 406, 429, 503):
+        return f"o site não deixa ler o link (erro {code})"
+    if "não público" in str(exc) or "não permitido" in str(exc):
+        return str(exc)
+    return f"o site não respondeu ({str(exc)[:120]})"
+
+
+def cached(url: str) -> dict | None:
+    """O que já foi lido deste link (sem ir ao site), ou None."""
+    try:
+        hit = json.loads((_cfg.DATA_DIR / "og_cache.json").read_text(encoding="utf-8")).get(url)
+    except (OSError, ValueError):
+        return None
+    return hit if hit and hit.get("_v") == CACHE_VERSION else None
 
 
 def _is_svg(url: str) -> bool:
@@ -136,7 +169,7 @@ def _best_icon(h: _Head) -> str:
     return max(icons, key=size)[2] if icons else ""
 
 
-CACHE_VERSION = 3          # mudar quando a leitura muda (ignora o que ficou guardado com a leitura antiga)
+CACHE_VERSION = 4          # mudar quando a leitura muda (ignora o que ficou guardado com a leitura antiga)
 
 
 def preview(url: str, fresh: bool = False) -> dict:
@@ -156,7 +189,10 @@ def preview(url: str, fresh: bool = False) -> dict:
     data = {"url": url, "domain": domain, "title": "", "description": "", "image": "", "sources": {},
             "_at": time.time(), "_v": CACHE_VERSION}
     try:
-        final, page = _safe_get(url)
+        try:
+            final, page = _safe_get(url)
+        except Exception:  # noqa: BLE001
+            final, page = _safe_get_browser(url)          # 2.ª tentativa como um browser
         h = _head(page)
         first = lambda *ks: next(((k, h.meta[k][0]) for k in ks if h.meta.get(k)), ("", ""))  # noqa: E731
         tk, title = first("og:title", "twitter:title")
@@ -173,7 +209,7 @@ def preview(url: str, fresh: bool = False) -> dict:
                     sources={"title": tk, "image": ik, "og_images": [urljoin(final, x) for x in h.meta.get("og:image", [])][:5],
                              "icons": [urljoin(final, i[2]) for i in h.icons][:5]})
     except Exception as exc:  # noqa: BLE001
-        data["error"] = str(exc)[:200]
+        data["error"] = _friendly(exc)
     cache[url] = data
     _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dict(list(cache.items())[-200:]), ensure_ascii=False), encoding="utf-8")

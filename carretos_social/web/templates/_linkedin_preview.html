@@ -115,7 +115,8 @@
   if(d.sub){var sub=document.getElementById('li-sub');sub.textContent=d.sub;sub.hidden=false;}
   var c=document.getElementById('li-card'),k=d.card;if(!c||!k)return;
   var title=document.getElementById('li-card-title');
-  title.textContent=k.error?'Não foi possível ler o link ('+k.error+'). O LinkedIn pode mostrar só o endereço.':(k.title||k.url||'(sem título)');
+  title.textContent=k.error?'O site não deixa ler o link. Defina o título e a imagem do cartão em (mudar).':(k.title||k.url||'(sem título)');
+  if(k.error){var dd=document.getElementById('li-diag');if(dd)dd.open=true;var tt=document.querySelector('#li-diag input[name=titulo]');if(tt)tt.placeholder='escreva o título do cartão';}
   document.getElementById('li-card-domain').textContent=k.domain||'';
   var im=document.getElementById('li-card-img');
   if(k.image&&/^https?:\/\//.test(k.image)){var probe=new Image();probe.referrerPolicy='no-referrer';
@@ -125,7 +126,7 @@
    probe.onerror=function(){im.classList.add('none');c.classList.add('small')};probe.src=k.image;}
   else{im.classList.add('none');c.classList.add('small');}
   var dg=document.getElementById('li-diag-body'),src=k.sources||{};
-  if(dg){dg.textContent='';var rows=[['Título',(k.title||'—')+(src.title?' (de '+src.title+')':'')],['Imagem',(k.image||'nenhuma')+(src.image?' (de '+src.image+')':'')],
+  if(dg){dg.textContent='';var rows=[['Leitura',k.error?'falhou: '+k.error:'ok'],['Título',(k.title||'—')+(src.title?' (de '+src.title+')':'')],['Imagem',(k.image||'nenhuma')+(src.image?' (de '+src.image+')':'')],
    ['og:image no site',(src.og_images||[]).join(' , ')||'nenhuma'],['Ícones do site',(src.icons||[]).join(' , ')||'nenhum']];
    rows.forEach(function(r){var p=document.createElement('div');p.textContent=r[0]+': '+r[1];dg.appendChild(p);});}
  }).catch(function(){});}

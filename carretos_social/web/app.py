@@ -267,6 +267,9 @@ def _post_view(conn, r) -> dict:
     p["placeholders"] = _re.findall(r"\[PREENCHER[^\]]*\]?", p.get("caption") or "")
     from ..content.guard import found_terms
     p["forbidden"] = [w for _, w in found_terms(p["account_id"], p.get("caption") or "")]
+    from .. import linkcard
+    p["card_problems"] = linkcard.text_problems(p, platform)       # palavras proibidas no título/descrição do cartão
+    p["card_warn"] = linkcard.warnings(p, platform)
     from ..media.formats import spec_for
     p["carousel_max"] = spec_for(platform, "carousel").get("count", (2, 10))[1]
     p["account"] = accounts().get(p["account_id"])

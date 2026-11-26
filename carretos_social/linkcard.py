@@ -145,3 +145,19 @@ def text_problems(row, platform: str) -> list[str]:
     if not card["title"]:
         out.append("cartão do link sem título")
     return out
+
+
+def warnings(row, platform: str) -> list[str]:
+    """Avisos (não bloqueiam): o post vai como artigo sem título nem imagem."""
+    card = for_post(row, platform)
+    if not card:
+        return []
+    if card["mode"] == "proprio":
+        return [] if card.get("image") else ["cartão do link sem imagem – carregue uma em (mudar)"]
+    from .web.linkpreview import cached
+    hit = cached(card["url"])
+    if hit and not hit.get("title") and not hit.get("image"):
+        return ["cartão do link: o site não deixa ler o link – defina o título e a imagem do cartão em (mudar)"]
+    if hit and not hit.get("image"):
+        return ["cartão do link sem imagem (o site não tem imagem PNG/JPG) – pode carregar uma em (mudar)"]
+    return []
