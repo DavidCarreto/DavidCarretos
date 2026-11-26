@@ -17,6 +17,7 @@
  <span class="muted" style="font-size:12px">{{ p.media|length }} de {{ p.carousel_max }} imagens no máximo nesta rede</span>
 </form>{% endif %}
 
+{% if li %}{% include "_linkedin_preview.html" %}{% endif %}
 {% if p.stock_sources %}<p class="muted" style="font-size:12px;margin-top:8px">Imagens de stock:
 {% for src in p.stock_sources %}{% if src.pagina %}<a class="gold" href="{{ src.pagina }}" target="_blank" rel="noopener">{{ src.fonte }}{% if src.autor %} · {{ src.autor }}{% endif %}</a>{% else %}{{ src.fonte }}{% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
 <div>

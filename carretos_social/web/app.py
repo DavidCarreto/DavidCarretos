@@ -348,6 +348,36 @@ def approve_page(request: Request):
     return _render(request, "approve.html", {"posts": rows, "post_groups": _group_posts(rows), "page": "approve"})
 
 
+def _li_preview(p: dict) -> dict | None:
+    """Pré-visualização ao estilo do LinkedIn (só contas LinkedIn). Sem publicar nada."""
+    a = p.get("account")
+    if not a or a.platform not in ("linkedin_member", "linkedin_org"):
+        return None
+    from . import linkpreview
+    from .. import linkedin_connect as lc
+    caption = p.get("caption") or ""
+    name = (lc.saved().get("name") if a.platform == "linkedin_member" else "") or a.name
+    link = linkpreview.first_url(caption)
+    return {"name": name, "org": a.platform == "linkedin_org", "html": linkpreview.li_html(caption),
+            "link": link, "card": bool(link and not p["media"]), "chars": len(caption)}
+
+
+@app.get("/post/{pid}/link-preview")
+def post_link_preview(request: Request, pid: int):
+    """Cartão do link (título/imagem/domínio) para a pré-visualização do LinkedIn; só quando o post não tem imagem."""
+    me = request.state.user
+    with connect() as conn:
+        p = _post_view(conn, get_post(conn, pid))
+    if not me.can_see(p["account_id"]):
+        return JSONResponse({}, status_code=403)
+    li = _li_preview(p)
+    if not li or not li["card"]:
+        return JSONResponse({})
+    from . import linkpreview
+    data = {k: v for k, v in linkpreview.preview(li["link"]).items() if not k.startswith("_")}
+    return JSONResponse(data)
+
+
 @app.get("/post/{pid}", response_class=HTMLResponse)
 def post_page(request: Request, pid: int):
     me = request.state.user
@@ -366,7 +396,7 @@ def post_page(request: Request, pid: int):
         return _forbidden()
     extra = json.loads(p.get("script") or "{}")
     acc = p["account_id"]
-    return _render(request, "post.html", {"p": p, "extra": extra, "can_create": me.can_create(acc),
+    return _render(request, "post.html", {"p": p, "extra": extra, "li": _li_preview(p), "can_create": me.can_create(acc),
                                           "can_approve": me.can_approve(acc), "history": history,
                                           "suggested": suggested, "fix_hint": _fix_hint(p.get("error") or ""),
                                           "approve_error": request.query_params.get("erro") == "aprovar"})

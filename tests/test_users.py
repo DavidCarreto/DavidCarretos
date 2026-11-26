@@ -1493,3 +1493,42 @@ def test_linkedin_wrong_account_protection(client, monkeypatch):
     monkeypatch.setattr(lc, "request", orgs_ok)
     updates, info = lc.connect_org({"access_token": "Y", "expires_in": 100})
     assert updates["LI_CARRETOSGROUP_URN"] == "urn:li:organization:777" and info["org_same_as_member"]
+
+
+def test_linkedin_preview_card_only_without_image(client, monkeypatch):
+    from carretos_social.db import add_media, add_post, connect
+    from carretos_social.web import linkpreview
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    calls = []
+    monkeypatch.setattr(linkpreview, "_safe_get", lambda url: calls.append(url) or (
+        url, '<meta property="og:title" content="Oficina &amp; Serviços"><meta property="og:image" content="/i.jpg">'))
+    cap = "Novidade na oficina! " * 20 + "\nSaiba mais em https://carretos.pt/servicos #Carretos <b>"
+    with connect() as conn:
+        sem = add_post(conn, account_id="li_carretosgroup", format="text", caption=cap, status="draft")
+        f = linkpreview._cfg.DATA_DIR / "x.jpg"
+        f.write_bytes(b"\xff\xd8\xff")
+        mid = add_media(conn, "image", str(f))
+        com = add_post(conn, account_id="li_carretosgroup", format="image", caption=cap, status="draft",
+                       media_ids=json.dumps([mid]))
+        ig = add_post(conn, account_id="ig_carretoclips", format="reel", caption=cap, status="draft")
+    page = client.get(f"/post/{sem}").text
+    assert "Como vai aparecer no LinkedIn" in page and 'id="li-card"' in page
+    assert '<span class="li-blue">#Carretos</span>' in page and "&lt;b&gt;" in page   # texto escapado
+    data = client.get(f"/post/{sem}/link-preview").json()
+    assert data["title"] == "Oficina & Serviços" and data["image"] == "https://carretos.pt/i.jpg"
+    assert data["domain"] == "carretos.pt"
+    page = client.get(f"/post/{com}").text
+    assert "Como vai aparecer no LinkedIn" in page and 'id="li-card"' not in page and "só como texto" in page
+    assert client.get(f"/post/{com}/link-preview").json() == {}
+    assert "Como vai aparecer no LinkedIn" not in client.get(f"/post/{ig}").text
+    assert calls == ["https://carretos.pt/servicos"]
+
+
+def test_linkpreview_blocks_private_addresses():
+    from carretos_social.web import linkpreview
+    for url in ("http://127.0.0.1/", "http://localhost:8000/", "http://10.0.0.1/", "file:///etc/passwd",
+                "http://169.254.169.254/latest/meta-data/"):
+        with pytest.raises(ValueError):
+            linkpreview._safe_get(url)
+    assert linkpreview.first_url("veja carretos.pt/a.") == "https://carretos.pt/a"
