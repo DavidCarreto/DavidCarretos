@@ -174,7 +174,12 @@ def tick(dry_run: bool = False) -> list[str]:
         for r in due_posts(conn):
             out.append(publish_post(conn, r["id"], dry_run))
             conn.commit()                 # cada publicação gravada logo (não bloqueia o dashboard)
+            if not dry_run and get_post(conn, r["id"])["status"] == "published":
+                JUST_PUBLISHED.add(r["account_id"])
         return out
+
+
+JUST_PUBLISHED: set[str] = set()          # contas com publicações novas: métricas recolhidas logo a seguir
 
 
 def _code_rev() -> str:
@@ -218,7 +223,16 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
+        if JUST_PUBLISHED and time.time() - last_sync <= sync_every_hours * 3600:
+            accs, _ = sorted(JUST_PUBLISHED), JUST_PUBLISHED.clear()
+            try:
+                with connect() as conn:
+                    for acc_id, st in sync(conn, accs).items():
+                        print(f"métricas {acc_id} (depois de publicar): {st}")
+            except Exception as exc:  # noqa: BLE001
+                print("métricas depois de publicar:", exc)
         if time.time() - last_sync > sync_every_hours * 3600:
+            JUST_PUBLISHED.clear()
             with connect() as conn:
                 for acc, st in sync(conn).items():
                     print(f"métricas {acc}: {st}")

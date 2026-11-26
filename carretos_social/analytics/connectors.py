@@ -99,7 +99,7 @@ def fetch_tiktok(acc: Account, limit: int = 20) -> dict:
 
 
 # ---------------------------------------------------------------- LinkedIn
-def fetch_linkedin(acc: Account, limit: int = 30) -> dict:
+def fetch_linkedin(acc: Account, limit: int = 100) -> dict:      # 100 = máximo por página da Posts API
     token, author = _need(acc, "access_token_env", "author_urn_env")
     if acc.platform == "linkedin_member":
         # ler os posts/estatísticas de um perfil pessoal exige r_member_social, que o LinkedIn só dá a parceiros
