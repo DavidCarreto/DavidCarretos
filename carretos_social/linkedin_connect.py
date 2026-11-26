@@ -15,7 +15,8 @@ import re
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-from .config import DATA_DIR, Account, _yes, accounts, save_account_override
+from . import config as _cfg
+from .config import Account, _yes, accounts, save_account_override
 from .http import request
 
 AUTH = "https://www.linkedin.com/oauth/v2/authorization"
@@ -59,7 +60,7 @@ def api_version() -> str:
     if _valid(env):
         return env
     try:
-        saved = (DATA_DIR / "linkedin_version.txt").read_text().strip()
+        saved = (_cfg.DATA_DIR / "linkedin_version.txt").read_text().strip()
         if _valid(saved):
             return saved
     except OSError:
@@ -83,8 +84,8 @@ def rest(method: str, url: str, headers: dict | None = None, **kwargs):
             version = _months_back(1, datetime.strptime(version, "%Y%m"))
             continue
         if version != api_version():
-            DATA_DIR.mkdir(parents=True, exist_ok=True)
-            (DATA_DIR / "linkedin_version.txt").write_text(version)
+            _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            (_cfg.DATA_DIR / "linkedin_version.txt").write_text(version)
         return resp
     raise ApiError("O LinkedIn não aceitou nenhuma versão da API dos últimos 12 meses.")
 
@@ -123,12 +124,20 @@ def organizations(token: str) -> list[dict]:
                 .get("localizedName", "")
         except Exception:  # noqa: BLE001
             name = ""
-        out.append({"urn": urn, "id": oid, "name": name or urn})
+        out.append({"urn": urn, "id": oid, "name": name or urn, "assignee": el.get("roleAssignee", "")})
     return out
 
 
+class WrongAccount(ValueError):
+    """A autorização foi dada com outra conta LinkedIn (não guardar nada)."""
+
+
+def _retry_msg(who: str) -> str:
+    return (f"Está com {who}. Termine a sessão no LinkedIn, entre com a conta David Carreto e tente outra vez.")
+
+
 def _path():
-    return DATA_DIR / "linkedin.json"
+    return _cfg.DATA_DIR / "linkedin.json"
 
 
 def saved() -> dict:
@@ -140,7 +149,7 @@ def saved() -> dict:
 
 def _save(**fields) -> dict:
     info = {**saved(), **fields}
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _path().write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
     _path().chmod(0o600)                                   # tem tokens: só o utilizador da app lê
     return info
@@ -155,11 +164,16 @@ def connect_member(token_data: dict) -> tuple[dict[str, str], dict]:
     token = token_data["access_token"]
     me = member(token)
     acc = accounts()["li_davidcarreto"]
+    # proteção contra conta errada: tem de ser a mesma conta do perfil já ligado (se houver)
+    expected = (saved().get("member_sub") or (acc.secret("author_urn_env") or "").rsplit(":", 1)[-1]).strip()
+    if expected and me.get("sub") != expected:
+        raise WrongAccount(_retry_msg(f"a conta LinkedIn «{me.get('name') or 'desconhecida'}»"))
     expires = _expires(token_data)
     updates = {acc.credentials["access_token_env"]: token, acc.credentials["author_urn_env"]: f"urn:li:person:{me['sub']}"}
     save_account_override(acc.id, status="ligada", meta_name=me.get("name", ""), token_expires=expires,
                           linked_at=datetime.now().isoformat(timespec="minutes"))
-    info = _save(name=me.get("name", ""), at=datetime.now().isoformat(timespec="minutes"), expires=expires)
+    info = _save(name=me.get("name", ""), member_sub=me.get("sub", ""),
+                 at=datetime.now().isoformat(timespec="minutes"), expires=expires)
     return updates, info
 
 
@@ -167,8 +181,16 @@ def connect_org(token_data: dict) -> tuple[dict[str, str], dict]:
     """2.ª app (Community Management API): encontra as páginas e liga a da Carretos Group (se for clara)."""
     token = token_data["access_token"]
     orgs = organizations(token)
+    # proteção contra conta errada: a conta autorizada tem de ser administradora da página Carretos Group
+    # (esta app não tem acesso ao nome da conta; uma conta errada não administra a página)
+    if not any("carretos" in o["name"].lower() for o in orgs):
+        raise WrongAccount(_retry_msg("uma conta LinkedIn que não é administradora da página Carretos Group"
+                                      + (f" (administra: {', '.join(o['name'] for o in orgs)})" if orgs else "")))
+    assignee = next((o.get("assignee") for o in orgs if "carretos" in o["name"].lower()), "")
+    member_urn = f"urn:li:person:{saved().get('member_sub')}" if saved().get("member_sub") else ""
     info = _save(orgs=orgs, org_token=token, org_expires=_expires(token_data),
-                 org_at=datetime.now().isoformat(timespec="minutes"))
+                 org_at=datetime.now().isoformat(timespec="minutes"), org_assignee=assignee,
+                 org_same_as_member=bool(member_urn and assignee == member_urn))
     updates: dict[str, str] = {}
     if len(orgs) == 1 or any("carretos" in o["name"].lower() for o in orgs):
         org = next((o for o in orgs if "carretos" in o["name"].lower()), orgs[0])

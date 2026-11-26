@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
-from .config import DATA_DIR, ROOT
+from . import config as _cfg
+from .config import ROOT
 
 HEALTH_AT, MORNING_AT = (8, 30), (9, 0)
 EXPIRY_DAYS = {14, 7, 3, 1, 0}
@@ -24,7 +25,7 @@ def dashboard_url(path: str = "/") -> str:
 
 
 def _state_path():
-    return DATA_DIR / "agendador.json"
+    return _cfg.DATA_DIR / "agendador.json"
 
 
 def _state() -> dict:
@@ -35,7 +36,7 @@ def _state() -> dict:
 
 
 def _save(state: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _state_path().write_text(json.dumps(state), encoding="utf-8")
 
 

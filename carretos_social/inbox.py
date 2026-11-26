@@ -19,7 +19,8 @@ import os
 import threading
 from datetime import datetime, timedelta
 
-from .config import DATA_DIR, Account, accounts
+from . import config as _cfg
+from .config import Account, accounts
 from .db import connect, now
 
 DEFAULT_WHATSAPP = "https://wa.me/351211454646"
@@ -35,7 +36,7 @@ FALLBACK = {
 
 # ------------------------------------------------------------------ definições por conta
 def _settings_path():
-    return DATA_DIR / "respostas.json"
+    return _cfg.DATA_DIR / "respostas.json"
 
 
 def settings() -> dict:
@@ -52,7 +53,7 @@ def account_settings(acc_id: str) -> dict:
 def save_account_settings(acc_id: str, **fields) -> None:
     data = settings()
     data.setdefault(acc_id, {}).update(fields)
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _settings_path().write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
@@ -190,19 +191,19 @@ def log_event(payload: dict | None, signature_ok: bool) -> None:
                  "echo": bool((m.get("message") or {}).get("is_echo")),
                  "text": ((m.get("message") or {}).get("text") or "")[:120]} for m in e.get("messaging", []) or []]
         entries.append({"id": str(e.get("id", "")), "changes": changes, "messaging": msgs})
-    path = DATA_DIR / "webhooks.json"
+    path = _cfg.DATA_DIR / "webhooks.json"
     try:
         items = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
     except (OSError, ValueError):
         items = []
     items.insert(0, {"at": now(), "signature_ok": signature_ok, "object": (payload or {}).get("object"),
                      "entries": entries})
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(items[:100], ensure_ascii=False), encoding="utf-8")
 
 
 def recent_events() -> list[dict]:
-    path = DATA_DIR / "webhooks.json"
+    path = _cfg.DATA_DIR / "webhooks.json"
     try:
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
     except (OSError, ValueError):

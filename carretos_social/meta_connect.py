@@ -18,7 +18,8 @@ import os
 import re
 from datetime import datetime
 
-from .config import DATA_DIR, Account, accounts, save_account_override
+from . import config as _cfg
+from .config import Account, accounts, save_account_override
 from .http import request
 
 SCOPES = ["pages_show_list", "pages_read_engagement", "pages_manage_posts", "business_management",
@@ -151,11 +152,11 @@ def discover(user_token: str) -> dict:
 
 
 def _path():
-    return DATA_DIR / "meta.json"
+    return _cfg.DATA_DIR / "meta.json"
 
 
 def _save(found: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     p = _path()
     p.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
     p.chmod(0o600)                                         # tem tokens: só o utilizador da app lê

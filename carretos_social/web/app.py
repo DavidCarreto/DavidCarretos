@@ -892,6 +892,8 @@ def linkedin_callback(request: Request, code: str = "", state: str = "", error: 
             updates, info = lc.connect_member(lc.exchange(code, redirect, "perfil"))
             text = f"LinkedIn de {info['name']} ligado."
         envfile.set_env(updates, root=ROOT)
+    except lc.WrongAccount as exc:                     # outra conta LinkedIn: nada foi guardado
+        return RedirectResponse(f"/contas?erro={quote(str(exc))}", 303)
     except Exception as exc:  # noqa: BLE001
         log.exception("linkedin callback")
         return RedirectResponse(f"/contas?erro={quote('Não foi possível ligar o LinkedIn: ' + str(exc))}", 303)

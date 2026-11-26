@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from .config import DATA_DIR, Account, accounts
+from . import config as _cfg
+from .config import Account, accounts
 
 
 def _path():
-    return DATA_DIR / "saude.json"
+    return _cfg.DATA_DIR / "saude.json"
 
 
 def results() -> dict:
@@ -53,7 +54,7 @@ def check_all(alert: bool = True) -> dict:
         except Exception as exc:  # noqa: BLE001
             ok, text = False, f"a verificação falhou: {exc}"
         out[acc.id] = {"ok": ok, "text": text, "at": now, "name": acc.name}
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _path().write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     newly = [r for k, r in out.items() if not r["ok"] and (previous.get(k) or {}).get("ok", True)]
     if alert and newly:

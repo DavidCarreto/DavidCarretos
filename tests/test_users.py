@@ -1456,3 +1456,40 @@ def test_linkedin_rest_retries_inactive_version(monkeypatch):
     # a publicação usa a mesma função (perfil e página)
     import carretos_social.publishers.linkedin as pub
     assert pub.li_rest is lc.rest
+
+
+def test_linkedin_wrong_account_protection(client, monkeypatch):
+    import pytest as _pytest
+    from carretos_social import linkedin_connect as lc
+    _setup_admin(client)
+    monkeypatch.setenv("LI_DAVIDCARRETO_URN", "urn:li:person:david123")
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+    # perfil: outra conta → recusa sem guardar nada
+    monkeypatch.setattr(lc, "request", lambda m, u, **k: R({"sub": "outra999", "name": "Carretos Sintra"}))
+    with _pytest.raises(lc.WrongAccount) as e:
+        lc.connect_member({"access_token": "X", "expires_in": 100})
+    assert "Está com a conta LinkedIn «Carretos Sintra»" in str(e.value) and "entre com a conta David Carreto" in str(e.value)
+    assert not lc.saved().get("member_sub")
+    # perfil: a mesma conta → liga e guarda quem autorizou
+    monkeypatch.setattr(lc, "request", lambda m, u, **k: R({"sub": "david123", "name": "David Carreto"}))
+    lc.connect_member({"access_token": "X", "expires_in": 100})
+    assert lc.saved()["member_sub"] == "david123" and lc.saved()["name"] == "David Carreto"
+    # página: conta que não administra a Carretos Group → recusa
+    def orgs(m, u, **k):
+        if u.endswith("/organizationAcls"):
+            return R({"elements": [{"organization": "urn:li:organization:5", "roleAssignee": "urn:li:person:outra"}]})
+        return R({"localizedName": "Outra Empresa"})
+    monkeypatch.setattr(lc, "request", orgs)
+    with _pytest.raises(lc.WrongAccount) as e:
+        lc.connect_org({"access_token": "Y", "expires_in": 100})
+    assert "não é administradora da página Carretos Group" in str(e.value) and not lc.saved().get("org_at")
+    # página: conta certa (a mesma do perfil)
+    def orgs_ok(m, u, **k):
+        if u.endswith("/organizationAcls"):
+            return R({"elements": [{"organization": "urn:li:organization:777", "roleAssignee": "urn:li:person:david123"}]})
+        return R({"localizedName": "Carretos Group"})
+    monkeypatch.setattr(lc, "request", orgs_ok)
+    updates, info = lc.connect_org({"access_token": "Y", "expires_in": 100})
+    assert updates["LI_CARRETOSGROUP_URN"] == "urn:li:organization:777" and info["org_same_as_member"]

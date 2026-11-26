@@ -31,8 +31,8 @@
   {% if li.org %}<a class="btn gold" href="/contas/linkedin/ligar?app=pagina" style="margin-left:6px">in Ligar a página da empresa</a>
   {% elif li.org_app %}<p class="fmt-line ajustar" style="margin:6px 0 0">⚠ 2.ª app configurada: quando o LinkedIn aprovar a Community Management API, escreva <b>sim</b> em ⚙ Configurar → "Community Management API aprovada?".</p>
   {% else %}<p class="muted" style="font-size:12px;margin:6px 0 0">Página da empresa: em modo assistido até haver a 2.ª app aprovada (guia: <code>docs/GUIA_LINKEDIN.md</code>).</p>{% endif %}
-  {% if li.saved.at %}<p class="muted" style="font-size:12px;margin:8px 0 0">Perfil ligado por {{ li.saved.name }} · {{ li.saved.at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.expires }}</p>{% endif %}
-  {% if li.saved.org_at %}<p class="muted" style="font-size:12px;margin:2px 0 0">Página ligada a {{ li.saved.org_at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.org_expires }}</p>{% endif %}
+  {% if li.saved.at %}<p class="muted" style="font-size:12px;margin:8px 0 0">Perfil autorizado pela conta LinkedIn «{{ li.saved.name }}» · {{ li.saved.at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.expires }}</p>{% endif %}
+  {% if li.saved.org_at %}<p class="muted" style="font-size:12px;margin:2px 0 0">Página autorizada por uma conta administradora da Carretos Group{% if li.saved.org_same_as_member %} (a mesma conta do perfil, «{{ li.saved.name }}» ✓){% endif %} · {{ li.saved.org_at.replace('T',' ') }} · volte a ligar antes de {{ li.saved.org_expires }}</p>{% endif %}
  {% endif %}
  <p class="muted" style="font-size:12px;margin:8px 0 0">Endereço de retorno: <code>{{ li.redirect }}</code></p>
 </div>
@@ -63,6 +63,8 @@
   <b>{{ ICON.get(a.platform,'') }} {{ a.name }}</b>{% if a.handle %} <span class="muted">@{{ a.handle }}</span>{% endif %}<br>
   {% if a.has_credentials %}<span class="pill" style="color:#3fb950;border-color:#3fb950">✓ Ligada</span>{% if it.over.meta_name %} <span class="muted" style="font-size:12px">{{ it.over.meta_name }}{% if it.over.linked_at %} · desde {{ it.over.linked_at.replace('T',' ') }}{% endif %}</span>{% endif %}
    {% if it.over.token_expires %}<span class="muted" style="font-size:12px"> · volte a ligar antes de {{ it.over.token_expires }}</span>{% endif %}
+   {% if a.platform == 'linkedin_member' and li.saved.name %}<span class="muted" style="font-size:12px"> · autorizada pela conta «{{ li.saved.name }}»</span>{% endif %}
+   {% if a.platform == 'linkedin_org' and li.saved.org_at %}<span class="muted" style="font-size:12px"> · autorizada por uma conta administradora{% if li.saved.org_same_as_member %} («{{ li.saved.name }}», a mesma do perfil){% endif %}</span>{% endif %}
    {% set h = health.get(a.id) %}{% if h %}<span style="font-size:12px;color:{{ '#8ddb8c' if h.ok else '#ff9b93' }}"> · verificada {{ h.at.replace('T',' ') }} {{ '✓' if h.ok else '✕ ' ~ h.text }}</span>{% endif %}<br>{% endif %}
   {% if a.mode == 'draft' %}<span class="pill" style="color:#25F4EE;border-color:#25F4EE">Rascunhos no TikTok</span> <span class="muted" style="font-size:12px">Vai para os rascunhos da app TikTok; publica-se lá.</span>
   {% elif a.assist_reason %}<span class="pill" style="color:#a371f7;border-color:#a371f7">Modo assistido</span> <span class="muted" style="font-size:12px">{{ a.assist_reason }}</span>
