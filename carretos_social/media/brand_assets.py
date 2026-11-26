@@ -2,7 +2,8 @@
 
 - pessoal (redes do David): sem logótipo, assinatura "David Carreto".
 - carretos (Carretos Group): logótipo oficial CARRETO'S GROUP (branco, do site), sem o nome do David.
-- auron: logótipo oficial AURON dourado (dado pelo David, fundo retirado), sem o nome do David.
+- auron: logótipo oficial AURON dourado (ficheiro original do David, sem "By David Carreto"); há também
+  as versões branca e preta em assets/ (auron-logo-branco.png, auron-logo-preto.png).
 Cada imagem leva o nome UMA só vez (logótipo/marca em cima OU assinatura por baixo da frase).
 Mudam-se em ⚙ Configurar → "Logótipo e assinatura das imagens".
 """
