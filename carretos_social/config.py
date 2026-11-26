@@ -196,6 +196,8 @@ def brand() -> dict:
     if ident:
         merged["visual"]["logo"] = str(ident["logo"]) if ident["logo"] else ""
         merged["visual"]["quote_author"] = ident["signature"]      # "" = sem assinatura por baixo da frase
+        if ident.get("accent"):                                    # cor de destaque escolhida em ⚙ Configurar
+            merged["visual"]["colors"] = {**merged["visual"]["colors"], "accent": ident["accent"]}
         merged["theme_id"] = _ACTIVE_THEME
     return merged
 

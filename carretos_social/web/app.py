@@ -488,7 +488,8 @@ def config_brand_sample(request: Request, theme: str):
     if not ident:
         return PlainTextResponse("marca desconhecida", status_code=404)
     logo = ident["logo"]
-    key = hashlib.sha1(json.dumps([theme, str(logo), logo.stat().st_mtime if logo else 0, ident["signature"]])
+    key = hashlib.sha1(json.dumps([theme, str(logo), logo.stat().st_mtime if logo else 0, ident["signature"],
+                                   ident.get("accent", "")])
                        .encode()).hexdigest()[:12]
     out = DATA_DIR / "marcas" / "exemplos" / f"{theme}-{key}.jpg"
     if not out.exists():
@@ -504,7 +505,8 @@ def config_brand_sample(request: Request, theme: str):
 
 @app.post("/configurar/marca/{theme}")
 def config_brand_save(request: Request, theme: str, assinatura: str = Form(""), sem_logo: str = Form(""),
-                      repor: str = Form(""), logo: UploadFile | None = File(None)):
+                      repor: str = Form(""), cor: str = Form(""), repor_cor: str = Form(""),
+                      logo: UploadFile | None = File(None)):
     from urllib.parse import quote
     from ..media import brand_assets
     me = _current_user(request)
@@ -526,7 +528,13 @@ def config_brand_save(request: Request, theme: str, assinatura: str = Form(""), 
     sig = assinatura.strip()[:60]
     if theme != "pessoal" and "carreto" in sig.lower() and "david" in sig.lower():
         return RedirectResponse(f"/configurar?marca=" + quote("o nome do David só pode aparecer nas contas pessoais") + f"#marca-{theme}", 303)
-    brand_assets.save(theme, signature=sig, no_logo=bool(sem_logo) and not img)
+    import re as _re3
+    extra = {}
+    if repor_cor:
+        extra["accent"] = ""
+    elif _re3.fullmatch(r"#[0-9A-Fa-f]{6}", cor.strip()):
+        extra["accent"] = cor.strip().upper()
+    brand_assets.save(theme, signature=sig, no_logo=bool(sem_logo) and not img, **extra)
     return RedirectResponse(f"/configurar?marca=ok#marca-{theme}", 303)
 
 
@@ -1743,7 +1751,13 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     from .. import linkcard
     from . import system as _system
     from ..media import brand_assets
-    return _render(request, "config.html", {"marcas": {t: brand_assets.get(t) for t in brand_assets.BRANDS},"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
+    from ..config import set_theme, brand as _brand
+    _acc = {}
+    for _t in brand_assets.BRANDS:
+        set_theme(_t)
+        _acc[_t] = _brand()["visual"]["colors"]["accent"]
+    set_theme(None)
+    return _render(request, "config.html", {"marcas": {t: brand_assets.get(t) for t in brand_assets.BRANDS}, "marca_cor": _acc,"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
                                             "ag": _system.agendador_status(), "web_rev": _system.git_rev(),
                                             "fields": fields, "first": first, "ok": ok, "erros": erros,
                                             "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),

@@ -57,6 +57,9 @@ Os outros campos foram guardados.</div>{% endif %}
  <p class="muted" style="font-size:12px;margin:0 0 6px">Logótipo: {% if m.custom_logo %}carregado por si{% elif m.logo %}oficial do site{% elif m.no_logo %}nenhum{% else %}{{ 'nenhum (assinatura em texto)' if t == 'pessoal' else 'nenhum: aparece «' ~ m.signature ~ '» em texto' if m.signature else 'nenhum' }}{% endif %}</p>
  <label>Trocar o logótipo (PNG com fundo transparente)</label><input type="file" name="logo" accept="image/png,image/jpeg">
  <label>Assinatura por baixo da frase {{ '(vazio = nenhuma)' }}</label><input name="assinatura" value="{{ m.signature }}" maxlength="60">
+ <label>Cor de destaque (aspas e traço)</label>
+ <div style="display:flex;gap:8px;align-items:center"><input type="color" name="cor" value="{{ marca_cor[t] }}" style="width:56px;height:34px;padding:2px"> <code style="font-size:12px">{{ marca_cor[t] }}</code>
+ {% if m.accent %}<button class="btn" name="repor_cor" value="1" style="padding:3px 10px;font-size:12px">Repor a cor</button>{% endif %}</div>
  {% if t != 'pessoal' %}<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px"><input type="checkbox" name="sem_logo" value="1" {{ 'checked' if m.no_logo }} style="width:auto"> Sem logótipo</label>{% endif %}
  <div class="row" style="margin-top:8px"><button class="btn gold" style="padding:4px 12px;font-size:12px">Guardar</button>
  {% if m.custom_logo or m.no_logo %}<button class="btn" name="repor" value="1" style="padding:4px 12px;font-size:12px">Repor o logótipo original</button>{% endif %}</div>

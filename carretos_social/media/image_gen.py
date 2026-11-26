@@ -136,7 +136,8 @@ def _background(photo: str | Path | None, size) -> Image.Image:
     bg = Image.new("RGBA", (W, H), _hex(_v()["colors"]["primary"]))
     glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(glow)
-    d.ellipse((-W * 0.4, -H * 0.3, W * 0.9, H * 0.6), fill=_hex(_v()["colors"]["accent"], 70))
+    glow_c = _v()["colors"].get("glow") or _v()["colors"]["accent"]      # brilho do fundo (AURON: neutro)
+    d.ellipse((-W * 0.4, -H * 0.3, W * 0.9, H * 0.6), fill=_hex(glow_c, 70))
     glow = glow.filter(ImageFilter.GaussianBlur(W // 5))
     bg.alpha_composite(glow)
     return bg

@@ -51,6 +51,7 @@ def get(theme: str | None) -> dict | None:
     if not logo and not saved.get("no_logo"):
         logo = base["logo"] if base["logo"] and Path(base["logo"]).exists() else None
     return {"label": base["label"], "logo": logo, "custom_logo": bool(custom_logo(theme)),
+            "accent": saved.get("accent", ""),            # "" = a cor do tema (brand.yaml)
             "no_logo": bool(saved.get("no_logo")),
             "signature": saved["signature"] if "signature" in saved else base["signature"]}
 

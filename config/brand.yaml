@@ -82,13 +82,14 @@ transcription_fixes:
 # Temas visuais por conta (accounts.yaml → theme). Sobrepõem-se a "visual".
 themes:
   carretos: {}                               # azul da Carretos Group (o "visual" acima)
-  auron:                                     # PROVISÓRIO: cores neutras até o David definir a identidade AURON
+  auron:                                     # preto e dourado do logótipo AURON (a cor muda-se em ⚙ Configurar)
     signature: "AURON"
     quote_author: ""                         # "AURON" só em cima (uma vez); nunca "David Carreto"
     colors:
       primary: "#0B0B0C"
       secondary: "#BFC4CC"
-      accent: "#E6E8EB"
+      accent: "#C5A316"                      # dourado oficial do logótipo AURON
+      glow: "#E6E8EB"                        # brilho do fundo neutro (não confundir com o preto e dourado do David)
       text: "#FFFFFF"
     logo: ""
     carousel_cta: "Guarda e partilha"
