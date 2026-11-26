@@ -457,6 +457,18 @@ def post_card_save(request: Request, pid: int, titulo: str = Form(""), descricao
     return RedirectResponse(f"/post/{pid}#li-post", 303)
 
 
+@app.get("/configurar/registos", response_class=HTMLResponse)
+def config_logs(request: Request, post: int = 0):
+    """Falhas de publicação e últimas linhas do registo do agendador (sem tokens)."""
+    from . import system
+    from ..scheduler import failures
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    return _render(request, "logs.html", {"fails": failures(post or None), "post": post,
+                                          "journal": system.agendador_log(filtro=f"#{post}" if post else "")})
+
+
 @app.get("/configurar/cartao-link.png")
 def config_card_image(request: Request):
     from .. import linkcard
@@ -603,7 +615,7 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
         acc = row["account_id"]
         if not me.can_see(acc):
             return _forbidden()
-        if action in ("aprovar", "rejeitar") and not me.can_approve(acc):
+        if action in ("aprovar", "rejeitar", "repetir") and not me.can_approve(acc):
             return _forbidden("Podes criar e editar nesta conta, mas não aprovar. Pede a um aprovador.")
         if not me.can_create(acc):
             return _forbidden("Nesta conta só tens acesso para ver.")
@@ -674,6 +686,22 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
                 return RedirectResponse(f"/post/{pid}?erro=aprovar" + (f"#img={img}" if img.isdigit() else ""), 303)
             else:
                 update_post(conn, pid, _by=me.id, status="approved", error=None, approved_by=me.id)
+        elif action == "repetir":
+            # "Tentar outra vez" depois de "Falhou": volta a aprovado; se a hora já passou, sai daqui a 2 minutos
+            cur = get_post(conn, pid)
+            if cur["status"] != "failed":
+                return _forbidden("Só se pode tentar outra vez uma publicação que falhou.")
+            problems = all_problems(conn, cur)
+            if problems:
+                update_post(conn, pid, error="; ".join(problems))
+                return RedirectResponse(f"/post/{pid}?erro=aprovar", 303)
+            fields = {"status": "approved", "error": None, "approved_by": me.id}
+            from ..scheduler import _tz
+            now = datetime.now(_tz())
+            if not cur["scheduled_at"] or parse_dt(cur["scheduled_at"]) < now:
+                fields["scheduled_at"] = (now + timedelta(minutes=2)).isoformat(timespec="seconds")
+            update_post(conn, pid, _by=me.id, _note="tentar outra vez", **fields)
+            return RedirectResponse(f"/post/{pid}?repetir=1", 303)
         elif action == "rejeitar":
             update_post(conn, pid, _by=me.id, status="rejected", approved_by=me.id)
         elif action == "refazer":

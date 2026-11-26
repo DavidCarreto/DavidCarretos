@@ -1689,3 +1689,52 @@ def test_card_forbidden_word_shown_before_approving_and_blocked_site(client, mon
     page = client.get(f"/post/{ext}").text
     assert "o site não deixa ler o link – defina o título e a imagem" in page and "veja o aviso do cartão" in page
     assert "⚠ cartão do link: o site não deixa ler" in client.get("/aprovar").text
+
+
+def test_failed_publish_shows_step_reason_and_retry(client, monkeypatch):
+    from carretos_social import scheduler, notify
+    from carretos_social.db import add_post, connect, get_post
+    from carretos_social.http import ApiError
+    from carretos_social.publishers import linkedin as li_pub
+    from carretos_social.config import accounts
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("LI_TESTE_ACCESS_TOKEN", "segredo-muito-longo-123")
+    with connect() as conn:
+        pid = add_post(conn, account_id="li_davidcarreto", format="text", status="approved",
+                       caption="Texto https://www.carretos.pt", scheduled_at="2020-01-01T10:00:00+00:00")
+    acc = accounts()["li_davidcarreto"]
+    monkeypatch.setattr(type(acc), "connected", property(lambda self: True))
+    monkeypatch.setattr(type(acc), "mode", property(lambda self: "auto"))
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "segredo-muito-longo-123" if "token" in k else "urn:li:person:1")
+
+    class R:
+        headers = {}
+
+        def json(self):
+            return {"value": {"uploadUrl": "https://up", "image": "urn:li:image:X"}, "status": "AVAILABLE"}
+
+    def fake_rest(method, url, headers=None, **kw):
+        if url.endswith("/posts"):
+            raise ApiError('POST https://api.linkedin.com/rest/posts -> 422: {"message":"thumbnail inválido"} '
+                           'Bearer segredo-muito-longo-123')
+        return R()
+    monkeypatch.setattr(li_pub, "li_rest", fake_rest)
+    monkeypatch.setattr(li_pub, "request", lambda *a, **k: R())
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t: sent.append(t))
+    with connect() as conn:
+        out = scheduler.publish_post(conn, pid)
+        row = get_post(conn, pid)
+    assert "FALHOU" in out and row["status"] == "failed"
+    assert "criar o post no LinkedIn (Posts API)" in row["error"] and "thumbnail inválido" in row["error"]
+    assert "segredo-muito-longo-123" not in row["error"] and "segredo-muito-longo-123" not in sent[0]
+    assert "Motivo:" in sent[0] and "Tentar outra vez" in sent[0]
+    page = client.get(f"/post/{pid}").text
+    assert "A publicação falhou" in page and "Passo onde falhou" in page and "Tentar outra vez" in page
+    logs = client.get(f"/configurar/registos?post={pid}").text
+    assert "thumbnail inválido" in logs and "segredo-muito-longo-123" not in logs
+    client.post(f"/post/{pid}", data={"action": "repetir"}, follow_redirects=False)
+    with connect() as conn:
+        row = get_post(conn, pid)
+    assert row["status"] == "approved" and row["error"] is None and row["scheduled_at"] > "2026"

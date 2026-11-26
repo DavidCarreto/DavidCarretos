@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block body %}
+<p><a class="muted" href="/configurar">‹ ⚙ Configurar</a></p>
+<h1>Registos{% if post %} da publicação #{{ post }}{% endif %}</h1>
+<p class="muted" style="font-size:13px">Sem tokens nem palavras-passe (são escondidos antes de aparecerem aqui).
+{% if post %}<a class="gold" href="/configurar/registos">Ver todos</a> · <a class="gold" href="/post/{{ post }}">voltar à publicação</a>{% endif %}</p>
+<div class="card"><b>Publicações que falharam</b>
+{% for f in fails %}<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px">
+ <b>#{{ f.post }}</b> · {{ f.conta }} · {{ f.at.replace('T',' ') }} · <a class="gold" href="/post/{{ f.post }}">abrir</a>
+ <p class="fmt-line editar" style="margin:4px 0;word-break:break-word">✕ {{ f.erro }}</p>
+ <details><summary class="muted" style="font-size:12px">Detalhe técnico</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:340px;overflow:auto">{{ f.detalhe }}</pre></details>
+</div>{% else %}<p class="muted" style="font-size:13px">Nenhuma falha registada{% if post %} para esta publicação{% endif %} (o registo começou com esta versão).</p>{% endfor %}
+</div>
+<div class="card" style="margin-top:12px"><b>Registo do agendador (carretos-agendador, últimos 3 dias){% if post %}, à volta de #{{ post }}{% endif %}</b>
+<pre style="white-space:pre-wrap;font-size:11px;max-height:520px;overflow:auto;margin-top:8px">{{ journal }}</pre></div>
+{% endblock %}

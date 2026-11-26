@@ -198,3 +198,22 @@ def dismiss_reboot() -> None:
             p.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
     except (OSError, ValueError):
         pass
+
+
+def agendador_log(lines: int = 400, filtro: str = "") -> str:
+    """Últimas linhas do registo do serviço carretos-agendador (o utilizador da app está no grupo systemd-journal),
+    sem tokens. Com filtro (ex.: "#34"), mostra só os blocos à volta das linhas que o têm."""
+    from ..redact import redact
+    if not shutil.which("journalctl"):
+        return "journalctl não existe neste servidor."
+    out = _run(["journalctl", "-u", "carretos-agendador", "--since", "-3 days", "-n", str(lines), "--no-pager",
+                "-o", "short-iso"], timeout=20)
+    out = redact(out or "(registo vazio ou sem permissão para o ler)")
+    if filtro:
+        rows = out.splitlines()
+        keep = set()
+        for i, r in enumerate(rows):
+            if filtro in r:
+                keep.update(range(max(0, i - 40), min(len(rows), i + 3)))
+        out = "\n".join(rows[i] for i in sorted(keep)) or f"(nenhuma linha com {filtro} nos últimos 3 dias)"
+    return out

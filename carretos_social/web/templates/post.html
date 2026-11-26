@@ -2,7 +2,15 @@
 <p><a class="muted" href="javascript:history.back()">‹ voltar</a></p>
 <h1>#{{ p.id }} · {{ p.title or tema(p.pillar) }}</h1>
 {% if request.query_params.get('falha') %}<div class="card alert">✕ {{ request.query_params.get('falha') }}</div>{% endif %}
-{% if approve_error and p.error %}<div class="card alert">✕ <b>Não foi aprovada.</b> Falta resolver: {{ p.error }}{% if fix_hint %}<br><span style="font-size:13px">{{ fix_hint|safe }}</span>{% endif %}</div>{% endif %}
+{% if p.status == 'failed' %}<div class="card alert" style="word-break:break-word">✕ <b>A publicação falhou.</b>
+ {% set e = p.error or 'o motivo não ficou registado nesta publicação (veja os registos)' %}
+ {% if ': ' in e and e.split(': ',1)[0]|length < 90 %}<br>Passo onde falhou: <b>{{ e.split(': ',1)[0] }}</b><br>Mensagem: {{ e.split(': ',1)[1] }}{% else %}<br>{{ e }}{% endif %}
+ {% if fix_hint %}<br><span style="font-size:13px">{{ fix_hint|safe }}</span>{% endif %}
+ <div class="row" style="margin-top:8px">{% if can_approve %}<form method="post" style="margin:0"><button class="btn gold" name="action" value="repetir" onclick="return confirm('Tentar publicar outra vez #{{ p.id }}? Se a hora já passou, sai daqui a 2 minutos.')">↻ Tentar outra vez</button></form>{% endif %}
+ {% if me and me.is_admin %}<a class="btn" href="/configurar/registos?post={{ p.id }}">Ver registos desta publicação</a>{% endif %}</div>
+</div>{% endif %}
+{% if request.query_params.get('repetir') %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c">✓ Aprovada outra vez. O agendador tenta publicar à hora marcada ({{ p.when|quando if p.when else 'agora' }}).</div>{% endif %}
+{% if approve_error and p.error and p.status != 'failed' %}<div class="card alert">✕ <b>Não foi aprovada.</b> Falta resolver: {{ p.error }}{% if fix_hint %}<br><span style="font-size:13px">{{ fix_hint|safe }}</span>{% endif %}</div>{% endif %}
 <p class="muted"><span class="gtag {{ p.group.id }}">{{ p.group.short }}</span> {{ p.account.label }} · <span class="pill" style="color:{{ STATUS[p.status][1] }};border-color:{{ STATUS[p.status][1] }}">{{ STATUS[p.status][0] }}</span>{% if p.remote_url %} · <a class="gold" href="{{ p.remote_url }}" target="_blank">ver publicado</a>{% endif %}</p>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
 <div><p style="margin:0 0 8px"><span class="kind {{ p.kind[0] }}">{{ p.kind[1] }}</span></p>
@@ -72,7 +80,7 @@
  {% if can_create %}<p style="margin:6px 0 0">{% if not p.caption %}<button class="btn" name="action" value="legenda_ia" formnovalidate>✦ Pedir legenda à IA</button> <span class="muted" style="font-size:12px">Sem legenda – escreva uma ou peça à IA</span>
  {% else %}<button class="btn" name="action" value="legenda_ia" formnovalidate onclick="return confirm('Refazer a legenda com a IA? A legenda atual fica guardada no Histórico.')" style="font-size:13px;padding:6px 12px">✦ Refazer legenda com a IA</button>{% endif %}</p>{% endif %}
  <p class="muted" style="font-size:13px">{{ p.tags }}</p>
- {% if p.error %}<p style="color:#ff8f8f">⚠ {{ p.error }}</p>{% endif %}
+ {% if p.error and p.status != 'failed' %}<p style="color:#ff8f8f">⚠ {{ p.error }}</p>{% endif %}
  {% if can_create %}<div class="row">{% if can_approve %}<button class="btn gold" name="action" value="aprovar">✓ Guardar e aprovar</button>{% endif %}
  <button class="btn" name="action" value="guardar">Guardar</button>
  {% if p.is_video %}<button class="btn" name="action" value="refazer">↻ Refazer vídeo</button>{% endif %}

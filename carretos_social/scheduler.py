@@ -85,17 +85,54 @@ def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
         return f"#{post_id} [simulação] {acc.name}: {row['format']} com {len(media)} ficheiro(s)"
     try:
         if card and acc.mode == "auto":
-            req.article = linkcard.resolve(card)          # lê o site só na altura de publicar
+            try:
+                req.article = linkcard.resolve(card)      # lê o site só na altura de publicar
+            except Exception as exc:  # noqa: BLE001
+                from .publishers.base import PublishStepError
+                raise PublishStepError("preparar o cartão do link", exc) from exc
         res = get_publisher(acc).publish(req)
     except Exception as exc:  # noqa: BLE001
-        update_post(conn, post_id, status="failed", error=str(exc)[:1000])
-        notify.send(f"⚠️ Falhou a publicação #{post_id} em {acc.name}: {exc}")
-        traceback.print_exc()
-        return f"#{post_id} FALHOU: {exc}"
+        from .redact import redact
+        msg = redact(str(exc) or type(exc).__name__)
+        when = datetime.now().strftime("%d/%m %H:%M")
+        update_post(conn, post_id, status="failed", error=f"[{when}] {msg}"[:1500])
+        _log_failure(post_id, acc.name, msg, redact(traceback.format_exc()))
+        try:
+            notify.send(f"⚠️ Falhou a publicação #{post_id} em {acc.name} ({when}).\nMotivo: {msg[:1200]}\n"
+                        f"Veja o rascunho no dashboard; depois de corrigir, use \"Tentar outra vez\".")
+        except Exception as nexc:  # noqa: BLE001
+            print("notificação falhou:", nexc)
+        print(redact(traceback.format_exc()))
+        return f"#{post_id} FALHOU: {msg}"
     status = res.status or "published"
     update_post(conn, post_id, status=status, remote_id=res.remote_id, remote_url=res.url, error=res.note or None)
     _confirm(acc, row, status, res)
     return f"#{post_id} {status} em {acc.name} {res.url or ''} {res.note}".strip()
+
+
+def _log_failure(post_id: int, account_name: str, msg: str, tb: str) -> None:
+    """Registo das falhas de publicação (dashboard → ⚙ Configurar → Registos), já sem tokens."""
+    from . import config as _cfg
+    path = _cfg.DATA_DIR / "publicacoes_falhadas.jsonl"
+    try:
+        _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        lines = path.read_text(encoding="utf-8").splitlines()[-99:] if path.exists() else []
+        lines.append(json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "post": post_id,
+                                 "conta": account_name, "erro": msg, "detalhe": tb[-6000:]}, ensure_ascii=False))
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print("registo de falhas:", exc)
+
+
+def failures(post_id: int | None = None, limit: int = 20) -> list[dict]:
+    from . import config as _cfg
+    path = _cfg.DATA_DIR / "publicacoes_falhadas.jsonl"
+    try:
+        rows = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    except (OSError, ValueError):
+        return []
+    rows = [r for r in rows if post_id is None or r.get("post") == post_id]
+    return rows[-limit:][::-1]
 
 
 def _confirm(acc, row, status: str, res) -> None:

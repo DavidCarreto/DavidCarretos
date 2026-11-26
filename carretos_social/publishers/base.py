@@ -27,3 +27,11 @@ class PublishResult:
 class Publisher:
     def publish(self, req: PublishRequest) -> PublishResult:  # pragma: no cover
         raise NotImplementedError
+
+
+class PublishStepError(RuntimeError):
+    """Falha num passo concreto da publicação (para mostrar onde falhou)."""
+
+    def __init__(self, step: str, cause: Exception):
+        self.step, self.cause = step, cause
+        super().__init__(f"{step}: {type(cause).__name__}: {cause}" if not str(cause) else f"{step}: {cause}")
