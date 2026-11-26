@@ -46,3 +46,15 @@ Por isso a página usa uma **2.ª app**, só com esse produto:
    **Contas → "Ligar a página da empresa"** → autorizar → a página Carretos Group fica ligada → **Testar**.
 
 As ligações do LinkedIn duram ~60 dias: o dashboard avisa 14 dias antes (e pelo Telegram, se estiver ativo).
+
+## Cartão do link (posts só com texto + link)
+
+A Posts API do LinkedIn **não lê o site** quando se publica pela API: para o link ter cartão, o post vai como
+**artigo** com título, descrição e miniatura (carregada pela Images API; só PNG, JPG ou GIF).
+
+- Links do **carretos.pt** (e subdomínios): imagem, título e descrição definidos em ⚙ Configurar →
+  "Cartão dos links carretos.pt" (imagem de origem: `carretos_social/assets/link-card-carretos.png`, 1200×627).
+- Cada rascunho pode mudar o seu cartão (pré-visualização → "Cartão do link … (mudar)").
+- Links de outros sites: título, descrição e imagem lidos do site na altura de publicar; as imagens SVG são
+  ignoradas (como o LinkedIn faz).
+- O título e a descrição passam pela mesma verificação da legenda (palavras proibidas, `[PREENCHER]`).

@@ -360,10 +360,13 @@ def _li_preview(p: dict) -> dict | None:
     text = caption_with_tags(p)                         # o texto que vai mesmo para o LinkedIn (legenda + hashtags)
     org = a.platform == "linkedin_org"
     name = (lc.saved().get("name") if not org else "") or _re2.sub(r"\s*\([^)]*\)\s*$", "", a.name)
+    from .. import linkcard
     link = linkpreview.first_url(text)
+    card = linkcard.for_post(p, a.platform)
     return {"name": name, "org": org, "text": text, "html": linkpreview.li_html(text),
             "sub": "" if org else os.environ.get("LINKEDIN_HEADLINE", "").strip(),
-            "link": link, "card": bool(link and not p["media"]), "chars": len(text)}
+            "link": link, "card": bool(card), "c": card or {}, "chars": len(text),
+            "ov": linkcard.overrides(p)}
 
 
 @app.get("/post/{pid}/link-preview")
@@ -379,7 +382,7 @@ def post_link_preview(request: Request, pid: int):
         return JSONResponse({})
     from . import linkpreview
     out: dict = {"card": None, "sub": ""}
-    if li["card"]:
+    if li["card"] and li["c"].get("mode") == "auto":
         fresh = request.query_params.get("fresh") == "1" and me.can_create(p["account_id"])
         out["card"] = {k: v for k, v in linkpreview.preview(li["link"], fresh=fresh).items() if not k.startswith("_")}
     if li["org"]:
@@ -387,6 +390,103 @@ def post_link_preview(request: Request, pid: int):
         n = lc.followers(p["account"])
         out["sub"] = f"{n:,} seguidores".replace(",", ".") if n is not None else ""     # como o LinkedIn: 1.517
     return JSONResponse(out)
+
+
+def _read_card_image(f: UploadFile | None) -> tuple[bytes, str] | None:
+    """Imagem do cartão do link: PNG, JPG ou GIF até 5 MB (formatos aceites pelo LinkedIn)."""
+    if not f or not f.filename:
+        return None
+    data = f.file.read(5 * 1024 * 1024 + 1)
+    if len(data) > 5 * 1024 * 1024:
+        raise ValueError("a imagem tem mais de 5 MB")
+    ext = ".png" if data[:8] == b"\x89PNG\r\n\x1a\n" else ".jpg" if data[:3] == b"\xff\xd8\xff" else \
+        ".gif" if data[:4] == b"GIF8" else ""
+    if not ext:
+        raise ValueError("a imagem tem de ser PNG, JPG ou GIF (o LinkedIn não aceita SVG nem WebP)")
+    return data, ext
+
+
+@app.get("/post/{pid}/cartao.png")
+def post_card_image(request: Request, pid: int):
+    from .. import linkcard
+    me = request.state.user
+    with connect() as conn:
+        row = get_post(conn, pid)
+    if not me.can_see(row["account_id"]):
+        return _forbidden()
+    acc = accounts().get(row["account_id"])
+    card = linkcard.for_post(row, acc.platform if acc else "")
+    if not card or not card.get("image"):
+        return PlainTextResponse("sem imagem", status_code=404)
+    return FileResponse(card["image"], headers={"Cache-Control": "no-store"})
+
+
+@app.post("/post/{pid}/cartao")
+def post_card_save(request: Request, pid: int, titulo: str = Form(""), descricao: str = Form(""),
+                   repor: str = Form(""), imagem: UploadFile | None = File(None)):
+    """Título, descrição e imagem do cartão do link deste rascunho (LinkedIn só texto + link)."""
+    from urllib.parse import quote
+    from .. import linkcard
+    me = request.state.user
+    with connect() as conn:
+        row = get_post(conn, pid)
+        if not me.can_create(row["account_id"]):
+            return _forbidden("Nesta conta só tens acesso para ver.")
+        extra = json.loads(row["script"] or "{}")
+        if repor:
+            extra.pop("link_card", None)
+            old = linkcard.post_image(pid)
+            if old:
+                old.unlink()
+        else:
+            try:
+                img = _read_card_image(imagem)
+            except ValueError as exc:
+                return RedirectResponse(f"/post/{pid}?falha=" + quote(f"Cartão do link: {exc}"), 303)
+            extra["link_card"] = {"title": titulo.strip()[:200], "description": descricao.strip()[:300]}
+            if img:
+                old = linkcard.post_image(pid)
+                if old:
+                    old.unlink()
+                linkcard.post_image_dir().mkdir(parents=True, exist_ok=True)
+                (linkcard.post_image_dir() / f"{pid}{img[1]}").write_bytes(img[0])
+        update_post(conn, pid, _by=me.id, script=json.dumps(extra, ensure_ascii=False))
+    return RedirectResponse(f"/post/{pid}#li-post", 303)
+
+
+@app.get("/configurar/cartao-link.png")
+def config_card_image(request: Request):
+    from .. import linkcard
+    if not _current_user(request):
+        return _forbidden()
+    return FileResponse(linkcard.default_image(), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/configurar/cartao-link")
+def config_card_save(request: Request, titulo: str = Form(""), descricao: str = Form(""), repor: str = Form(""),
+                     imagem: UploadFile | None = File(None)):
+    from urllib.parse import quote
+    from .. import linkcard
+    me = _current_user(request)
+    if not (me and me.is_admin):
+        return _forbidden()
+    if repor:
+        old = linkcard.custom_default_image()
+        if old:
+            old.unlink()
+        return RedirectResponse("/configurar?cartao=ok#cartao-link", 303)
+    try:
+        img = _read_card_image(imagem)
+    except ValueError as exc:
+        return RedirectResponse("/configurar?cartao=" + quote(str(exc)) + "#cartao-link", 303)
+    if img:
+        old = linkcard.custom_default_image()
+        if old:
+            old.unlink()
+        linkcard._cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        (linkcard._cfg.DATA_DIR / f"link_card{img[1]}").write_bytes(img[0])
+    linkcard.save_settings(title=titulo.strip()[:200], description=descricao.strip()[:300])
+    return RedirectResponse("/configurar?cartao=ok#cartao-link", 303)
 
 
 @app.get("/post/{pid}", response_class=HTMLResponse)
@@ -1546,7 +1646,9 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     fields = [(k, label, secret, bool(os.environ.get(k))) for k, label, secret in CONFIG_FIELDS]
     labels = {k: label for k, label, _ in CONFIG_FIELDS}
     erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
-    return _render(request, "config.html", {"fields": fields, "first": first, "ok": ok, "erros": erros,
+    from .. import linkcard
+    return _render(request, "config.html", {"lcard": linkcard.settings(), "lcard_custom": bool(linkcard.custom_default_image()),
+                                            "fields": fields, "first": first, "ok": ok, "erros": erros,
                                             "teste": teste, "motivo": motivo, "email_ok": mailer.configured(),
                                             "tg": tg, "tg_ok": notify_enabled(),
                                             "tg_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),

@@ -42,6 +42,11 @@ def ready_problems(row) -> list[str]:
         problems.append(warning)
     if row["format"] not in ("text",) and not json.loads(row["media_ids"] or "[]"):
         problems.append("sem vídeo/imagem associado")
+    from . import linkcard
+    from .config import accounts
+    acc = accounts().get(row["account_id"])
+    if acc:
+        problems += linkcard.text_problems(row, acc.platform)
     return problems
 
 
@@ -72,11 +77,15 @@ def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
         return f"#{post_id} não publicado: {', '.join(problems)}"
     media = media_paths(conn, json.loads(row["media_ids"] or "[]"))
     cover = media_paths(conn, [row["cover_id"]])[0] if row["cover_id"] else None
+    from . import linkcard
+    card = linkcard.for_post(row, acc.platform)
     req = PublishRequest(account=acc, format=row["format"], caption=caption_with_tags(row), media=media,
                          cover=cover, title=row["title"] or "")
     if dry_run:
         return f"#{post_id} [simulação] {acc.name}: {row['format']} com {len(media)} ficheiro(s)"
     try:
+        if card and acc.mode == "auto":
+            req.article = linkcard.resolve(card)          # lê o site só na altura de publicar
         res = get_publisher(acc).publish(req)
     except Exception as exc:  # noqa: BLE001
         update_post(conn, post_id, status="failed", error=str(exc)[:1000])

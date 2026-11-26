@@ -1503,7 +1503,7 @@ def test_linkedin_preview_card_only_without_image(client, monkeypatch):
     calls = []
     monkeypatch.setattr(linkpreview, "_safe_get", lambda url: calls.append(url) or (
         url, '<meta property="og:title" content="Oficina &amp; Serviços"><meta property="og:image" content="/i.jpg">'))
-    cap = "Novidade na oficina! " * 20 + "\nSaiba mais em https://carretos.pt/servicos #Carretos <b>"
+    cap = "Novidade na oficina! " * 20 + "\nSaiba mais em https://exemplo.com/servicos #Carretos <b>"
     with connect() as conn:
         sem = add_post(conn, account_id="li_carretosgroup", format="text", caption=cap, status="draft")
         f = linkpreview._cfg.DATA_DIR / "x.jpg"
@@ -1516,14 +1516,14 @@ def test_linkedin_preview_card_only_without_image(client, monkeypatch):
     assert "Como vai aparecer no LinkedIn" in page and 'id="li-card"' in page
     assert '<span class="li-blue">#Carretos</span>' in page and "&lt;b&gt;" in page   # texto escapado
     data = client.get(f"/post/{sem}/link-preview").json()["card"]
-    assert data["title"] == "Oficina & Serviços" and data["image"] == "https://carretos.pt/i.jpg"
-    assert data["domain"] == "carretos.pt"
+    assert data["title"] == "Oficina & Serviços" and data["image"] == "https://exemplo.com/i.jpg"
+    assert data["domain"] == "exemplo.com"
     page = client.get(f"/post/{com}").text
     assert "Como vai aparecer no LinkedIn" in page and 'id="li-card"' not in page and "só como texto" in page
     assert client.get(f"/post/{com}/link-preview").json()["card"] is None
     assert ">Carretos Group<" in page and "(LinkedIn empresa)" not in page.split("li-name")[1][:80]
     assert "Como vai aparecer no LinkedIn" not in client.get(f"/post/{ig}").text
-    assert calls == ["https://carretos.pt/servicos"]
+    assert calls == ["https://exemplo.com/servicos"]
 
 
 def test_linkpreview_blocks_private_addresses():
@@ -1546,7 +1546,7 @@ def test_create_text_only_draft(client):
     with connect() as conn:
         row = conn.execute("SELECT format, status, media_ids FROM posts WHERE id=?", (pid,)).fetchone()
     assert row["format"] == "text" and row["status"] == "draft" and not json.loads(row["media_ids"] or "[]")
-    assert 'id="li-card"' in client.get(f"/post/{pid}").text
+    assert 'id="li-card-own"' in client.get(f"/post/{pid}").text            # link carretos.pt: cartão próprio
     assert "não aceita" in client.post("/criar", data={"tipo": "texto", "conta": "ig_carretoclips", "tema": "x"}).text
 
 
@@ -1585,3 +1585,73 @@ def test_linkpreview_parser_entities_icon_and_old_cache(tmp_path, monkeypatch):
     d = linkpreview.preview(url)                                       # a cache antiga (sem versão) é ignorada
     assert d["title"] == "Carreto's Group" and d["sources"]["title"] == "og:title"
     assert d["image"] == "https://www.carretos.pt/escudo.png" and d["sources"]["image"] == "ícone do site"
+
+
+def test_link_card_own_domain_article_and_guard(client, monkeypatch):
+    from PIL import Image
+    from carretos_social import linkcard
+    from carretos_social.db import add_post, connect, get_post
+    from carretos_social.publishers.base import PublishRequest
+    from carretos_social.publishers import linkedin as li_pub
+    from carretos_social.scheduler import ready_problems
+    from carretos_social.config import accounts
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    with connect() as conn:
+        pid = add_post(conn, account_id="li_carretosgroup", format="text", status="draft",
+                       caption="[TESTE] Veja https://www.carretos.pt", scheduled_at="2030-01-01T10:00:00+00:00")
+        row = get_post(conn, pid)
+    card = linkcard.for_post(row, "linkedin_org")
+    assert card["mode"] == "proprio" and card["title"] == "Carreto's Group" and "Cacém" in card["description"]
+    assert "AURON" not in card["description"] and "Sintra" not in card["description"]
+    page = client.get(f"/post/{pid}").text
+    assert 'id="li-card-own"' in page and f"/post/{pid}/cartao.png" in page and "Carreto&#39;s Group" in page
+    r = client.get(f"/post/{pid}/cartao.png")
+    assert r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n"
+    import io
+    assert Image.open(io.BytesIO(r.content)).size == (1200, 627)
+    # SVG recusado; título com palavra proibida bloqueia a aprovação
+    r = client.post(f"/post/{pid}/cartao", data={"titulo": "x"}, files={"imagem": ("a.svg", b"<svg/>", "image/svg+xml")},
+                    follow_redirects=False)
+    assert "falha=" in r.headers["location"]
+    client.post(f"/post/{pid}/cartao", data={"titulo": "Orçamento pelo AURON", "descricao": ""})
+    with connect() as conn:
+        assert any("cartão do link" in x for x in ready_problems(get_post(conn, pid)))
+    client.post(f"/post/{pid}/cartao", data={"repor": "1"})
+    with connect() as conn:
+        row = get_post(conn, pid)
+        assert not any("cartão" in x for x in ready_problems(row))
+    # publicação: vai como artigo com miniatura carregada pela Images API
+    sent = {}
+
+    class R:
+        def __init__(self, data=None, headers=None):
+            self._d, self.headers = data or {}, headers or {}
+
+        def json(self):
+            return self._d
+
+    def fake_rest(method, url, headers=None, json=None, **kw):
+        if "initializeUpload" in url:
+            return R({"value": {"uploadUrl": "https://up", "image": "urn:li:image:X"}})
+        sent["body"] = json
+        return R(headers={"x-restli-id": "urn:li:share:1"})
+    monkeypatch.setattr(li_pub, "li_rest", fake_rest)
+    monkeypatch.setattr(li_pub, "request", lambda *a, **k: R())
+    acc = accounts()["li_carretosgroup"]
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok" if "token" in k else "urn:li:organization:1")
+    req = PublishRequest(account=acc, format="text", caption=row["caption"], article=linkcard.resolve(card))
+    li_pub.LinkedInPublisher().publish(req)
+    art = sent["body"]["content"]["article"]
+    assert art == {"source": "https://www.carretos.pt", "title": "Carreto's Group",
+                   "description": card["description"], "thumbnail": "urn:li:image:X"}
+
+
+def test_linkpreview_ignores_svg_og_image(tmp_path, monkeypatch):
+    from carretos_social.web import linkpreview
+    monkeypatch.setattr(linkpreview._cfg, "DATA_DIR", tmp_path)
+    page = ('<meta property="og:title" content="Site"><meta property="og:image" content="/logo.svg">'
+            '<meta name="twitter:image" content="/logo.svg"><link rel="icon" href="/fav.png" sizes="32x32">')
+    monkeypatch.setattr(linkpreview, "_safe_get", lambda u: (u, page))
+    d = linkpreview.preview("https://exemplo.com/")
+    assert d["image"] == "https://exemplo.com/fav.png"

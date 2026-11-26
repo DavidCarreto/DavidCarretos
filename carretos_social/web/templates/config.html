@@ -46,6 +46,20 @@ Os outros campos foram guardados.</div>{% endif %}
 <form method="post" action="/configurar/telegram-chat"><button class="btn" {{ 'disabled' if not tg_token }}>🔎 Descobrir o chat</button></form>
 <form method="post" action="/configurar/testar-telegram"><button class="btn" {{ 'disabled' if not tg_ok }}>✈ Enviar mensagem de teste</button></form>
 </div>{% if not tg_ok %}<p class="fmt-line ajustar" style="margin:8px 0 0">⚠ Telegram por configurar: os posts em modo assistido ficam só em "Para publicar à mão" no dashboard.</p>{% endif %}</div>{% endif %}
+{% if not first %}<form method="post" action="/configurar/cartao-link" enctype="multipart/form-data" class="card" id="cartao-link" style="margin-top:12px">
+<b>Cartão dos links carretos.pt (LinkedIn)</b>
+{% set cs = request.query_params.get('cartao') %}{% if cs == 'ok' %}<p style="color:#3fb950;margin:6px 0">✓ Guardado.</p>{% elif cs %}<p class="fmt-line editar" style="margin:6px 0">✕ {{ cs }}</p>{% endif %}
+<p class="muted" style="font-size:13px;margin:4px 0 10px">Nos posts do LinkedIn só com texto e um link do carretos.pt, o cartão do link leva esta imagem, título e descrição
+(o LinkedIn não lê o site quando se publica pela API). Cada rascunho pode mudar os seus. Links de outros sites: lidos automaticamente.</p>
+<img src="/configurar/cartao-link.png?v={{ range(100000)|random }}" alt="" style="display:block;width:100%;max-width:600px;aspect-ratio:1200/627;object-fit:cover;border-radius:8px;border:1px solid var(--line)">
+<p class="muted" style="font-size:12px;margin:4px 0 10px">{{ 'Imagem carregada por si.' if lcard_custom else 'Imagem de origem (logótipo do site em fundo preto com dourado).' }} Recomendado: 1200×627, PNG ou JPG (o LinkedIn não aceita SVG).</p>
+<label>Trocar a imagem</label><input type="file" name="imagem" accept="image/png,image/jpeg,image/gif">
+<label>Título</label><input name="titulo" value="{{ lcard.title }}" maxlength="200">
+<label>Descrição</label><textarea name="descricao" rows="2" maxlength="300">{{ lcard.description }}</textarea>
+<p class="muted" style="font-size:12px;margin:4px 0 0">Só factos da base de conhecimento; as palavras proibidas da marca (ex.: AURON) bloqueiam a aprovação.</p>
+<div class="row" style="margin-top:8px"><button class="btn gold">Guardar</button>
+{% if lcard_custom %}<button class="btn" name="repor" value="1" onclick="return confirm('Voltar à imagem de origem?')">Repor a imagem de origem</button>{% endif %}</div>
+</form>{% endif %}
 {% if not first %}<div class="card" style="margin-top:12px">
 <b>Manutenção</b>
 <p class="muted" style="font-size:13px;margin:4px 0 10px">Atualiza o Carretos Studio para a versão mais recente (faz primeiro uma cópia de segurança da base de dados e reinicia os serviços). Não precisa da consola da Hetzner.</p>

@@ -39,8 +39,8 @@ def _public(host: str) -> bool:
     return True
 
 
-def _safe_get(url: str, hops: int = 3) -> tuple[str, str]:
-    """(url final, html) só de endereços públicos http/https, seguindo até 3 redirecionamentos verificados."""
+def _safe_fetch(url: str, max_bytes: int = MAX_BYTES, hops: int = 3) -> tuple[str, bytes, str]:
+    """(url final, conteúdo, tipo) só de endereços públicos http/https, seguindo até 3 redirecionamentos verificados."""
     import requests
     for _ in range(hops + 1):
         p = urlparse(url)
@@ -56,10 +56,28 @@ def _safe_get(url: str, hops: int = 3) -> tuple[str, str]:
         body = b""
         for chunk in r.iter_content(65536):
             body += chunk
-            if len(body) > MAX_BYTES:
+            if len(body) > max_bytes:
                 break
-        return url, body.decode(r.encoding or "utf-8", errors="replace")
+        r.raise_for_status()
+        return url, body[:max_bytes], r.headers.get("content-type", "")
     raise ValueError("demasiados redirecionamentos")
+
+
+def _safe_get(url: str, hops: int = 3) -> tuple[str, str]:
+    final, body, _ = _safe_fetch(url, MAX_BYTES, hops)
+    return final, body.decode("utf-8", errors="replace")
+
+
+def _is_svg(url: str) -> bool:
+    return urlparse(url).path.lower().endswith((".svg", ".svgz"))
+
+
+def fetch_image(url: str) -> bytes:
+    """Imagem (PNG/JPG/GIF, até 5 MB) para a miniatura do artigo no LinkedIn."""
+    _, body, ctype = _safe_fetch(url, 5 * 1024 * 1024)
+    if not (body[:8] == b"\x89PNG\r\n\x1a\n" or body[:3] == b"\xff\xd8\xff" or body[:4] == b"GIF8"):
+        raise ValueError(f"a imagem não é PNG, JPG nem GIF ({ctype or 'tipo desconhecido'})")
+    return body
 
 
 class _Head(HTMLParser):
@@ -114,10 +132,11 @@ def _best_icon(h: _Head) -> str:
     def size(icon):
         m = re.match(r"(\d+)x\d+", icon[1])
         return (int(m.group(1)) if m else (180 if "apple" in icon[0] else 16))
-    return max(h.icons, key=size)[2] if h.icons else ""
+    icons = [i for i in h.icons if not _is_svg(i[2])]
+    return max(icons, key=size)[2] if icons else ""
 
 
-CACHE_VERSION = 2          # mudar quando a leitura muda (ignora o que ficou guardado com a leitura antiga)
+CACHE_VERSION = 3          # mudar quando a leitura muda (ignora o que ficou guardado com a leitura antiga)
 
 
 def preview(url: str, fresh: bool = False) -> dict:
@@ -143,7 +162,10 @@ def preview(url: str, fresh: bool = False) -> dict:
         tk, title = first("og:title", "twitter:title")
         if not title and h.title.strip():
             tk, title = "<title>", h.title.strip()
-        ik, img = first("og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src")
+        # como o LinkedIn: as imagens SVG são ignoradas
+        cands = [(k, v) for k in ("og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src")
+                 for v in h.meta.get(k, []) if not _is_svg(urljoin(final, v))]
+        ik, img = cands[0] if cands else ("", "")
         if not img and _best_icon(h):
             ik, img = "ícone do site", _best_icon(h)
         data.update(title=" ".join(title.split())[:200], description=first("og:description", "description")[1][:300],

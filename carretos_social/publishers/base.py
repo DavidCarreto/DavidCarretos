@@ -13,6 +13,7 @@ class PublishRequest:
     media: list[str] = field(default_factory=list)   # caminhos locais
     cover: str | None = None
     title: str = ""
+    article: dict | None = None     # LinkedIn só texto + link: cartão do link (url, title, description, image_bytes)
 
 
 @dataclass

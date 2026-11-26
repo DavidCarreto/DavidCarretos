@@ -6,7 +6,7 @@
   <span class="li-toggle"><button type="button" class="btn sel" data-w="555">💻 Computador</button><button type="button" class="btn" data-w="360">📱 Telemóvel</button></span>
  </div>
  <p class="muted" style="font-size:12px;margin:4px 0 10px">Aproximação feita no dashboard: nada é enviado ao LinkedIn. {{ li.chars }} caracteres (máx. 3000).
- {% if li.link and p.media %}<br>ℹ O post tem imagem, por isso o LinkedIn mostra o link só como texto (sem cartão do link).{% elif li.link %}<br>ℹ Sem imagem: o LinkedIn mostra o cartão do link por baixo do texto.{% endif %}</p>
+ {% if li.link and p.media %}<br>ℹ O post tem imagem, por isso o LinkedIn mostra o link só como texto (sem cartão do link).{% elif li.card %}<br>ℹ Sem imagem: vai como artigo, com o cartão do link por baixo do texto.{% endif %}</p>
  <div class="li-post" id="li-post" style="width:555px" data-src="/post/{{ p.id }}/link-preview">
   <div class="li-head">
    <div class="li-avatar {{ 'org' if li.org }}">{{ li.name[:1] }}</div>
@@ -21,6 +21,11 @@
     {% for m in p.media[:4] %}<div class="li-cell">{% if m.video %}<video src="/media/{{ m.id }}" muted playsinline preload="metadata"></video>{% else %}<img src="/media/{{ m.id }}" alt="" {% if n == 1 %}class="li-single"{% endif %}>{% endif %}
      {% if loop.index == 4 and n > 4 %}<span class="li-plus">+{{ n - 4 }}</span>{% endif %}</div>{% endfor %}
    </div>
+  {% elif li.card and li.c.mode == 'proprio' %}
+   <a class="li-card big" id="li-card-own" href="{{ li.link }}" target="_blank" rel="noopener noreferrer">
+    {% if li.c.image %}<img class="li-card-photo" src="/post/{{ p.id }}/cartao.png" alt="">{% endif %}
+    <div class="li-card-body"><div class="li-card-title">{{ li.c.title or '(sem título)' }}</div><div class="li-sub">{{ li.c.domain }}</div></div>
+   </a>
   {% elif li.card %}
    <a class="li-card" id="li-card" href="{{ li.link }}" target="_blank" rel="noopener noreferrer">
     <div class="li-card-img" id="li-card-img"></div>
@@ -29,10 +34,22 @@
   {% endif %}
   <div class="li-bar"><span>👍 Gosto</span><span>💬 Comentar</span><span>🔁 Partilhar</span><span>➤ Enviar</span></div>
  </div>
-{% if li.card %}<details class="li-diag" id="li-diag" style="margin-top:8px;font-size:12px"><summary class="muted">De onde vem o cartão do link</summary>
- <div id="li-diag-body" class="muted" style="margin-top:4px;word-break:break-all">A ler…</div>
- <button type="button" class="btn" id="li-fresh" style="padding:3px 10px;font-size:12px;margin-top:6px">↻ Ler o link outra vez</button>
- <span class="muted">· Para ver o que o próprio LinkedIn usa: <a class="gold" href="https://www.linkedin.com/post-inspector/" target="_blank" rel="noopener">Post Inspector do LinkedIn</a></span>
+{% if li.card %}<details class="li-diag" id="li-diag" style="margin-top:8px;font-size:12px" {{ 'open' if request.query_params.get('cartao') }}>
+ <summary class="muted">Cartão do link: {{ 'definido no Carretos Studio' if li.c.mode == 'proprio' else 'lido do site automaticamente' }} (mudar)</summary>
+ {% if li.c.mode == 'auto' %}<div id="li-diag-body" class="muted" style="margin-top:4px;word-break:break-all">A ler…</div>
+ <button type="button" class="btn" id="li-fresh" style="padding:3px 10px;font-size:12px;margin-top:6px">↻ Ler o link outra vez</button>{% endif %}
+ <p class="muted" style="margin:6px 0">No LinkedIn, este post vai como <b>artigo</b>: a API não lê o site, por isso o cartão leva o título, a descrição
+ e a imagem {{ 'definidos aqui' if li.c.mode == 'proprio' else 'lidos agora do site (as imagens SVG são ignoradas)' }}. O LinkedIn mostra a imagem e o título; a descrição pode não aparecer no feed.</p>
+ {% if li.c.mode == 'proprio' and li.c.description %}<p class="muted" style="margin:0 0 6px">Descrição: {{ li.c.description }}</p>{% endif %}
+ {% if can_create %}<form method="post" action="/post/{{ p.id }}/cartao" enctype="multipart/form-data">
+  <label>Título do cartão</label><input name="titulo" value="{{ li.ov.title or '' }}" maxlength="200" placeholder="{{ li.c.title if li.c.mode == 'proprio' else 'título lido do site' }}">
+  <label>Descrição do cartão</label><textarea name="descricao" rows="2" maxlength="300" placeholder="{{ li.c.description if li.c.mode == 'proprio' else 'descrição lida do site' }}">{{ li.ov.description or '' }}</textarea>
+  <label>Imagem só deste post (PNG ou JPG, recomendado 1200×627)</label><input type="file" name="imagem" accept="image/png,image/jpeg,image/gif">
+  <p class="muted" style="margin:4px 0 0">Campos vazios = os de ⚙ Configurar (links carretos.pt) ou os do site (outros links).</p>
+  <div class="row" style="margin-top:6px"><button class="btn gold" style="padding:4px 12px;font-size:12px">Guardar o cartão</button>
+  {% if li.c.custom %}<button class="btn" name="repor" value="1" style="padding:4px 12px;font-size:12px">Voltar ao cartão por omissão</button>{% endif %}</div>
+ </form>{% endif %}
+ <p class="muted" style="margin:6px 0 0">Ver o que o LinkedIn faz com o link: <a class="gold" href="https://www.linkedin.com/post-inspector/" target="_blank" rel="noopener">Post Inspector do LinkedIn</a></p>
 </details>{% endif %}
 </div>
 <style>
@@ -57,6 +74,7 @@
 .li-card{display:block;margin-top:8px;background:#eef3f8;color:inherit;text-decoration:none}
 .li-card-img{aspect-ratio:1.91/1;background:#dce6f1 center/cover no-repeat}
 .li-card-img.none{display:none}
+.li-card-photo{display:block;width:100%;aspect-ratio:1200/627;object-fit:cover;background:#000}
 .li-card.small{display:flex;align-items:center;gap:12px;margin:8px 16px 0;padding:12px;background:#fff;border:1px solid #e0e0e0;border-radius:8px}
 .li-card.small .li-card-img{flex:none;width:72px;aspect-ratio:auto;height:72px;border-radius:6px;background-size:contain;background-color:#fff}
 .li-card.small .li-card-body{padding:0}

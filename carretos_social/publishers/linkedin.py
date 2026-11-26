@@ -37,15 +37,25 @@ class LinkedInPublisher(Publisher):
                 body["content"] = {"multiImage": {"images": [{"id": self._image(p)} for p in req.media[:20]]}}
             else:
                 body["content"] = {"media": {"id": self._image(req.media[0])}}
+        elif req.article:
+            # a Posts API não lê o site: o cartão do link vai como artigo com título, descrição e miniatura
+            art = {"source": req.article["url"], "title": (req.article.get("title") or req.article["url"])[:400]}
+            if req.article.get("description"):
+                art["description"] = req.article["description"][:4086]
+            if req.article.get("image_bytes"):
+                art["thumbnail"] = self._image_bytes(req.article["image_bytes"])
+            body["content"] = {"article": art}
         resp = li_rest("POST", f"{API}/posts", headers=self.h, json=body)
         urn = resp.headers.get("x-restli-id", "")
         return PublishResult(remote_id=urn, url=f"https://www.linkedin.com/feed/update/{quote(urn)}/")
 
     def _image(self, path: str) -> str:
+        return self._image_bytes(Path(path).read_bytes())
+
+    def _image_bytes(self, data: bytes) -> str:
         init = li_rest("POST", f"{API}/images?action=initializeUpload", headers=self.h,
                        json={"initializeUploadRequest": {"owner": self.author}}).json()["value"]
-        request("PUT", init["uploadUrl"], headers={"Authorization": self.h["Authorization"]},
-                data=Path(path).read_bytes())
+        request("PUT", init["uploadUrl"], headers={"Authorization": self.h["Authorization"]}, data=data)
         return init["image"]
 
     def _video(self, path: str, cover: str | None) -> str:
