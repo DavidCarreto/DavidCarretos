@@ -1425,3 +1425,11 @@ def test_duplicates_check(client, tmp_path):
     assert total(f) == 4
     page = client.get("/verificacao").text
     assert "Publicações da mesma conta à mesma hora" in page and "A marca chama-se AURON." in page
+
+
+def test_linkedin_secret_formats_accepted():
+    import carretos_social.web.app as app_mod
+    fake = "WPL_AP1.abcDEF123/xyz+Q9==.Zz-90_k"           # inventado, no formato dos secrets do LinkedIn
+    for key in ("LINKEDIN_CLIENT_SECRET", "LINKEDIN_ORG_CLIENT_SECRET"):
+        assert not app_mod._bad_key(key, fake)
+        assert app_mod._bad_key(key, "tem espaços no meio 123")
