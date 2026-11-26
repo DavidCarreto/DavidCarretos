@@ -9,6 +9,7 @@ import json
 import re
 import socket
 import time
+from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
 from .. import config as _cfg
@@ -61,18 +62,66 @@ def _safe_get(url: str, hops: int = 3) -> tuple[str, str]:
     raise ValueError("demasiados redirecionamentos")
 
 
+class _Head(HTMLParser):
+    """Lê as etiquetas <meta>, <link rel=icon> e <title> com um leitor de HTML a sério (aspas simples ou duplas,
+    apóstrofos, &#39;, atributos por qualquer ordem)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.meta: dict[str, list[str]] = {}
+        self.icons: list[tuple[str, str, str]] = []           # (rel, sizes, href)
+        self.title, self._in_title = "", False
+
+    def handle_starttag(self, tag, attrs):
+        a = {k.lower(): (v or "") for k, v in attrs}
+        if tag == "meta":
+            key = (a.get("property") or a.get("name") or a.get("itemprop") or "").strip().lower()
+            if key and a.get("content", "").strip():
+                self.meta.setdefault(key, []).append(a["content"].strip())
+        elif tag == "link" and "icon" in a.get("rel", "").lower() and a.get("href"):
+            self.icons.append((a["rel"].lower(), a.get("sizes", ""), a["href"]))
+        elif tag == "title" and not self.title:
+            self._in_title = True
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self._in_title = False
+
+
+def _head(page: str) -> _Head:
+    h = _Head()
+    try:
+        h.feed(page)
+    except Exception:  # noqa: BLE001
+        pass
+    return h
+
+
 def _meta(page: str, *names: str) -> str:
+    h = _head(page)
     for name in names:
-        for pat in (rf'<meta[^>]+(?:property|name)=(["\']){re.escape(name)}\1[^>]*?content=(["\'])(?P<v>.*?)\2',
-                    rf'<meta[^>]+content=(["\'])(?P<v>.*?)\1[^>]*?(?:property|name)=(["\']){re.escape(name)}\3'):
-            m = re.search(pat, page, re.I | re.S)
-            if m and m.group("v").strip():
-                return html.unescape(m.group("v").strip())
+        if h.meta.get(name.lower()):
+            return h.meta[name.lower()][0]
     return ""
 
 
-def preview(url: str) -> dict:
-    """{url, domain, title, description, image} (vazios se não for possível ler a página)."""
+def _best_icon(h: _Head) -> str:
+    """Ícone maior do site (apple-touch-icon / icon com tamanho), usado quando não há og:image."""
+    def size(icon):
+        m = re.match(r"(\d+)x\d+", icon[1])
+        return (int(m.group(1)) if m else (180 if "apple" in icon[0] else 16))
+    return max(h.icons, key=size)[2] if h.icons else ""
+
+
+CACHE_VERSION = 2          # mudar quando a leitura muda (ignora o que ficou guardado com a leitura antiga)
+
+
+def preview(url: str, fresh: bool = False) -> dict:
+    """{url, domain, title, description, image, sources} (vazios se não for possível ler a página)."""
     if not url:
         return {}
     path = _cfg.DATA_DIR / "og_cache.json"
@@ -81,19 +130,26 @@ def preview(url: str) -> dict:
     except (OSError, ValueError):
         cache = {}
     hit = cache.get(url)
-    if hit and time.time() - hit.get("_at", 0) < CACHE_HOURS * 3600:
+    if (hit and not fresh and hit.get("_v") == CACHE_VERSION
+            and time.time() - hit.get("_at", 0) < CACHE_HOURS * 3600):
         return hit
     domain = (urlparse(url).hostname or "").removeprefix("www.")
-    data = {"url": url, "domain": domain, "title": "", "description": "", "image": "", "_at": time.time()}
+    data = {"url": url, "domain": domain, "title": "", "description": "", "image": "", "sources": {},
+            "_at": time.time(), "_v": CACHE_VERSION}
     try:
         final, page = _safe_get(url)
-        title = _meta(page, "og:title", "twitter:title")
-        if not title:
-            m = re.search(r"<title[^>]*>(.*?)</title>", page, re.I | re.S)
-            title = html.unescape(m.group(1).strip()) if m else ""
-        img = _meta(page, "og:image", "twitter:image")
-        data.update(title=title[:200], description=_meta(page, "og:description", "description")[:300],
-                    image=urljoin(final, img) if img else "")
+        h = _head(page)
+        first = lambda *ks: next(((k, h.meta[k][0]) for k in ks if h.meta.get(k)), ("", ""))  # noqa: E731
+        tk, title = first("og:title", "twitter:title")
+        if not title and h.title.strip():
+            tk, title = "<title>", h.title.strip()
+        ik, img = first("og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src")
+        if not img and _best_icon(h):
+            ik, img = "ícone do site", _best_icon(h)
+        data.update(title=" ".join(title.split())[:200], description=first("og:description", "description")[1][:300],
+                    image=urljoin(final, img) if img else "",
+                    sources={"title": tk, "image": ik, "og_images": [urljoin(final, x) for x in h.meta.get("og:image", [])][:5],
+                             "icons": [urljoin(final, i[2]) for i in h.icons][:5]})
     except Exception as exc:  # noqa: BLE001
         data["error"] = str(exc)[:200]
     cache[url] = data

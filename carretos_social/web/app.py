@@ -380,11 +380,12 @@ def post_link_preview(request: Request, pid: int):
     from . import linkpreview
     out: dict = {"card": None, "sub": ""}
     if li["card"]:
-        out["card"] = {k: v for k, v in linkpreview.preview(li["link"]).items() if not k.startswith("_")}
+        fresh = request.query_params.get("fresh") == "1" and me.can_create(p["account_id"])
+        out["card"] = {k: v for k, v in linkpreview.preview(li["link"], fresh=fresh).items() if not k.startswith("_")}
     if li["org"]:
         from .. import linkedin_connect as lc
         n = lc.followers(p["account"])
-        out["sub"] = f"{n:,} seguidores".replace(",", " ") if n is not None else ""
+        out["sub"] = f"{n:,} seguidores".replace(",", ".") if n is not None else ""     # como o LinkedIn: 1.517
     return JSONResponse(out)
 
 

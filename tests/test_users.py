@@ -1567,3 +1567,21 @@ def test_og_title_with_apostrophe_and_remove_date(client):
     client.post(f"/post/{pid}", data={"action": "guardar", "quando": "", "sem_data": "1"})
     with connect() as conn:
         assert conn.execute("SELECT scheduled_at FROM posts WHERE id=?", (pid,)).fetchone()[0] is None
+
+
+def test_linkpreview_parser_entities_icon_and_old_cache(tmp_path, monkeypatch):
+    import time
+    from carretos_social.web import linkpreview
+    page = ("<html><head><title>Carreto&#39;s Group | Oficinas</title>"
+            "<meta content='Carreto&#39;s Group' property='og:title'>"
+            '<link rel="icon" href="/fav-16.png" sizes="16x16"><link rel="apple-touch-icon" href="/escudo.png" sizes="180x180">'
+            "</head></html>")
+    assert linkpreview._meta(page, "og:title") == "Carreto's Group"
+    assert linkpreview._meta('<meta property="og:title" content="Carreto’s Group">', "og:title") == "Carreto’s Group"
+    monkeypatch.setattr(linkpreview._cfg, "DATA_DIR", tmp_path)
+    url = "https://www.carretos.pt"
+    (tmp_path / "og_cache.json").write_text(json.dumps({url: {"url": url, "title": "Carreto", "_at": time.time()}}))
+    monkeypatch.setattr(linkpreview, "_safe_get", lambda u: (u + "/", page))
+    d = linkpreview.preview(url)                                       # a cache antiga (sem versão) é ignorada
+    assert d["title"] == "Carreto's Group" and d["sources"]["title"] == "og:title"
+    assert d["image"] == "https://www.carretos.pt/escudo.png" and d["sources"]["image"] == "ícone do site"
