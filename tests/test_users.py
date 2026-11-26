@@ -2040,3 +2040,14 @@ def test_mail_receiver_accepts_only_secret_address_and_alerts(tmp_path, monkeypa
     finally:
         loop.call_soon_threadsafe(loop.stop)
         th.join(5)
+
+
+def test_config_shows_non_secret_values_only(client, monkeypatch):
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("SMTP_HOST", "mail.exemplo.pt")
+    monkeypatch.setenv("SMTP_USER", "studio@exemplo.pt")
+    monkeypatch.setenv("SMTP_PASSWORD", "palavra-secreta-123")
+    page = client.get("/configurar").text
+    assert "atual: <code" in page and "mail.exemplo.pt" in page and "studio@exemplo.pt" in page
+    assert "palavra-secreta-123" not in page

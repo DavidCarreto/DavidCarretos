@@ -1869,7 +1869,9 @@ def config_page(request: Request, ok: str = "", erro: str = "", teste: str = "",
     if not first and not (me and me.is_admin):
         return RedirectResponse("/login", 303)
     request.state.user = me
-    fields = [(k, label, secret, bool(os.environ.get(k))) for k, label, secret in CONFIG_FIELDS]
+    # valores que não são segredos aparecem (só ao administrador); as chaves e palavras-passe nunca
+    fields = [(k, label, secret, bool(os.environ.get(k)),
+               "" if (secret or first) else os.environ.get(k, "")) for k, label, secret in CONFIG_FIELDS]
     labels = {k: label for k, label, _ in CONFIG_FIELDS}
     erros = [(labels.get(k, k), KEY_FORMATS[k][1]) for k in erro.split(",") if k in KEY_FORMATS]
     from .. import linkcard
