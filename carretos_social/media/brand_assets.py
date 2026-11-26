@@ -2,7 +2,7 @@
 
 - pessoal (redes do David): sem logótipo, assinatura "David Carreto".
 - carretos (Carretos Group): logótipo oficial CARRETO'S GROUP (branco, do site), sem o nome do David.
-- auron: logótipo carregado pelo David (até lá, "AURON" em texto, em cima), sem o nome do David.
+- auron: logótipo oficial AURON dourado (dado pelo David, fundo retirado), sem o nome do David.
 Cada imagem leva o nome UMA só vez (logótipo/marca em cima OU assinatura por baixo da frase).
 Mudam-se em ⚙ Configurar → "Logótipo e assinatura das imagens".
 """
@@ -17,7 +17,7 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets"
 BRANDS = {
     "pessoal": {"label": "David Carreto (contas pessoais)", "logo": None, "signature": "David Carreto"},
     "carretos": {"label": "Carretos Group", "logo": ASSETS / "carretos-logo-branco.png", "signature": ""},
-    "auron": {"label": "AURON", "logo": None, "signature": ""},        # "AURON" só em cima (uma vez)
+    "auron": {"label": "AURON", "logo": ASSETS / "auron-logo-dourado.png", "signature": ""},   # logótipo em cima (uma vez)
 }
 IMAGE_EXT = (".png", ".jpg", ".jpeg")
 
