@@ -1,7 +1,7 @@
 # Identidade das imagens geradas (cores, logótipos e assinaturas)
 
 Valores **base** de cada marca. A equipa pode mudá-los em ⚙ Configurar → "Logótipo e assinatura das imagens";
-o botão "Repor a cor base" / "Repor o logótipo original" volta sempre a estes valores.
+os botões "↺ Usar a cor base" e "Repor o logótipo original" voltam sempre a estes valores.
 
 | Marca | Cor de destaque (aspas e traço) | Logótipo | Assinatura por baixo da frase |
 |---|---|---|---|
