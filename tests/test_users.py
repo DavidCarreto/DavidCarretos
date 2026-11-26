@@ -1759,3 +1759,22 @@ def test_li_display_paragraphs_like_linkedin():
     from carretos_social.web.linkpreview import li_display
     txt = "Linha 1\nLinha 2\n\n\nLinha 3\n#CarretosGroup #MercedesBenz"
     assert li_display(txt) == "Linha 1\n\nLinha 2\n\nLinha 3\n#CarretosGroup #MercedesBenz"
+
+
+def test_published_post_has_no_approve_and_li_member_metrics_ignored(client, monkeypatch):
+    from carretos_social.analytics import connectors
+    from carretos_social.config import accounts
+    from carretos_social.db import add_post, connect
+    from carretos_social.web.linkpreview import li_collapsed
+    assert li_collapsed("A\n\nB\n#x") == "A\nB\n#x"
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    with connect() as conn:
+        pid = add_post(conn, account_id="li_davidcarreto", format="text", status="published", caption="Texto")
+    page = client.get(f"/post/{pid}").text
+    assert 'value="aprovar"' not in page and "Já publicado" in page
+    assert client.post(f"/post/{pid}", data={"action": "aprovar"}).status_code == 403
+    acc = accounts()["li_davidcarreto"]
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "x")
+    with pytest.raises(connectors.NotConfigured):
+        connectors.fetch_linkedin(acc)

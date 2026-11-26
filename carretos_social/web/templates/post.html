@@ -81,10 +81,12 @@
  {% else %}<button class="btn" name="action" value="legenda_ia" formnovalidate onclick="return confirm('Refazer a legenda com a IA? A legenda atual fica guardada no Histórico.')" style="font-size:13px;padding:6px 12px">✦ Refazer legenda com a IA</button>{% endif %}</p>{% endif %}
  <p class="muted" style="font-size:13px">{{ p.tags }}</p>
  {% if p.error and p.status != 'failed' %}<p style="color:#ff8f8f">⚠ {{ p.error }}</p>{% endif %}
- {% if can_create %}<div class="row">{% if can_approve %}<button class="btn gold" name="action" value="aprovar">✓ Guardar e aprovar</button>{% endif %}
+ {% set done = p.status in ('published', 'assist_sent', 'tiktok_draft') %}
+ {% if done %}<p class="muted" style="font-size:13px;margin:6px 0">✓ {{ 'Já publicado' if p.status == 'published' else 'Já enviado' }}: mudar o texto aqui não altera {{ 'o post na rede' if p.status == 'published' else 'o que já foi enviado' }}.</p>{% endif %}
+ {% if can_create %}<div class="row">{% if can_approve and not done %}<button class="btn gold" name="action" value="aprovar">✓ Guardar e aprovar</button>{% endif %}
  <button class="btn" name="action" value="guardar">Guardar</button>
  {% if p.is_video %}<button class="btn" name="action" value="refazer">↻ Refazer vídeo</button>{% endif %}
- {% if can_approve %}<button class="btn red" name="action" value="rejeitar" onclick="return confirm('Rejeitar #{{ p.id }}? Pode ser reposto no Histórico.')">Rejeitar</button>{% endif %}</div>
+ {% if can_approve and not done %}<button class="btn red" name="action" value="rejeitar" onclick="return confirm('Rejeitar #{{ p.id }}? Pode ser reposto no Histórico.')">Rejeitar</button>{% endif %}</div>
  {% else %}<p class="muted">Tens acesso só para ver esta conta.</p>{% endif %}
  {% if extra.script %}<h2>Guião</h2>{% for s in extra.script %}<p style="font-size:14px"><b class="gold">{{ s.seconds }}</b> {{ s.voice_or_text }}<br><span class="muted">{{ s.visual }}</span></p>{% endfor %}{% endif %}
 </form>

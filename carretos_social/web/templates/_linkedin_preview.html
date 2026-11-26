@@ -16,6 +16,7 @@
   </div>
   <div class="li-text" id="li-text">{{ li.html|safe }}</div>
   <script type="application/json" id="li-raw">{{ li.text|tojson }}</script>
+  <script type="application/json" id="li-short">{{ li.short|tojson }}</script>
   {% if p.media %}
    <div class="li-media n{{ [n, 5]|min }}">
     {% for m in p.media[:4] %}<div class="li-cell">{% if m.video %}<video src="/media/{{ m.id }}" muted playsinline preload="metadata"></video>{% else %}<img src="/media/{{ m.id }}" alt="" {% if n == 1 %}class="li-single"{% endif %}>{% endif %}
@@ -84,20 +85,23 @@
 <script>
 (function(){
  var post=document.getElementById('li-post'),t=document.getElementById('li-text');
- var raw=JSON.parse(document.getElementById('li-raw').textContent),open=false,LINES=3;
+ var raw=JSON.parse(document.getElementById('li-raw').textContent),short=JSON.parse(document.getElementById('li-short').textContent),open=false,LINES=3;
  function esc(s){return s.replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
  function fmt(s){return s.split(/(https?:\/\/[^\s<>"]+|#[^\s#.,;:!?()\[\]{}<>"']+)/).map(function(x,i){return i%2?'<span class="li-blue">'+esc(x)+'</span>':esc(x)}).join('')}
- var MORE='<button type="button" class="li-more" id="li-more">…ver mais</button>';
+ var MORE='<button type="button" class="li-more" id="li-more">…mais</button>';
  // corte como o LinkedIn: no fim da 3.ª linha, com "…ver mais" na mesma linha, logo a seguir ao texto
+ // recolhido: o LinkedIn ignora as linhas em branco (só aparecem depois de "…mais")
  function render(){
   t.innerHTML=fmt(raw);
   if(open)return;
+  var full=raw;raw=short;t.innerHTML=fmt(raw);
   var lh=parseFloat(getComputedStyle(t).lineHeight)||20,pad=parseFloat(getComputedStyle(t).paddingTop)||0,max=lh*LINES+pad+2;
-  if(t.offsetHeight<=max)return;
+  if(t.offsetHeight<=max){raw=full;t.innerHTML=fmt(full);if(t.offsetHeight<=max)return;raw=short;t.innerHTML=fmt(short);}
   var lo=0,hi=raw.length;
   while(lo<hi){var mid=(lo+hi+1)>>1;t.innerHTML=fmt(raw.slice(0,mid).replace(/\s+$/,''))+' '+MORE;if(t.offsetHeight<=max)lo=mid;else hi=mid-1;}
   var cut=raw.slice(0,lo);if(lo<raw.length&&/\S/.test(raw[lo])){var sp=cut.search(/\s\S*$/);if(sp>0)cut=cut.slice(0,sp);}  // só entre palavras
   t.innerHTML=fmt(cut.replace(/\s+$/,''))+' '+MORE;
+  raw=full;
   document.getElementById('li-more').onclick=function(){open=true;render();};
  }
  document.querySelectorAll('.li-toggle .btn').forEach(function(b){b.onclick=function(){

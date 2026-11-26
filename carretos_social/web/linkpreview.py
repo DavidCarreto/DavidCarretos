@@ -244,3 +244,8 @@ def li_display(text: str) -> str:
             out += "\n" if _HASHTAG_LINE.match(ln) else "\n\n"
         out += ln
     return out
+
+
+def li_collapsed(text: str) -> str:
+    """Texto recolhido (antes de "…mais"): o LinkedIn ignora as linhas em branco."""
+    return "\n".join(ln.rstrip() for ln in (text or "").replace("\r", "").split("\n") if ln.strip())

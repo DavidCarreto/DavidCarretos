@@ -101,6 +101,10 @@ def fetch_tiktok(acc: Account, limit: int = 20) -> dict:
 # ---------------------------------------------------------------- LinkedIn
 def fetch_linkedin(acc: Account, limit: int = 30) -> dict:
     token, author = _need(acc, "access_token_env", "author_urn_env")
+    if acc.platform == "linkedin_member":
+        # ler os posts/estatísticas de um perfil pessoal exige r_member_social, que o LinkedIn só dá a parceiros
+        raise NotConfigured("métricas do perfil pessoal do LinkedIn precisam da autorização r_member_social, que o "
+                            "LinkedIn só dá a parceiros aprovados. Veja-as no LinkedIn ou importe o CSV.")
     headers = _linkedin_headers(token)
     posts_resp = li_rest("GET", f"{LINKEDIN}/posts", headers=headers,
                          params={"q": "author", "author": author, "count": limit}).json()
@@ -115,10 +119,10 @@ def fetch_linkedin(acc: Account, limit: int = 30) -> dict:
                 key = el.get("share") or el.get("ugcPost")
                 if key:
                     stats_by_share[key] = el.get("totalShareStatistics", {})
-            followers = li_rest("GET", f"{LINKEDIN}/networkSizes/{author}", headers=headers,
-                                params={"edgeType": "COMPANY_FOLLOWED_BY_MEMBER"}).json().get("firstDegreeSize")
         except ApiError:
             pass
+        from ..linkedin_connect import followers as li_followers   # o mesmo valor da pré-visualização (1.517)
+        followers = li_followers(acc)
     for p in posts_resp.get("elements", []):
         s = stats_by_share.get(p["id"], {})
         content = p.get("content") or {}

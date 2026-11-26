@@ -367,7 +367,8 @@ def _li_preview(p: dict) -> dict | None:
     link = linkpreview.first_url(text)
     card = linkcard.for_post(p, a.platform)
     shown = linkpreview.li_display(text)                # parágrafos como no LinkedIn real
-    return {"name": name, "org": org, "text": shown, "html": linkpreview.li_html(shown),
+    return {"name": name, "org": org, "text": shown, "short": linkpreview.li_collapsed(text),
+            "html": linkpreview.li_html(shown),
             "sub": "" if org else os.environ.get("LINKEDIN_HEADLINE", "").strip(),
             "link": link, "card": bool(card), "c": card or {}, "chars": len(text),
             "ov": linkcard.overrides(p)}
@@ -680,6 +681,8 @@ def post_action(request: Request, pid: int, action: str = Form(...), caption: st
         if action == "ajustar":
             jobs.enqueue("ajustar-formato", [str(pid)], f"Ajustar formato #{pid}", user_id=me.id, conn=conn)
             return RedirectResponse("/tarefas", 303)
+        if action in ("aprovar", "rejeitar") and row["status"] in ("published", "assist_sent", "tiktok_draft"):
+            return _forbidden("Esta publicação já saiu: não se aprova nem rejeita outra vez.")
         if action == "aprovar":
             problems = all_problems(conn, get_post(conn, pid))
             if problems:   # fica (ou vai) para a página da publicação, com o erro em cima
