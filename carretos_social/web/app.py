@@ -366,7 +366,8 @@ def _li_preview(p: dict) -> dict | None:
     from .. import linkcard
     link = linkpreview.first_url(text)
     card = linkcard.for_post(p, a.platform)
-    return {"name": name, "org": org, "text": text, "html": linkpreview.li_html(text),
+    shown = linkpreview.li_display(text)                # parágrafos como no LinkedIn real
+    return {"name": name, "org": org, "text": shown, "html": linkpreview.li_html(shown),
             "sub": "" if org else os.environ.get("LINKEDIN_HEADLINE", "").strip(),
             "link": link, "card": bool(card), "c": card or {}, "chars": len(text),
             "ov": linkcard.overrides(p)}

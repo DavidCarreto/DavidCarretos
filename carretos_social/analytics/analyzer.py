@@ -23,6 +23,7 @@ def engagement(m: dict) -> float:
 def sync(conn, account_ids: list[str] | None = None) -> dict[str, str]:
     """Recolhe métricas de todas as contas configuradas. Devolve o estado por conta."""
     result = {}
+    conn.commit()
     for acc in accounts().values():
         if account_ids and acc.id not in account_ids:
             continue
@@ -41,6 +42,7 @@ def sync(conn, account_ids: list[str] | None = None) -> dict[str, str]:
             conn.execute("INSERT OR REPLACE INTO account_stats(account_id, day, followers) VALUES (?,?,?)",
                          (acc.id, datetime.now().date().isoformat(), data["followers"]))
         result[acc.id] = f"ok — {len(data['posts'])} publicações, {data.get('followers') or '?'} seguidores"
+        conn.commit()     # grava conta a conta: a base de dados não fica bloqueada enquanto se espera pelas redes
     return result
 
 

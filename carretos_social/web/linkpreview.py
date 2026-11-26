@@ -228,3 +228,19 @@ def li_html(text: str) -> str:
         pos = m.end()
     out.append(html.escape((text or "")[pos:]))
     return "".join(out)
+
+
+_HASHTAG_LINE = re.compile(r"^\s*(#[^\s#]+\s*)+$")
+
+
+def li_display(text: str) -> str:
+    """Como o LinkedIn mostra o texto publicado pela API: cada mudança de linha vira um parágrafo (com uma linha
+    em branco), exceto antes de uma linha só com hashtags, que fica logo a seguir."""
+    lines = [ln.rstrip() for ln in (text or "").replace("\r", "").split("\n")]
+    paras = [ln for ln in lines if ln.strip()]
+    out = ""
+    for i, ln in enumerate(paras):
+        if i:
+            out += "\n" if _HASHTAG_LINE.match(ln) else "\n\n"
+        out += ln
+    return out

@@ -83,6 +83,7 @@ def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
                          cover=cover, title=row["title"] or "")
     if dry_run:
         return f"#{post_id} [simulação] {acc.name}: {row['format']} com {len(media)} ficheiro(s)"
+    conn.commit()                         # nada fica por gravar enquanto se espera pela rede
     try:
         if card and acc.mode == "auto":
             try:
@@ -168,7 +169,12 @@ def auto_approve(conn) -> None:
 def tick(dry_run: bool = False) -> list[str]:
     with connect() as conn:
         auto_approve(conn)
-        return [publish_post(conn, r["id"], dry_run) for r in due_posts(conn)]
+        conn.commit()
+        out = []
+        for r in due_posts(conn):
+            out.append(publish_post(conn, r["id"], dry_run))
+            conn.commit()                 # cada publicação gravada logo (não bloqueia o dashboard)
+        return out
 
 
 def _code_rev() -> str:
@@ -196,7 +202,13 @@ def _write_status(rev: str) -> None:
 def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     from .analytics.analyzer import sync
 
-    print(f"Agendador ativo (verifica a cada {interval}s). Ctrl+C para parar.")
+    import sys
+    try:                                  # o registo (journalctl) mostra cada linha logo, sem ficar em memória
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except AttributeError:
+        pass
+    print(f"Agendador ativo (verifica a cada {interval}s, versão {_code_rev() or '?'}). Ctrl+C para parar.")
     from .config import ROOT
     rev = _code_rev()
     _write_status(rev)

@@ -1753,3 +1753,9 @@ def test_tiktok_metrics_skipped_without_scopes_and_agendador_status(tmp_path, mo
     (tmp_path / "agendador_estado.json").write_text(json.dumps({"rev": "velho1", "pid": 1, "started": "2026-11-26T06:59:00"}))
     monkeypatch.setattr(system, "git_rev", lambda: "novo222")
     assert system.agendador_status()["old"] is True
+
+
+def test_li_display_paragraphs_like_linkedin():
+    from carretos_social.web.linkpreview import li_display
+    txt = "Linha 1\nLinha 2\n\n\nLinha 3\n#CarretosGroup #MercedesBenz"
+    assert li_display(txt) == "Linha 1\n\nLinha 2\n\nLinha 3\n#CarretosGroup #MercedesBenz"
