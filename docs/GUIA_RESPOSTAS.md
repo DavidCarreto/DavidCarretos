@@ -74,3 +74,20 @@ App → **Webhooks** (adicionar o produto se não existir):
 - **Parceria** → proposta "Obrigado pelo contacto! Para propostas de parceria, envie-nos os detalhes para
   davidcarreto@carretos.pt, que respondemos com toda a atenção." **Sempre para aprovação.** Aviso no Telegram e
   email para a lista de ⚙ Configurar → "Respostas · avisos de parcerias por email".
+
+## LinkedIn · avisos de mensagens privadas (perfil e página)
+
+A API de mensagens do LinkedIn só está aberta a parceiros: o Carretos Studio **não lê nem responde** mensagens,
+só avisa no Telegram a partir dos emails de aviso do LinkedIn.
+
+1. Uma vez, como root (consola da Hetzner): `bash /opt/carretos/deploy/ativar_correio.sh` → cria o serviço
+   `carretos-correio`, que recebe email na porta 25 **só** para um endereço secreto.
+2. ⚙ Configurar → "LinkedIn · avisar no Telegram as mensagens privadas" = sim.
+3. Mensagens → "Endereço para a regra do Hotmail" (ex.: `linkedin-xxxxxxxxxx@carretosstudio.duckdns.org`).
+4. Hotmail → Regras: De contém `linkedin.com` **e** Assunto contém `mensagem` / `message` / `InMail` →
+   Redirecionar para esse endereço.
+5. Aviso: "💬 Nova mensagem no LinkedIn (perfil do David | página Carretos Group) de <nome>", o início da
+   mensagem (se vier no email) e o link. Os emails não são guardados.
+
+Alternativa (se a Microsoft não entregar no servidor): uma caixa dedicada lida por IMAP
+(⚙ Configurar → "Caixa dedicada (alternativa) · …").

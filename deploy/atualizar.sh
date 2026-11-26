@@ -61,6 +61,9 @@ echo "==> Reiniciar serviços"
 # este script (e o systemctl), por isso o que vier depois dele pode não chegar a correr
 sudo /usr/bin/systemctl restart carretos-agendador
 echo "Agendador reiniciado."
+if systemctl list-unit-files carretos-correio.service >/dev/null 2>&1 && systemctl cat carretos-correio >/dev/null 2>&1; then
+  sudo /usr/bin/systemctl restart carretos-correio && echo "Recetor de email reiniciado." || true
+fi
 sudo /usr/bin/systemctl restart carretos-web
 sleep 3
 

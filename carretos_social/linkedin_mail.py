@@ -28,6 +28,37 @@ PARTNER_WORDS = re.compile(r"parceri|fornecedor|colabora|patroc|proposta comerci
 JOB_WORDS = re.compile(r"candidat|emprego|\bvaga|\bcv\b|curr[ií]culo|trabalhar convosco|recrutamento|job", re.I)
 
 
+def receive_address(create: bool = True) -> str:
+    """Endereço secreto deste servidor que recebe os emails redirecionados (criado uma vez e guardado no .env)."""
+    addr = os.environ.get("LINKEDIN_EMAIL_ENDERECO", "").strip()
+    if addr or not create:
+        return addr
+    import secrets
+    from urllib.parse import urlparse
+    from .envfile import set_env
+    from .routine import dashboard_url
+    host = urlparse(dashboard_url("/")).hostname or ""
+    if not host or host in ("localhost", "127.0.0.1"):
+        return ""
+    addr = f"linkedin-{secrets.token_hex(5)}@{host}"
+    set_env({"LINKEDIN_EMAIL_ENDERECO": addr})
+    return addr
+
+
+def handle_message(msg) -> bool:
+    """Um email recebido diretamente pelo servidor (recetor da porta 25): avisa se for de mensagem do LinkedIn."""
+    info = parse(msg)
+    if not info:
+        return False
+    h = hashlib.sha256((msg.get("Message-ID") or "").encode() + (msg.get("Date") or "").encode()).hexdigest()[:24]
+    if h in set(_seen()):
+        return False
+    _alert(info)
+    _remember(h)
+    print(f"correio: aviso de mensagem do LinkedIn ({'página' if info['page'] else 'perfil'})", flush=True)
+    return True
+
+
 def enabled() -> bool:
     return os.environ.get("LINKEDIN_EMAILS_ATIVO", "").strip().lower() in ("sim", "s", "yes", "1", "true")
 
@@ -102,13 +133,29 @@ def parse_parts(subject: str, sender: str, body: str) -> dict | None:
             name = m.group(1).strip(" .:-")[:60]
             break
     page = "Carretos Group" if re.search(r"carreto'?s group", subject + " " + body, re.I) else ""
+    preview = _preview(body, clean_subj, name)
     link = next(iter(re.findall(r"https://www\.linkedin\.com/(?:messaging|comm/messaging|company/[^\s\"'<>]*inbox)[^\s\"'<>]*", body)),
                 "https://www.linkedin.com/messaging/")
     snippet = " ".join(body.split())[:400]
     kind = "parceria" if PARTNER_WORDS.search(clean_subj + " " + snippet) else (
         "candidatura" if JOB_WORDS.search(clean_subj + " " + snippet) else "")
     return {"name": name, "subject": clean_subj[:160], "page": page, "link": link.split("?")[0], "kind": kind,
-            "snippet": snippet}
+            "snippet": snippet, "preview": preview}
+
+
+_BOILER = re.compile(r"linkedin|responder|reply|ver mensagem|view message|unsubscribe|anular a subscri|cancelar|"
+                     r"definições|settings|privacidade|privacy|©|this email|este email|enviou-lhe|sent you|"
+                     r"^(de|from|para|to|assunto|subject|enviado|sent|data|date)\s*:|https?://", re.I)
+
+
+def _preview(body: str, subject: str, name: str) -> str:
+    """Início da mensagem, se o LinkedIn o incluiu no email (a 1.ª linha de texto que não é do modelo do email)."""
+    for ln in body.splitlines():
+        t = " ".join(ln.split())
+        if len(t) < 12 or t == subject or (name and t.strip(" .:").lower() == name.lower()) or _BOILER.search(t):
+            continue
+        return t[:200]
+    return ""
 
 
 # ------------------------------------------------------------------ Microsoft 365 (aplicação registada)
@@ -164,6 +211,8 @@ def poll() -> list[str]:
         return []
     if graph_mode():
         return _poll_graph()
+    if not os.environ.get("IMAP_USER"):
+        return []                         # sem caixa dedicada: os emails chegam ao recetor do servidor (porta 25)
     s = imap_settings()
     if not (s["host"] and s["user"] and s["password"]):
         raise RuntimeError("falta o servidor de entrada (IMAP) ou o utilizador/palavra-passe do email do Carretos Studio")
@@ -200,11 +249,12 @@ def poll() -> list[str]:
 
 def _alert(info: dict) -> None:
     from . import notify
-    where = f"página {info['page']}" if info["page"] else "LinkedIn"
-    tag = " · parece pedido de parceria" if info["kind"] == "parceria" else (
-        " · parece candidatura" if info["kind"] == "candidatura" else "")
-    notify.send(f"💬 Nova mensagem no LinkedIn ({where}){' de ' + info['name'] if info['name'] else ''} — "
-                f"{info['subject']}{tag} — abrir: {info['link']}")
+    where = f"página {info['page']}" if info["page"] else "perfil do David"
+    tag = "\n🤝 Parece um pedido de parceria." if info["kind"] == "parceria" else (
+        "\n🧑‍🔧 Parece uma candidatura." if info["kind"] == "candidatura" else "")
+    notify.send(f"💬 Nova mensagem no LinkedIn ({where}) de {info['name'] or 'alguém (o email não diz o nome)'}\n"
+                + (f"«{info['preview']}»\n" if info.get("preview") else "")
+                + f"{tag.strip() + chr(10) if tag else ''}Abrir: {info['link']}\n(O Carretos Studio não responde: responda no LinkedIn.)")
     if info["kind"] == "parceria":
         from .inbox import parcerias_avisos
         from .web import mailer

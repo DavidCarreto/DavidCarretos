@@ -658,6 +658,11 @@ def cmd_run(a):
     run_forever(a.interval)
 
 
+def cmd_correio(a):
+    from .mail_receiver import run
+    run(port=a.porta)
+
+
 def cmd_dashboard(a):
     from .dashboard import build
     p = build(a.days)
@@ -1033,6 +1038,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--dry-run", action="store_true")
     s = add("publish", cmd_publish, "publica já uma publicação"); s.add_argument("id", type=int)
     s.add_argument("--dry-run", action="store_true")
+    s = add("correio", cmd_correio, "recetor de email (porta 25) só para os avisos de mensagens do LinkedIn")
+    s.add_argument("--porta", type=int, default=None)
     s = add("run", cmd_run, "agendador contínuo (publica, recolhe métricas, lembra aprovações)")
     s.add_argument("--interval", type=int, default=60)
     s = add("dashboard", cmd_dashboard, "gera o painel HTML (agenda + métricas)")

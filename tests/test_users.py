@@ -1922,6 +1922,7 @@ def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "smtp.exemplo.pt")
     monkeypatch.setenv("SMTP_USER", "studio@exemplo.pt")
     monkeypatch.setenv("SMTP_PASSWORD", "x")
+    monkeypatch.setenv("IMAP_USER", "avisos@exemplo.pt")              # caixa dedicada (alternativa)
     assert linkedin_mail.imap_settings()["host"] == "imap.exemplo.pt"
 
     def mk(frm, subj, body, mid):
@@ -1997,3 +1998,45 @@ def test_linkedin_message_emails_via_microsoft_graph(tmp_path, monkeypatch):
     assert "de Ana Costa" in sent[0] and "página Carretos Group" in sent[0]
     assert ("DELETE", "https://graph.microsoft.com/v1.0/users/studio@carretos.pt/messages/m1") in calls
     assert not any("m2" in u for m, u in calls if m == "DELETE")
+
+
+def test_mail_receiver_accepts_only_secret_address_and_alerts(tmp_path, monkeypatch):
+    import asyncio
+    import smtplib
+    import threading
+    from email.message import EmailMessage
+    from carretos_social import linkedin_mail, mail_receiver, notify, envfile
+    monkeypatch.setattr(linkedin_mail._cfg, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(envfile, "reload_env", lambda *a, **k: None)
+    monkeypatch.setenv("LINKEDIN_EMAILS_ATIVO", "sim")
+    monkeypatch.setenv("LINKEDIN_EMAIL_ENDERECO", "linkedin-abc123@carretosstudio.duckdns.org")
+    monkeypatch.delenv("IMAP_USER", raising=False)
+    assert linkedin_mail.poll() == []                           # sem caixa dedicada: não tenta IMAP
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append(t))
+    loop = asyncio.new_event_loop()
+    srv = loop.run_until_complete(asyncio.start_server(mail_receiver._session, "127.0.0.1", 0))
+    port = srv.sockets[0].getsockname()[1]
+    th = threading.Thread(target=loop.run_forever, daemon=True)
+    th.start()
+    try:
+        m = EmailMessage()
+        m["From"], m["To"] = "LinkedIn <messages-noreply@linkedin.com>", "linkedin-abc123@carretosstudio.duckdns.org"
+        m["Subject"], m["Message-ID"] = "Ana Costa enviou-lhe uma mensagem", "<x1>"
+        m.set_content("Ana Costa\nOlá David, gostava de marcar uma revisão para o meu Classe C.\n"
+                      "Responder https://www.linkedin.com/messaging/thread/77/\nAnular a subscrição")
+        with smtplib.SMTP("127.0.0.1", port, timeout=10) as c:
+            c.ehlo()
+            c.send_message(m)
+            with pytest.raises(smtplib.SMTPRecipientsRefused):
+                c.send_message(m, to_addrs=["outro@carretosstudio.duckdns.org"])
+        assert len(sent) == 1 and "perfil do David" in sent[0] and "de Ana Costa" in sent[0]
+        assert "«Olá David, gostava de marcar uma revisão para o meu Classe C.»" in sent[0]
+        assert "https://www.linkedin.com/messaging/thread/77/" in sent[0]
+        monkeypatch.setenv("LINKEDIN_EMAILS_ATIVO", "não")      # desligado: recusa tudo
+        with smtplib.SMTP("127.0.0.1", port, timeout=10) as c:
+            with pytest.raises(smtplib.SMTPRecipientsRefused):
+                c.send_message(m)
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        th.join(5)

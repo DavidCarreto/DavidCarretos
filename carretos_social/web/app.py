@@ -1316,6 +1316,22 @@ async def meta_webhook(request: Request):
     return PlainTextResponse("ok")
 
 
+def _li_mail_addr() -> str:
+    try:
+        from .. import linkedin_mail
+        return linkedin_mail.receive_address(create=True)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _service_state(name: str) -> str:
+    import subprocess
+    try:
+        return subprocess.run(["systemctl", "is-active", name], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 @app.get("/mensagens", response_class=HTMLResponse)
 def inbox_page(request: Request, ok: str = "", erro: str = ""):
     from .. import inbox
@@ -1333,7 +1349,9 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "verify": inbox.verify_token() if me.is_admin else "", "test": None,
         "events": inbox.recent_events()[:30] if me.is_admin else [],
         "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes(),
-        "li_mail": __import__("carretos_social.linkedin_mail", fromlist=["x"]).enabled()})
+        "li_mail": __import__("carretos_social.linkedin_mail", fromlist=["x"]).enabled(),
+        "li_mail_addr": _li_mail_addr() if me.is_admin else "",
+        "correio": _service_state("carretos-correio") if me.is_admin else ""})
 
 
 @app.post("/mensagens/conta/{acc_id}")
@@ -1770,7 +1788,9 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("MS_TENANT_ID", "Microsoft 365 · ID do diretório (inquilino) da app \"Carretos Studio\"", False),
     ("MS_CLIENT_ID", "Microsoft 365 · ID da aplicação (cliente) da app \"Carretos Studio\"", False),
     ("MS_CLIENT_SECRET", "Microsoft 365 · segredo do cliente (Valor) da app \"Carretos Studio\"", True),
-    ("IMAP_HOST", "Email · servidor de entrada IMAP (só se não usar o Microsoft 365; vazio = o de envio com 'imap')", False),
+    ("IMAP_HOST", "Caixa dedicada (alternativa) · servidor de entrada IMAP", False),
+    ("IMAP_USER", "Caixa dedicada (alternativa) · email/utilizador da caixa que recebe os avisos do LinkedIn", False),
+    ("IMAP_PASSWORD", "Caixa dedicada (alternativa) · palavra-passe de aplicação dessa caixa", True),
     ("LINKEDIN_HEADLINE", "LinkedIn · cargo do perfil, por baixo do nome (só para a pré-visualização; ex.: CEO · Carretos Group)", False),
     # TikTok (ver docs/GUIA_TIKTOK.md)
     ("TIKTOK_CLIENT_KEY", "TikTok · Client key", False),
@@ -1810,6 +1830,7 @@ KEY_FORMATS = {
     "MS_TENANT_ID": (_re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I), "um ID com o formato 00000000-0000-0000-0000-000000000000"),
     "MS_CLIENT_ID": (_re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I), "um ID com o formato 00000000-0000-0000-0000-000000000000"),
     "MS_CLIENT_SECRET": (_re.compile(r"^[A-Za-z0-9_.~\-]{20,120}$"), "o Valor do segredo (não o ID do segredo)"),
+    "IMAP_USER": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}$", _re.I), "um email"),
     "IMAP_HOST": (_re.compile(r"^[a-z0-9.-]{4,100}$", _re.I), "só o nome do servidor (ex.: imap.exemplo.pt)"),
     "LINKEDIN_HEADLINE": (_re.compile(r"^[^\n\r\"'=#]{2,120}$"), "texto simples, até 120 caracteres, sem aspas"),
     "TIKTOK_CLIENT_KEY": (_re.compile(r"^[A-Za-z0-9]{10,40}$"), "letras e números, sem espaços"),
