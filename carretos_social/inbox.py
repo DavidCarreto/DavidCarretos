@@ -268,7 +268,9 @@ def receive(payload: dict, background: bool = True) -> list[int]:
             if e["author_id"] and e["author_id"] == e["own"]:
                 status, note = "ignorado", "escrito pela própria conta"
             elif is_own(e["author_id"], e["author"]):
-                status, note = "ignorado", "conta nossa (não se responde a contas ligadas ao Carretos Studio)"
+                # outra conta nossa: avisa e espera pela aprovação como os outros (só a própria conta é ignorada);
+                # em «Responder sozinho» é ignorado, para as contas não se responderem umas às outras
+                note = "comentário de outra conta ligada ao Carretos Studio"
             elif not e["account_id"]:
                 status, note = "ignorado", "conta não ligada no Carretos Studio"
             ids.append(conn.execute(
@@ -430,6 +432,10 @@ def process(item_id: int, wait: int = 0, force_propose: bool = False) -> str:
             conn.execute("UPDATE inbox SET status='desligado', note=? WHERE id=?",
                          ("respostas automáticas desligadas nesta conta", item_id))
             return "desligado"
+        if (row["note"] or "").startswith("comentário de outra conta") and account_settings(acc.id).get("mode") == "auto":
+            conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
+                         ("conta nossa (em «Responder sozinho» não se responde a contas ligadas)", item_id))
+            return "ignorado"
         if row["kind"] == "message" and _recent_auto_dm(conn, acc.id, row["author_id"]):
             conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
                          ("já respondeu a esta pessoa nas últimas 24 h (a conversa segue no WhatsApp)", item_id))

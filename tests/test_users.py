@@ -2078,3 +2078,19 @@ def test_linkedin_scopes_and_daily_budget(tmp_path, monkeypatch):
     first = linkedin_inbox.posts_this_round(posts)
     assert first[0] == "urn:li:share:0" and 1 <= len(first) <= 8
     assert len(first) <= 60 - 6                           # nunca mais do que o orçamento que resta
+
+
+def test_comment_from_other_own_account_is_proposed_not_ignored(monkeypatch):
+    from carretos_social import inbox, notify
+    from carretos_social.db import connect
+    monkeypatch.setattr(inbox, "is_own", lambda aid, a: a == "davidcarretos")
+    monkeypatch.setattr(inbox, "already_answered", lambda acc, row: False)
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append((t, buttons)))
+    monkeypatch.setattr(inbox, "parse", lambda p: [{"account_id": "ig_carretosgroup", "network": "instagram",
+        "kind": "comment", "external_id": "own-x1", "author_id": "1", "author": "davidcarretos", "text": "Boa equipa!",
+        "context": "m1", "own": "999"}])
+    inbox.receive({}, background=False)
+    with connect() as conn:
+        row = conn.execute("SELECT status FROM inbox WHERE external_id='own-x1'").fetchone()
+    assert row["status"] == "proposta" and "Quem: @davidcarretos" in sent[0][0] and sent[0][1]
