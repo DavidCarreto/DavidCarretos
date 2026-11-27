@@ -266,9 +266,13 @@ def recent_events() -> list[dict]:
 
 def receive(payload: dict, background: bool = True) -> list[int]:
     """Guarda os eventos novos e responde (em segundo plano, para o webhook responder logo à Meta)."""
+    return receive_items(parse(payload), background)
+
+
+def receive_items(items: list[dict], background: bool = True) -> list[int]:
     ids = []
     with connect() as conn:
-        for e in parse(payload):
+        for e in items:
             if conn.execute("SELECT 1 FROM inbox WHERE external_id=?", (e["external_id"],)).fetchone():
                 continue                                          # a Meta pode reenviar o mesmo evento
             status, note = "novo", None
@@ -588,7 +592,7 @@ INTENT_NAME = {"elogio": "elogio", "preco": "preço", "marcacao": "marcação", 
 
 def _who(row) -> str:
     if row["network"] == "linkedin":
-        return "um membro do LinkedIn (o LinkedIn não dá o nome)"
+        return (row["author"] or "um membro do LinkedIn (o LinkedIn não dá o nome)")
     a = (row["author"] or "").strip()
     if not a:
         return "desconhecido"
@@ -704,6 +708,73 @@ def page_id_for(acc: Account) -> str | None:
     from .meta_connect import discovered
     ig = acc.secret("user_id_env")
     return next((p["id"] for p in discovered().get("pages", []) if (p.get("ig") or {}).get("id") == ig), None)
+
+
+# ------------------------------------------------------------------ Páginas de Facebook: ir buscar os comentários
+def fb_interval_minutes() -> int:
+    try:
+        return max(2, int(os.environ.get("FACEBOOK_COMMENTS_MINUTES", "5")))
+    except ValueError:
+        return 5
+
+
+def _fb_state_path():
+    return _cfg.DATA_DIR / "facebook_leitura.json"
+
+
+def poll_facebook_pages(force: bool = False) -> list[str]:
+    """Além dos avisos (webhooks) da Meta, vai buscar os comentários recentes das Páginas de Facebook ligadas
+    (posts dos últimos 30 dias) e trata os novos como se tivessem chegado pelo webhook (mesmo id: não duplica).
+    Só comentários depois de a conta estar ligada; os da própria Página não contam."""
+    from .http import request
+    from .meta_connect import graph
+    try:
+        st = json.loads(_fb_state_path().read_text(encoding="utf-8")) if _fb_state_path().exists() else {}
+    except (OSError, ValueError):
+        st = {}
+    import time as _t
+    if not force and _t.time() - st.get("last_poll", 0) < fb_interval_minutes() * 60:
+        return []
+    st["last_poll"] = _t.time()
+    lines = []
+    since_30d = int(_t.time() - 30 * 86400)
+    for acc in eligible_accounts():
+        if acc.platform != "facebook_page":
+            continue
+        cfg = account_settings(acc.id)
+        if not cfg.get("enabled"):
+            continue
+        first = st.setdefault("since", {}).setdefault(acc.id, now())      # 1.ª leitura: só daqui para a frente
+        since = max(first, cfg.get("enabled_at") or first)
+        pid, token = page_id_for(acc), acc.secret("access_token_env")
+        if not pid or not token:
+            continue
+        try:
+            fields = ("id,created_time,comments.limit(50).order(reverse_chronological){id,message,created_time,from,"
+                      "comments.limit(25){id,message,created_time,from}}")
+            data = request("GET", f"{graph()}/{pid}/posts", retries=1, params={
+                "fields": fields, "limit": 15, "since": since_30d, "access_token": token}).json().get("data", [])
+        except Exception as exc:  # noqa: BLE001
+            from .redact import redact
+            lines.append(f"Facebook comentários {acc.name}: erro — {redact(str(exc))[:300]}")
+            continue
+        items = []
+        for post in data:
+            for c in ((post.get("comments") or {}).get("data") or []):
+                for cc in [c] + (((c.get("comments") or {}).get("data")) or []):
+                    frm = cc.get("from") or {}
+                    when = (cc.get("created_time") or "")[:19]
+                    if not cc.get("id") or str(frm.get("id", "")) == str(pid) or (when and when < since[:19]):
+                        continue
+                    items.append({"account_id": acc.id, "network": "facebook", "kind": "comment",
+                                  "external_id": cc["id"], "author_id": str(frm.get("id", "")),
+                                  "author": frm.get("name", ""), "text": cc.get("message", ""),
+                                  "context": post.get("id", ""), "own": str(pid)})
+        new = receive_items(items, background=False)
+        lines.append(f"Facebook comentários {acc.name}: {len(data)} posts lidos, {len(new)} comentário(s) novo(s)")
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _fb_state_path().write_text(json.dumps(st), encoding="utf-8")
+    return lines
 
 
 def meta_diagnose() -> dict:

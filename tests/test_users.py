@@ -1928,6 +1928,7 @@ def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
     monkeypatch.setenv("SMTP_USER", "studio@exemplo.pt")
     monkeypatch.setenv("SMTP_PASSWORD", "x")
     monkeypatch.setenv("IMAP_USER", "avisos@exemplo.pt")              # caixa dedicada (alternativa)
+    (tmp_path / "linkedin_emails_ativacao.txt").write_text("2026-01-01T00:00:00+00:00")   # emails do teste são posteriores
     assert linkedin_mail.imap_settings()["host"] == "imap.exemplo.pt"
 
     def mk(frm, subj, body, mid):
@@ -1963,6 +1964,7 @@ def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
     monkeypatch.setattr(mailer, "send", lambda to, s, b: mails.append(to))
     lines = linkedin_mail.poll()
     assert "ok" in lines[0] and "2 aviso(s)" in lines[0] and "messages-noreply@linkedin.com ×1" in lines[0]
+    assert any("→ aviso enviado" in l for l in lines) and any("não é aviso de mensagem" in l for l in lines)
     assert "de Ana Costa" in sent[0] and "página Carretos Group" in sent[0] and "parceria" in sent[0]
     assert "https://www.linkedin.com/messaging/thread/123/" in sent[0] and "?x=1" not in sent[0]
     assert "de Rui Lopes" in sent[1] and "candidatura" in sent[1]
@@ -2174,3 +2176,57 @@ def test_linkedin_thread_replies_and_poll_due(tmp_path, monkeypatch):
     linkedin_inbox.poll_due()
     linkedin_inbox.poll_due()                           # logo a seguir (ex.: reinício): não lê outra vez
     assert calls == [1]
+
+
+
+def test_linkedin_emails_older_than_activation_are_not_alerted(tmp_path, monkeypatch):
+    from email.message import EmailMessage
+    from carretos_social import linkedin_mail
+    monkeypatch.setattr(linkedin_mail._cfg, "DATA_DIR", tmp_path)
+    m = EmailMessage()
+    m["From"], m["Subject"], m["Date"] = "LinkedIn <messages-noreply@linkedin.com>", "Ana enviou-lhe uma mensagem", "Mon, 02 Nov 2026 10:00:00 +0000"
+    (tmp_path / "linkedin_emails_ativacao.txt").write_text("2026-11-27T00:00:00+00:00")
+    assert linkedin_mail._older_than_activation(m)
+    m.replace_header("Date", "Sat, 28 Nov 2026 10:00:00 +0000")
+    assert not linkedin_mail._older_than_activation(m)
+
+
+def test_linkedin_mention_removed_and_name_learned():
+    from carretos_social import linkedin_inbox
+    text, names = linkedin_inbox._clean_message({"text": "David Carreto  E também ao GLA?", "attributes": [
+        {"start": 0, "length": 13, "value": {"person": {"person": "urn:li:person:D1"}}}]})
+    assert text == "E também ao GLA?" and names == {"urn:li:person:D1": "David Carreto"}
+    text, _ = linkedin_inbox._clean_message({"text": "Obrigado Ana pela ajuda", "attributes": [
+        {"start": 9, "length": 3, "value": {"person": {"person": "urn:li:person:A"}}}]})
+    assert text == "Obrigado Ana pela ajuda"                   # menção a meio do texto fica
+
+
+def test_facebook_pages_polled_without_webhooks(tmp_path, monkeypatch):
+    from carretos_social import inbox
+    from carretos_social.config import accounts
+    from carretos_social.db import connect
+    import carretos_social.http as http_mod
+    acc = accounts()["fb_carretosgroup"]
+    monkeypatch.setattr(type(acc), "has_credentials", property(lambda self: True))
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok" if "token" in k else "222")
+    monkeypatch.setattr(inbox, "eligible_accounts", lambda: [acc])
+    monkeypatch.setattr(inbox, "page_id_for", lambda a: "222")
+    done = []
+    monkeypatch.setattr(inbox, "process", lambda iid, wait=0, force_propose=False: done.append(iid) or "proposta")
+    inbox.save_account_settings(acc.id, enabled=True, enabled_at="2026-01-01T00:00:00")
+
+    class R:
+        def json(self):
+            return {"data": [{"id": "222_1", "comments": {"data": [
+                {"id": "c1", "message": "Quanto custa?", "created_time": "2026-11-27T10:00:00+0000", "from": {"id": "9", "name": "David Carreto"},
+                 "comments": {"data": [{"id": "c2", "message": "Obrigado!", "created_time": "2026-11-27T10:05:00+0000", "from": {"id": "222", "name": "Carretos Group"}}]}}]}}]}
+    monkeypatch.setattr(http_mod, "request", lambda *a, **k: R())
+    st = tmp_path / "fb.json"
+    monkeypatch.setattr(inbox, "_fb_state_path", lambda: st)
+    st.write_text('{"since": {"fb_carretosgroup": "2026-01-01T00:00:00"}}')
+    lines = inbox.poll_facebook_pages(force=True)
+    assert "1 comentário(s) novo(s)" in lines[0] and len(done) == 1      # o da própria Página não conta
+    with connect() as conn:
+        row = conn.execute("SELECT author, network FROM inbox WHERE external_id='c1'").fetchone()
+    assert row["author"] == "David Carreto" and row["network"] == "facebook"
+    assert inbox.poll_facebook_pages() == []                              # dentro do intervalo: não volta a ler

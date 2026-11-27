@@ -70,10 +70,39 @@ def api_version() -> str:
     return _months_back(2)
 
 
+MEMBER_DAILY_LIMIT = 100        # Community Management API, Nível de Desenvolvimento: 100 pedidos por membro por dia
+
+
+def _calls_path():
+    return _cfg.DATA_DIR / "linkedin_pedidos.json"
+
+
+def calls_today_total() -> int:
+    """Pedidos à API REST do LinkedIn hoje (todos: publicar, métricas, comentários), dia UTC."""
+    from datetime import timezone
+    try:
+        st = json.loads(_calls_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return st.get("total", 0) if st.get("day") == datetime.now(timezone.utc).date().isoformat() else 0
+
+
+def count_call() -> None:
+    from datetime import timezone
+    day = datetime.now(timezone.utc).date().isoformat()
+    total = calls_today_total() + 1
+    try:
+        _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _calls_path().write_text(json.dumps({"day": day, "total": total}), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def rest(method: str, url: str, headers: dict | None = None, **kwargs):
     """Pedido à API REST do LinkedIn com a versão certa. Se o LinkedIn responder que a versão não está ativa
     (426 NONEXISTENT_VERSION), tenta as dos meses anteriores e guarda a que funcionar."""
     from .http import ApiError
+    count_call()
     headers = {"X-Restli-Protocol-Version": "2.0.0", **(headers or {})}
     version = api_version()
     for _ in range(12):

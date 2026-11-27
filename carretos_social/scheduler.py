@@ -224,6 +224,12 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
+        try:                                            # comentários das Páginas de Facebook (além dos webhooks)
+            from .inbox import poll_facebook_pages
+            for line in poll_facebook_pages():
+                print(datetime.now().strftime("%H:%M"), line)
+        except Exception as exc:  # noqa: BLE001
+            print("Facebook comentários:", exc)
         from .linkedin_inbox import poll_due            # comentários da página LinkedIn (intervalo guardado)
         for line in poll_due():
             print(datetime.now().strftime("%H:%M"), line)

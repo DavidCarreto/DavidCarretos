@@ -1317,6 +1317,13 @@ async def meta_webhook(request: Request):
     return PlainTextResponse("ok")
 
 
+def _li_calls() -> dict:
+    from .. import linkedin_connect as lc, linkedin_inbox as li
+    total, used, budget = lc.calls_today_total(), li.calls_today(), li.daily_budget()
+    free = max(0, lc.MEMBER_DAILY_LIMIT - total - max(0, budget - used))
+    return {"total": total, "limit": lc.MEMBER_DAILY_LIMIT, "comments": used, "budget": budget, "publish": free}
+
+
 def _li_mail_addr() -> str:
     try:
         from .. import linkedin_mail
@@ -1350,8 +1357,7 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "verify": inbox.verify_token() if me.is_admin else "", "test": None,
         "events": inbox.recent_events()[:30] if me.is_admin else [],
         "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes(),
-        "li_calls": (__import__("carretos_social.linkedin_inbox", fromlist=["x"]).calls_today(),
-                     __import__("carretos_social.linkedin_inbox", fromlist=["x"]).daily_budget()),
+        "li_calls": _li_calls(),
         "li_mail": __import__("carretos_social.linkedin_mail", fromlist=["x"]).enabled(),
         "li_mail_addr": _li_mail_addr() if me.is_admin else "",
         "correio": _service_state("carretos-correio") if me.is_admin else "",

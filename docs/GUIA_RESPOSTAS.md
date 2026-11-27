@@ -101,3 +101,8 @@ Alternativa (se a Microsoft não entregar no servidor): uma caixa dedicada lida 
 - **Nada é publicado sem aprovação** (todas as contas em "Propor e eu aprovo" por omissão). Uma conta em
   "Responder sozinho" mostra um aviso em Mensagens a dizer que contraria esta regra.
 - Cada aviso (enviado ou falhado) fica em ⚙ Configurar → Registos → "Avisos de comentários no Telegram".
+
+## Facebook · comentários das Páginas (também sem webhooks)
+Além dos avisos (webhooks) da Meta, o agendador vai buscar de 5 em 5 minutos (⚙ → FACEBOOK_COMMENTS_MINUTES) os
+comentários recentes de cada Página ligada (posts dos últimos 30 dias). Só comentários depois de a leitura começar;
+os da própria Página não contam; o mesmo comentário nunca é tratado duas vezes (mesmo id que o webhook).

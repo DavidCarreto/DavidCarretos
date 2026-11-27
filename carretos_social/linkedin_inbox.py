@@ -68,7 +68,7 @@ def _budget_state() -> dict:
         st = {}
     if st.get("day") != _today():
         st = {"day": _today(), "calls": 0, **{k: st[k] for k in ("rot", "posts", "posts_at", "threads", "activity",
-                                                                    "last", "last_poll") if k in st}}
+                                                                    "last", "last_poll", "read", "names") if k in st}}
     return st
 
 
@@ -139,58 +139,75 @@ def recent_posts(acc: Account, days: int = 30) -> list[str]:
 
 
 def posts_this_round(posts: list[str]) -> list[str]:
-    """Quantos posts ver nesta leitura, para o orçamento chegar até à meia-noite UTC: o mais recente sempre que
-    possível e os outros em rotação."""
+    """Que posts ver nesta leitura, dentro do orçamento diário:
+    - o mais recente e os que tiveram comentários nos últimos 2 dias: de hora a hora;
+    - os outros dos últimos 30 dias: de 3 em 3 horas (em rotação, o que está há mais tempo sem ser visto primeiro);
+    - nunca mais do que o orçamento que resta até à meia-noite UTC permite."""
     from datetime import timezone
     if not posts:
         return []
     st = _budget_state()
+    now_s = time.time()
+    act, read = st.get("activity", {}), st.get("read", {})
+    hot = {posts[0]} | {p for p in posts if now_s * 1000 - act.get(p, 0) < 2 * 86400000}
+    due = [p for p in posts if now_s - read.get(p, 0) >= (3300 if p in hot else 3 * 3600 - 300)]
+    due.sort(key=lambda p: (p not in hot, posts.index(p) if p in hot else read.get(p, 0)))
     now = datetime.now(timezone.utc)
     secs_left = (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1) - now).total_seconds()
     rounds_left = max(1, int(secs_left // (interval_minutes() * 60)) + 1)
     reserve = 6                                          # para verificar respostas e responder
-    allowance = max(0, (daily_budget() - reserve - st["calls"]) // rounds_left)
-    allowance = min(len(posts), max(1 if st["calls"] < daily_budget() - reserve else 0, allowance))
-    if allowance == 0:
+    remaining = daily_budget() - reserve - st["calls"]
+    if remaining <= 0:
         return []
-    chosen = [posts[0]]
-    # a seguir, os posts com comentários mais recentes (atividade guardada das leituras anteriores)
-    act = st.get("activity", {})
-    active = sorted([p for p in posts[1:] if act.get(p)], key=lambda p: -act[p])
-    for p in active:
-        if len(chosen) < allowance and time.time() * 1000 - act[p] < 7 * 86400000:
-            chosen.append(p)
-    rest_posts = [p for p in posts[1:] if p not in chosen]
-    if rest_posts and allowance > len(chosen):
-        start = st.get("rot", 0) % len(rest_posts)
-        rot = (rest_posts[start:] + rest_posts[:start])[:allowance - len(chosen)]
-        chosen += rot
-        st["rot"] = start + len(rot)
-        _budget_save(st)
+    allowance = max(1, int(remaining / rounds_left * 2.5))      # nem todas as leituras têm posts em dia
+    chosen = due[:allowance]
+    for p in chosen:
+        read[p] = now_s
+    st["read"] = read
+    _budget_save(st)
     return chosen
+
+
+def _clean_message(msg: dict) -> tuple[str, dict]:
+    """Texto sem as menções automáticas do início (ex.: «David Carreto  E também ao GLA?» → «E também ao GLA?»)
+    e os nomes que as menções revelam ({URN: nome}), para mostrar quem escreveu noutros comentários."""
+    text = (msg or {}).get("text") or ""
+    names, cut = {}, 0
+    for a in sorted((msg or {}).get("attributes") or [], key=lambda a: a.get("start", 0)):
+        start, length = int(a.get("start") or 0), int(a.get("length") or 0)
+        val = a.get("value") or {}
+        urn = ((val.get("person") or {}).get("person") or (val.get("organization") or {}).get("organization") or "")
+        name = text[start:start + length].strip()
+        if urn and name:
+            names[urn] = name
+        if start <= cut + 1 and length:          # menção logo no início (ou encostada a outra): sai do texto
+            cut = start + length
+    return text[cut:].strip(" \u00a0") if cut else text.strip(), names
+
+
+_NAMES: dict = {}
+
+
+def _element(c: dict, post_urn: str, parent: str = "") -> dict:
+    text, names = _clean_message(c.get("message") or {})
+    _NAMES.update(names)
+    summ = c.get("commentsSummary") or {}
+    return {"urn": c.get("commentUrn") or "", "actor": c.get("actor") or (c.get("created") or {}).get("actor", ""),
+            "text": text, "time": int((c.get("created") or {}).get("time") or 0), "post": post_urn, "parent": parent,
+            "replies": int(summ.get("aggregatedTotalComments") or summ.get("totalFirstLevelComments") or 0)}
 
 
 def comments(acc: Account, post_urn: str) -> list[dict]:
     data = _call("GET", f"{REST}/socialActions/{quote(post_urn, safe='')}/comments", acc,
                  params={"count": 100}).json()
-    out = []
-    for c in data.get("elements", []):
-        summ = c.get("commentsSummary") or {}
-        out.append({"urn": c.get("commentUrn") or "", "actor": c.get("actor") or (c.get("created") or {}).get("actor", ""),
-                    "text": ((c.get("message") or {}).get("text") or "").strip(),
-                    "time": int((c.get("created") or {}).get("time") or 0), "post": post_urn, "parent": "",
-                    "replies": int(summ.get("aggregatedTotalComments") or summ.get("totalFirstLevelComments") or 0)})
-    return out
+    return [_element(c, post_urn) for c in data.get("elements", [])]
 
 
 def thread_replies(acc: Account, parent: dict) -> list[dict]:
     """Respostas dentro do fio de um comentário (exceto as da própria página são tratadas pelo chamador)."""
     data = _call("GET", f"{REST}/socialActions/{quote(parent['urn'], safe='')}/comments", acc,
                  params={"count": 100}).json()
-    return [{"urn": c.get("commentUrn") or "", "actor": c.get("actor") or (c.get("created") or {}).get("actor", ""),
-             "text": ((c.get("message") or {}).get("text") or "").strip(),
-             "time": int((c.get("created") or {}).get("time") or 0), "post": parent["post"], "parent": parent["urn"],
-             "replies": 0} for c in data.get("elements", [])]
+    return [_element(c, parent["post"], parent["urn"]) for c in data.get("elements", [])]
 
 
 def comment_exists(acc: Account, comment_urn: str, context: str = "") -> bool | None:
@@ -250,6 +267,7 @@ def poll(include_old: bool = False) -> list[str]:
     new_ids, seen = [], 0
     st_b = _budget_state()
     threads, activity = st_b.get("threads", {}), st_b.get("activity", {})
+    names = st_b.get("names", {})
     deleted = []
     with connect() as conn:
         for post in checking:
@@ -259,16 +277,29 @@ def poll(include_old: bool = False) -> list[str]:
                 break
             # respostas dentro dos fios: só quando o n.º de respostas mudou desde a última leitura
             for c in list(found):
-                if c["replies"] and (include_old or threads.get(c["urn"]) != c["replies"]):
+                changed = include_old or threads.get(c["urn"]) != c["replies"]
+                if c["replies"] and changed:
                     try:
-                        found += thread_replies(acc, c)
-                        threads[c["urn"]] = c["replies"]
+                        replies = thread_replies(acc, c)
                     except BudgetExceeded:
                         break
                     except Exception:  # noqa: BLE001
-                        pass
+                        continue
+                    found += replies
+                    threads[c["urn"]] = c["replies"]
+                    # respostas pendentes deste fio que já não estão lá: apagadas pelo autor
+                    have = {r["urn"] for r in replies}
+                    for r in conn.execute("SELECT * FROM inbox WHERE account_id=? AND status='proposta' AND context=?",
+                                          (acc.id, f"{post}|{c['urn']}")).fetchall():
+                        if r["external_id"] not in have:
+                            deleted.append(r)
+                elif not c["replies"] and threads.get(c["urn"]):
+                    threads[c["urn"]] = 0          # o fio ficou sem respostas: as pendentes foram apagadas
+                    deleted += conn.execute("SELECT * FROM inbox WHERE account_id=? AND status='proposta' AND context=?",
+                                            (acc.id, f"{post}|{c['urn']}")).fetchall()
             if found:
                 activity[post] = max([activity.get(post, 0)] + [c["time"] for c in found])
+            names.update(_NAMES)
             # propostas pendentes deste post cujo comentário (de 1.º nível) desapareceu: apagado pelo autor
             urns = {c["urn"] for c in found}
             for r in conn.execute("SELECT * FROM inbox WHERE account_id=? AND status='proposta' AND context=?",
@@ -282,13 +313,14 @@ def poll(include_old: bool = False) -> list[str]:
                 if conn.execute("SELECT 1 FROM inbox WHERE external_id=?", (c["urn"],)).fetchone():
                     continue
                 ctx = f"{post}|{c['parent']}" if c["parent"] else post
+                author = names.get(c["actor"], "")            # nome conhecido de uma menção noutro comentário
                 new_ids.append(conn.execute(
                     "INSERT INTO inbox(account_id, network, kind, external_id, author_id, author, text, context, "
                     "status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (acc.id, "linkedin", "comment", c["urn"], c["actor"], "", c["text"][:3000], ctx, "novo",
+                    (acc.id, "linkedin", "comment", c["urn"], c["actor"], author, c["text"][:3000], ctx, "novo",
                      now())).lastrowid)
     st_b = _budget_state()
-    st_b["threads"], st_b["activity"] = threads, activity
+    st_b["threads"], st_b["activity"], st_b["names"] = threads, activity, dict(list(names.items())[-300:])
     st_b["last"] = {"at": now(), "seen": len(checking), "total": len(posts), "new": len(new_ids),
                     "left": max(0, len(posts) - len(checking)), "manual": include_old}
     _budget_save(st_b)

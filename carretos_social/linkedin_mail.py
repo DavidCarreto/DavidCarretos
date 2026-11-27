@@ -234,6 +234,7 @@ def poll() -> list[str]:
         typ, data = box.search(None, '(OR FROM "linkedin.com" TEXT "linkedin.com")')
         ids = (data[0] or b"").split()[-50:]
         senders: dict[str, int] = {}
+        details: list[tuple[str, str]] = []
         for num in ids:
             typ, raw = box.fetch(num, "(RFC822)")
             if typ != "OK" or not raw or not raw[0]:
@@ -244,12 +245,20 @@ def poll() -> list[str]:
                 senders[frm] = senders.get(frm, 0) + 1
             h = hashlib.sha256((msg.get("Message-ID") or "").encode() + (msg.get("Date") or "").encode()).hexdigest()[:24]
             info = parse(msg)
+            subj = str(make_header(decode_header(msg.get("Subject", ""))))[:70]
             if not info:
+                details.append((h, f"{frm or '?'} · «{subj}» → ignorado (não é aviso de mensagem)"))
                 continue                                   # outros emails (mesmo do LinkedIn) não se tocam
+            if _older_than_activation(msg):
+                details.append((h, f"{frm} · «{subj}» → antigo (anterior à ativação): sem aviso"))
+                continue                                   # não avisa em massa os emails que já lá estavam
             if h not in seen:
                 _alert(info)
                 _remember(h)
                 n_avisos += 1
+                details.append((h, f"{frm} · «{subj}» → aviso enviado"))
+            else:
+                details.append((h, f"{frm} · «{subj}» → já avisado antes"))
             box.store(num, "+FLAGS", "\\Deleted")          # aviso dado: o email sai da caixa
         box.expunge()
     finally:
@@ -258,8 +267,52 @@ def poll() -> list[str]:
         except Exception:  # noqa: BLE001
             pass
     seen_txt = ", ".join(f"{k} ×{v}" for k, v in sorted(senders.items())) or "nenhum"
-    return [f"LinkedIn mensagens (email): ok, {len(ids)} email(s) do LinkedIn na caixa, {n_avisos} aviso(s) · "
-            f"remetentes LinkedIn vistos: {seen_txt}"]
+    lines = [f"LinkedIn mensagens (email): ok, {len(ids)} email(s) do LinkedIn na caixa, {n_avisos} aviso(s) · "
+             f"remetentes LinkedIn vistos: {seen_txt}"]
+    logged = set(_logged())
+    fresh = [(h, d) for h, d in details if h not in logged]
+    lines += [f"  • {d}" for _, d in fresh[:20]]       # cada email aparece no registo uma só vez
+    _remember_logged([h for h, _ in fresh])
+    return lines
+
+
+def _activation_path():
+    return _cfg.DATA_DIR / "linkedin_emails_ativacao.txt"
+
+
+def _older_than_activation(msg) -> bool:
+    """Emails com data anterior à 1.ª leitura com esta versão não geram aviso (eram antigos)."""
+    from email.utils import parsedate_to_datetime
+    from datetime import timezone
+    p = _activation_path()
+    if not p.exists():
+        _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        p.write_text(datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    try:
+        act = datetime.fromisoformat(p.read_text().strip())
+        when = parsedate_to_datetime(msg.get("Date"))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return when < act
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _logged_path():
+    return _cfg.DATA_DIR / "linkedin_emails_registados.json"
+
+
+def _logged() -> list[str]:
+    try:
+        return json.loads(_logged_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _remember_logged(hs: list[str]) -> None:
+    if hs:
+        _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _logged_path().write_text(json.dumps((_logged() + hs)[-1000:]), encoding="utf-8")
 
 
 def _alert(info: dict) -> None:
