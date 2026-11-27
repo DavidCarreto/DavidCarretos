@@ -68,8 +68,8 @@ App → **Webhooks** (adicionar o produto se não existir):
 
 ## Categorias fixas (Instagram, Facebook e LinkedIn)
 
-- **Candidatura** → "Obrigado pelo interesse em juntar-se à Carretos Group! Envie o seu CV para rh@carretos.pt, com a
-  função e a oficina que lhe interessam. Boa sorte!" (sai logo; nunca pede dados no comentário; se o comentário tiver
+- **Candidatura** (espera pela aprovação, como tudo) → "Obrigado pelo interesse em juntar-se à Carretos Group! Envie o seu CV para rh@carretos.pt, com a
+  função e a oficina que lhe interessam. Boa sorte!" (nunca pede dados no comentário; se o comentário tiver
   telefone/email, não o repete e avisa no Telegram).
 - **Parceria** → proposta "Obrigado pelo contacto! Para propostas de parceria, envie-nos os detalhes para
   davidcarreto@carretos.pt, que respondemos com toda a atenção." **Sempre para aprovação.** Aviso no Telegram e
@@ -91,3 +91,13 @@ só avisa no Telegram a partir dos emails de aviso do LinkedIn.
 
 Alternativa (se a Microsoft não entregar no servidor): uma caixa dedicada lida por IMAP
 (⚙ Configurar → "Caixa dedicada (alternativa) · …").
+
+## Regra geral (desde 27/11/2026): tudo passa pelo David
+
+- **Cada comentário novo** em todas as contas ligadas (LinkedIn Carretos Group, Instagram e Páginas de Facebook)
+  envia um aviso ao Telegram: conta e rede, quem comentou, texto, categoria, resposta proposta, link da
+  publicação e os botões ✓ Aprovar / ✎ Editar / ✕ Ignorar (abrem o dashboard). Spam também, como
+  "spam (proposta: ignorar)". Comentários da própria conta não geram aviso.
+- **Nada é publicado sem aprovação** (todas as contas em "Propor e eu aprovo" por omissão). Uma conta em
+  "Responder sozinho" mostra um aviso em Mensagens a dizer que contraria esta regra.
+- Cada aviso (enviado ou falhado) fica em ⚙ Configurar → Registos → "Avisos de comentários no Telegram".

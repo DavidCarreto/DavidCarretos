@@ -25,10 +25,16 @@ def _api(method: str) -> str:
 
 
 def send(text: str, buttons: list[tuple[str, str]] | None = None) -> None:
-    """buttons: [(texto, link)] → botões por baixo da mensagem (abrem o dashboard)."""
+    """buttons: [(texto, link)] → botões por baixo da mensagem (abrem o dashboard). Os botões de link só são
+    aceites pelo Telegram com endereços https públicos: se não for o caso, a mensagem segue sem botões."""
     if not enabled():
         print(f"[notificação] {text}")
+        if buttons is not None:
+            raise RuntimeError("Telegram não configurado (falta o token do bot ou o chat)")
         return
+    if buttons:
+        buttons = [(t, u) for t, u in buttons if u.startswith("https://") and "localhost" not in u
+                   and "127.0.0.1" not in u] or None
     data = {"chat_id": os.environ["TELEGRAM_CHAT_ID"], "text": (PREFIX + text)[:4000]}
     if buttons:
         import json

@@ -13,12 +13,13 @@ verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div
 {% for a, s in accs %}<div class="acc-row" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
  <div style="flex:1;min-width:220px"><b>{{ ICON.get(a.platform,'') }} {{ a.name }}</b>{% if a.handle %} <span class="muted">@{{ a.handle }}</span>{% endif %}<br>
   {% if s.enabled %}<span class="pill" style="color:#3fb950;border-color:#3fb950">Respostas automáticas ligadas</span>{% else %}<span class="pill" style="color:#7d8590;border-color:#7d8590">Desligadas</span>{% endif %}
-  {% if s.enabled %}<span class="muted" style="font-size:12px"> · {{ 'propõe e espera pela aprovação' if s.mode == 'propor' else 'responde sozinho' }} (parcerias, reclamações e urgências esperam sempre pela aprovação)</span>{% endif %}
+  {% if s.enabled %}<span class="muted" style="font-size:12px"> · {{ 'cada comentário vai ao Telegram e espera pela sua aprovação' if s.mode == 'propor' else 'responde sozinho' }}</span>{% endif %}
+  {% if s.mode == 'auto' %}<br><span class="fmt-line editar" style="font-size:12px">⚠ Esta conta está em «Responder sozinho»: isto contraria a regra «nada é publicado sem aprovação». Mude para «Propor e eu aprovo».</span>{% endif %}
   {% if a.platform == 'linkedin_org' %}<br><span class="muted" style="font-size:12px">LinkedIn · Carretos Group: lê os comentários dos posts dos últimos 30 dias de {{ li_minutes }} em {{ li_minutes }} minutos e responde como página, no fio do comentário.
   Pedidos ao LinkedIn hoje: {{ li_calls[0] }}/{{ li_calls[1] }} (o Nível de Desenvolvimento dá 100 por dia; o resto fica para publicar e para as métricas).{% if s.enabled_at %} Só comentários depois de {{ s.enabled_at[:16].replace('T',' ') }}.{% endif %}</span>
   {% elif s.subscribed_at %}<span class="muted" style="font-size:12px"> · Meta a enviar eventos desde {{ s.subscribed_at[:16].replace('T',' ') }}</span>{% else %}<span class="muted" style="font-size:12px"> · ainda não ativado na Meta</span>{% endif %}</div>
  <form method="post" action="/mensagens/conta/{{ a.id }}" class="acc-actions">
-  <label style="font-size:13px"><input type="checkbox" name="enabled" value="1" {{ 'checked' if s.enabled }} style="width:auto"> Ligado</label>
+  <label style="font-size:13px"><input type="checkbox" name="enabled" value="1" {{ 'checked' if s.enabled }} style="width:auto"> Ligado (avisa no Telegram)</label>
   <select name="modo" style="width:auto;font-size:13px"><option value="propor" {{ 'selected' if s.mode == 'propor' }}>Propor e eu aprovo</option><option value="auto" {{ 'selected' if s.mode == 'auto' }}>Responder sozinho</option></select>
   {% if a.platform != 'linkedin_org' %}<label style="font-size:13px"><input type="checkbox" name="private" value="1" {{ 'checked' if s.private }} style="width:auto"> + mensagem privada nos comentários</label>{% endif %}
   <button class="btn">Guardar</button>

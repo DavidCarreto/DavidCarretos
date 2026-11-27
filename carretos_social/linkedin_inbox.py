@@ -204,7 +204,10 @@ def poll(include_old: bool = False) -> list[str]:
     st = inbox.account_settings(acc.id)
     if not st.get("enabled") and not include_old:
         return []
-    since = st.get("enabled_at") or now()
+    if not st.get("enabled_at"):
+        inbox.save_account_settings(acc.id, enabled_at=now())   # só comentários a partir de agora
+        st = inbox.account_settings(acc.id)
+    since = st["enabled_at"]
     since_ms = datetime.fromisoformat(since[:19]).timestamp() * 1000
     try:
         posts = recent_posts(acc)

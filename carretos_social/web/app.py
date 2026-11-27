@@ -471,7 +471,8 @@ def config_logs(request: Request, post: int = 0):
     me = _current_user(request)
     if not (me and me.is_admin):
         return _forbidden()
-    return _render(request, "logs.html", {"fails": failures(post or None), "post": post,
+    from .. import inbox as _inbox
+    return _render(request, "logs.html", {"fails": failures(post or None), "post": post, "avisos": _inbox.avisos_log(),
                                           "journal": system.agendador_log(filtro=f"#{post}" if post else "")})
 
 

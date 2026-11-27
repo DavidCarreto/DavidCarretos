@@ -1241,7 +1241,7 @@ def test_inbox_webhook_auto_replies_and_safeguards(client, monkeypatch):
     class R:
         def json(self): return {"id": "ok"}
     monkeypatch.setattr(http, "request", lambda m, u, **k: (sent.append((u, k)) if m == "POST" else None) or R())
-    monkeypatch.setattr(notify, "send", lambda t: alerts.append(t))
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: alerts.append(t))
     monkeypatch.setattr(inbox.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda s: target(*args)})())
     fb = {"object": "page", "entry": [{"id": "222", "changes": [{"field": "feed", "value": {
         "item": "comment", "verb": "add", "comment_id": "222_1_c1", "post_id": "222_1", "message": "Quanto custa a revisão?",
@@ -1249,13 +1249,14 @@ def test_inbox_webhook_auto_replies_and_safeguards(client, monkeypatch):
     body = _json.dumps(fb).encode()
     assert client.post("/webhooks/meta", content=body, headers={"content-type": "application/json",
                                                                "x-hub-signature-256": "sha256=errada"}).status_code == 403
-    # desligado por defeito: guarda mas não responde
+    # por omissão: avisa no Telegram e espera pela aprovação (nada é publicado)
     assert client.post("/webhooks/meta", content=body, headers=_signed(body, secret)).text == "ok"
     with connect() as conn:
-        assert conn.execute("SELECT status FROM inbox WHERE external_id='222_1_c1'").fetchone()[0] == "desligado"
-    assert not sent
-    # ligar e receber de novo (outro comentário)
-    client.post("/mensagens/conta/fb_carretosgroup", data={"enabled": "1", "private": "1"})
+        assert conn.execute("SELECT status FROM inbox WHERE external_id='222_1_c1'").fetchone()[0] == "proposta"
+    assert not sent and "Comentário: «Quanto custa a revisão?»" in alerts[-1] and "Quem: Cliente" in alerts[-1]
+    # «Responder sozinho» (contraria a regra, mas existe) e receber de novo (outro comentário)
+    client.post("/mensagens/conta/fb_carretosgroup", data={"enabled": "1", "private": "1", "modo": "auto"})
+    assert "contraria a regra" in client.get("/mensagens").text
     fb["entry"][0]["changes"][0]["value"]["comment_id"] = "222_1_c2"
     body = _json.dumps(fb).encode()
     client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
@@ -1275,7 +1276,7 @@ def test_inbox_webhook_auto_replies_and_safeguards(client, monkeypatch):
     client.post("/webhooks/meta", content=body, headers=_signed(body, secret))
     assert len(sent) == n
     # Instagram: comentário → /replies; mensagem privada → /me/messages, uma vez por pessoa em 24 h
-    client.post("/mensagens/conta/ig_auron", data={"enabled": "1"})
+    client.post("/mensagens/conta/ig_auron", data={"enabled": "1", "modo": "auto"})
     ig = {"object": "instagram", "entry": [{"id": "17841477151306262", "changes": [{"field": "comments", "value": {
         "id": "igc1", "text": "Dá para marcar?", "from": {"id": "u7", "username": "cliente_x"}, "media": {"id": "m1"}}}],
         "messaging": [{"sender": {"id": "u7"}, "recipient": {"id": "17841477151306262"}, "message": {"mid": "mid1", "text": "Olá, preço?"}},
@@ -1357,7 +1358,7 @@ def test_inbox_recipient_own_accounts_already_answered_and_log(client, monkeypat
     monkeypatch.setenv("IG_CARRETOSGROUP_TOKEN", "T2"); monkeypatch.setenv("IG_CARRETOSGROUP_USER_ID", "222")
     monkeypatch.setattr(inbox.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda s: target(*args)})())
     for acc in ("ig_davidcarreto", "ig_carretosgroup"):
-        inbox.save_account_settings(acc, enabled=True)
+        inbox.save_account_settings(acc, enabled=True, mode="auto")
     posts, replies_exist = [], {"value": False}
     class R:
         def __init__(self, d): self._d = d
@@ -1865,15 +1866,17 @@ def test_linkedin_comments_categories_modes_and_approval(client, monkeypatch):
     with connect() as conn:
         rows = {r["external_id"].rsplit(",", 1)[1][:2]: dict(r) for r in conn.execute("SELECT * FROM inbox")}
     assert rows["11"]["status"] == "proposta" and rows["11"]["intent"] == "elogio"
-    assert rows["12"]["status"] == "respondido" and "rh@carretos.pt" in rows["12"]["reply"]   # candidatura sai logo
+    assert rows["12"]["status"] == "proposta" and "rh@carretos.pt" in rows["12"]["reply"]   # candidatura também espera
     assert "912" not in rows["12"]["reply"] and "telefone/email" in rows["12"]["note"]
     assert rows["13"]["status"] == "proposta" and "davidcarreto@carretos.pt" in rows["13"]["reply"]
-    assert state["replies"][0] == {"actor": "urn:li:organization:77657554", "object": "urn:li:activity:1",
-                                   "parentComment": "urn:li:comment:(urn:li:activity:1,12)",
-                                   "message": {"text": rows["12"]["reply"]}}
+    assert state["replies"] == []                                          # nada foi publicado
+    assert len(sent) == 3 and all(b and [x for x, _ in b] == ["✓ Aprovar", "✎ Editar", "✕ Ignorar"] for _, b in sent)
     texts = " ".join(t for t, _ in sent)
-    assert "Nova candidatura no LinkedIn" in texts and "🤝 Pedido de parceria no LinkedIn" in texts
-    assert any(b and b[0][0] == "✓ Aprovar" for _, b in sent)
+    assert "🧑‍🔧 Candidatura · Carretos Group" in texts and "🤝 Pedido de parceria" in texts
+    assert "Quem: um membro do LinkedIn" in texts and "Categoria: elogio" in texts and "Resposta proposta:" in texts
+    assert "Publicação: https://www.linkedin.com/feed/update/urn:li:share:1/" in texts
+    from carretos_social import inbox as _ib
+    assert len([a for a in _ib.avisos_log() if a["ok"]]) == 3
     # aprovar com texto editado
     page = client.get(f"/mensagens/item/{rows['11']['id']}").text
     assert "Aprovar e enviar" in page
@@ -1887,10 +1890,12 @@ def test_linkedin_comments_categories_modes_and_approval(client, monkeypatch):
         assert conn.execute("SELECT status FROM inbox WHERE id=?", (rows["13"]["id"],)).fetchone()[0] == "ignorado"
     # comentários já existentes: só como propostas (nada sai sozinho)
     n = len(state["replies"])
+    k = len(sent)
     client.post("/mensagens/linkedin/existentes")
     with connect() as conn:
         old = conn.execute("SELECT status FROM inbox WHERE external_id LIKE '%,15)'").fetchone()
     assert old["status"] == "proposta" and len(state["replies"]) == n
+    assert len(sent) == k + 1                                   # o botão "Trazer…" também avisa no Telegram
     page = client.get("/mensagens").text
     assert "LinkedIn pessoal (David Carreto)" in page and "Propor e eu aprovo" in page
 

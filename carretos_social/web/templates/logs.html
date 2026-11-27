@@ -10,6 +10,9 @@
  <details><summary class="muted" style="font-size:12px">Detalhe técnico</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:340px;overflow:auto">{{ f.detalhe }}</pre></details>
 </div>{% else %}<p class="muted" style="font-size:13px">Nenhuma falha registada{% if post %} para esta publicação{% endif %} (o registo começou com esta versão).</p>{% endfor %}
 </div>
+<div class="card" style="margin-top:12px"><b>Avisos de comentários no Telegram</b> <span class="muted" style="font-size:12px">(um por comentário: enviado ou falhado)</span>
+{% for a in avisos %}<div style="font-size:12px;margin-top:4px;color:{{ '#8ddb8c' if a.ok else '#ff9b93' }}">{{ a.at[:16].replace('T',' ') }} · {{ a.linha }}</div>
+{% else %}<p class="muted" style="font-size:13px">Ainda não houve avisos de comentários.</p>{% endfor %}</div>
 <div class="card" style="margin-top:12px"><b>Registo do agendador (carretos-agendador, últimos 3 dias){% if post %}, à volta de #{{ post }}{% endif %}</b>
 <pre style="white-space:pre-wrap;font-size:11px;max-height:520px;overflow:auto;margin-top:8px">{{ journal }}</pre></div>
 {% endblock %}

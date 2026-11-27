@@ -48,9 +48,8 @@ def settings() -> dict:
 
 def account_settings(acc_id: str) -> dict:
     """enabled: responder (ou propor) nesta conta; mode: "propor" (eu aprovo) ou "auto" (responde sozinho)."""
-    acc = accounts().get(acc_id)
-    default_mode = "propor" if acc and acc.platform.startswith("linkedin") else "auto"
-    return {"enabled": False, "private": True, "mode": default_mode, **(settings().get(acc_id) or {})}
+    # regra do David: todos os comentários vão ao Telegram e nada é publicado sem aprovação
+    return {"enabled": True, "private": True, "mode": "propor", **(settings().get(acc_id) or {})}
 
 
 def save_account_settings(acc_id: str, **fields) -> None:
@@ -447,9 +446,8 @@ def process(item_id: int, wait: int = 0, force_propose: bool = False) -> str:
     status, note = "respondido", res.get("error")
     try:
         if intent == "spam" or not res.get("reply"):
-            status, note = "ignorado", "spam ou sem resposta necessária"
-        elif intent == "candidatura" and not force_propose:
-            _send(acc, row, res)                                  # resposta fixa: sai mesmo no modo "propor"
+            # vem também ao Telegram, com a proposta de ignorar (o David decide)
+            status, note = "proposta", "spam (proposta: ignorar)" if intent == "spam" else "sem resposta proposta"
         elif intent in ("parceria", "reclamacao") or res.get("alert") or mode == "propor" or force_propose:
             # parcerias, reclamações e urgências nunca saem sozinhas; no modo "propor" nada sai sem aprovação
             status, note = "proposta", ("parceria: espera sempre pela aprovação" if intent == "parceria" else
@@ -522,31 +520,81 @@ def _send(acc: Account, row, res: dict) -> None:
             params={"access_token": token})
 
 
+INTENT_NAME = {"elogio": "elogio", "preco": "preço", "marcacao": "marcação", "pergunta": "pergunta",
+               "candidatura": "candidatura", "parceria": "parceria", "reclamacao": "reclamação", "spam": "spam",
+               "outro": "outro"}
+
+
+def _who(row) -> str:
+    if row["network"] == "linkedin":
+        return "um membro do LinkedIn (o LinkedIn não dá o nome)"
+    a = (row["author"] or "").strip()
+    if not a:
+        return "desconhecido"
+    return f"@{a.lstrip('@')}" if row["network"] == "instagram" else a
+
+
 def _notify(acc: Account, row, res: dict, status: str, note, contacts: bool, item_id: int) -> None:
-    """Avisos pelo Telegram (e por email nas parcerias)."""
+    """Um aviso no Telegram por CADA comentário novo (todas as categorias, spam incluído), com os botões
+    Aprovar / Editar / Ignorar quando está à espera de decisão. Parcerias: também o email de aviso."""
     from . import notify
     from .routine import dashboard_url
     rede = NETWORK_NAME.get(row["network"] or "", row["network"] or "")
-    intent, excerpt = res.get("intent"), (row["text"] or "")[:300]
+    intent = res.get("intent") or "outro"
+    cat = "spam (proposta: ignorar)" if intent == "spam" else INTENT_NAME.get(intent, intent)
     item_url = dashboard_url(f"/mensagens/item/{item_id}")
     buttons = [("✓ Aprovar", item_url + "?acao=aprovar"), ("✎ Editar", item_url + "?acao=editar"),
-               ("✕ Ignorar", item_url + "?acao=ignorar")] if status == "proposta" else None
+               ("✕ Ignorar", item_url + "?acao=ignorar")] if status in ("proposta", "erro") else None
+    head = {"candidatura": "🧑‍🔧 Candidatura", "parceria": "🤝 Pedido de parceria", "reclamacao": "⚠️ Reclamação",
+            "spam": "🚫 Spam"}.get(intent, "💬 Comentário novo")
+    lines = [f"{head} · {acc.name} ({rede})",
+             f"Quem: {_who(row)}",
+             f"Comentário: «{(row['text'] or '')[:500]}»",
+             f"Categoria: {cat}"]
+    if contacts:
+        lines.append("⚠️ Tem telefone/email: não é repetido na resposta.")
+    if status == "respondido":
+        lines.append(f"Resposta já enviada (conta em «Responder sozinho»): {res.get('reply')}")
+    elif intent == "spam" or not res.get("reply"):
+        lines.append("Proposta: ignorar (não responder)")
+    else:
+        lines.append(f"Resposta proposta: {res.get('reply')}")
+    if status == "erro":
+        lines.append(f"Erro: {note}")
+    lines.append(f"Publicação: {post_link(row)}")
+    ok, err = True, ""
     try:
-        if intent == "candidatura":
-            notify.send(f"Nova candidatura no {rede} ({acc.name}): {post_link(row)}\n«{excerpt}»"
-                        + ("\n⚠️ O comentário tem telefone/email: não foi repetido na resposta." if contacts else "")
-                        + (f"\nResposta enviada: {res.get('reply')}" if status == "respondido" else f"\nEstado: {status} {note or ''}"))
-        elif intent == "parceria":
-            notify.send(f"🤝 Pedido de parceria no {rede} ({acc.name}): {post_link(row)} — «{excerpt}»\n"
-                        f"Resposta proposta (espera pela sua aprovação): {res.get('reply')}", buttons=buttons)
-            _email_parceria(acc, row, rede)
-        elif status == "proposta":
-            notify.send(f"✍️ Resposta para aprovar no {rede} ({acc.name}) · {intent}:\n«{excerpt}»\n"
-                        f"Proposta: {res.get('reply')}\n{post_link(row)}", buttons=buttons)
-        elif res.get("alert") or status == "erro" or contacts:
-            _alert(acc, row, res, status, note)
-    except Exception:  # noqa: BLE001
+        notify.send("\n".join(lines), buttons=buttons)
+    except Exception as exc:  # noqa: BLE001
+        ok, err = False, str(exc)
+    _log_aviso(item_id, acc.name, rede, cat, ok, err)
+    if intent == "parceria":
+        _email_parceria(acc, row, rede)
+
+
+def _log_aviso(item_id: int, conta: str, rede: str, cat: str, ok: bool, err: str = "") -> None:
+    """Uma linha por aviso (enviado ou falhado): no registo do processo e em data/avisos_comentarios.jsonl
+    (⚙ Configurar → Registos)."""
+    from .redact import redact
+    line = (f"aviso Telegram comentário #{item_id} ({conta} · {rede} · {cat}): "
+            + ("enviado" if ok else f"FALHOU — {redact(err)[:300]}"))
+    print(datetime.now().strftime("%H:%M"), line, flush=True)
+    try:
+        path = _cfg.DATA_DIR / "avisos_comentarios.jsonl"
+        _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        rows = path.read_text(encoding="utf-8").splitlines()[-299:] if path.exists() else []
+        rows.append(json.dumps({"at": now(), "linha": line, "ok": ok}, ensure_ascii=False))
+        path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    except OSError:
         pass
+
+
+def avisos_log(limit: int = 50) -> list[dict]:
+    try:
+        rows = [json.loads(x) for x in (_cfg.DATA_DIR / "avisos_comentarios.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    except (OSError, ValueError):
+        return []
+    return rows[-limit:][::-1]
 
 
 def _email_parceria(acc: Account, row, rede: str) -> None:
