@@ -2051,3 +2051,25 @@ def test_config_shows_non_secret_values_only(client, monkeypatch):
     page = client.get("/configurar").text
     assert "atual: <code" in page and "mail.exemplo.pt" in page and "studio@exemplo.pt" in page
     assert "palavra-secreta-123" not in page
+
+
+def test_linkedin_scopes_and_daily_budget(tmp_path, monkeypatch):
+    from carretos_social import linkedin_connect, linkedin_inbox
+    assert {"r_organization_social_feed", "w_organization_social_feed", "r_organization_social",
+            "w_organization_social", "rw_organization_admin"} <= set(linkedin_connect.ORG_SCOPES)
+    monkeypatch.setattr(linkedin_inbox, "_budget_path", lambda: tmp_path / "orc.json")
+    monkeypatch.delenv("LINKEDIN_COMMENTS_DAILY_CALLS", raising=False)
+    monkeypatch.delenv("LINKEDIN_COMMENTS_MINUTES", raising=False)
+    assert linkedin_inbox.interval_minutes() == 60 and linkedin_inbox.daily_budget() == 60
+    for _ in range(60):
+        linkedin_inbox._spend()
+    with pytest.raises(linkedin_inbox.BudgetExceeded):
+        linkedin_inbox._spend()
+    linkedin_inbox._spend(force=True)                    # responder a um comentário aprovado nunca é bloqueado
+    assert linkedin_inbox.calls_today() == 61
+    posts = [f"urn:li:share:{i}" for i in range(8)]
+    assert linkedin_inbox.posts_this_round(posts) == []  # sem orçamento: não lê
+    (tmp_path / "orc.json").unlink()
+    first = linkedin_inbox.posts_this_round(posts)
+    assert first[0] == "urn:li:share:0" and 1 <= len(first) <= 8
+    assert len(first) <= 60 - 6                           # nunca mais do que o orçamento que resta

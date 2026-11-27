@@ -23,7 +23,9 @@ AUTH = "https://www.linkedin.com/oauth/v2/authorization"
 TOKEN = "https://www.linkedin.com/oauth/v2/accessToken"
 REST = "https://api.linkedin.com/rest"
 MEMBER_SCOPES = ["openid", "profile", "w_member_social"]
-ORG_SCOPES = ["w_organization_social", "r_organization_social", "rw_organization_admin"]
+# *_feed: ler e escrever comentários/reações da página (socialActions), pedidos pela Community Management API
+ORG_SCOPES = ["w_organization_social", "r_organization_social", "rw_organization_admin",
+              "r_organization_social_feed", "w_organization_social_feed"]
 
 
 APPS = {"perfil": ("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"),
