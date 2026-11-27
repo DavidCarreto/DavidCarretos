@@ -1319,9 +1319,13 @@ async def meta_webhook(request: Request):
 
 def _li_calls() -> dict:
     from .. import linkedin_connect as lc, linkedin_inbox as li
-    total, used, budget = lc.calls_today_total(), li.calls_today(), li.daily_budget()
+    used, budget = li.calls_today(), li.daily_budget()
+    # os pedidos dos comentários também passam pelo total; o total nunca é menor (antes desta contagem existir,
+    # ou com dois processos a escrever ao mesmo tempo, podia ficar atrás)
+    total = max(lc.calls_today_total(), used)
     free = max(0, lc.MEMBER_DAILY_LIMIT - total - max(0, budget - used))
-    return {"total": total, "limit": lc.MEMBER_DAILY_LIMIT, "comments": used, "budget": budget, "publish": free}
+    return {"total": total, "limit": lc.MEMBER_DAILY_LIMIT, "comments": used, "budget": budget, "publish": free,
+            "next": li.next_poll_at()}
 
 
 def _li_mail_addr() -> str:

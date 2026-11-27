@@ -230,9 +230,12 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
                 print(datetime.now().strftime("%H:%M"), line)
         except Exception as exc:  # noqa: BLE001
             print("Facebook comentários:", exc)
-        from .linkedin_inbox import poll_due            # comentários da página LinkedIn (intervalo guardado)
-        for line in poll_due():
-            print(datetime.now().strftime("%H:%M"), line)
+        try:                                            # comentários da página LinkedIn (intervalo guardado)
+            from .linkedin_inbox import poll_due
+            for line in poll_due():
+                print(datetime.now().strftime("%H:%M"), line)
+        except Exception as exc:  # noqa: BLE001
+            print(datetime.now().strftime("%H:%M"), "LinkedIn comentários: erro —", exc)
         from .linkedin_mail import interval_minutes as mail_minutes, poll_safe as mail_poll
         if time.time() - last_li_poll >= mail_minutes() * 60:     # avisos de mensagens privadas (emails)
             last_li_poll = time.time()

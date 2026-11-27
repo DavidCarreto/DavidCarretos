@@ -225,14 +225,21 @@ def comment_exists(acc: Account, comment_urn: str, context: str = "") -> bool | 
         return False if ("-> 404" in str(exc) or "-> 410" in str(exc)) else None
 
 
-def page_replied(acc: Account, comment_urn: str) -> bool:
-    """A página já respondeu a este comentário (alguém da equipa no LinkedIn)? Em caso de dúvida, False."""
+def page_reply_text(acc: Account, comment_urn: str) -> str | None:
+    """Texto da resposta da página a este comentário feita fora do Carretos Studio, ou None (ou na dúvida)."""
     try:
         data = _call("GET", f"{REST}/socialActions/{quote(comment_urn, safe='')}/comments", acc,
                      params={"count": 50}).json()
-        return any((c.get("actor") or "") == _org(acc) for c in data.get("elements", []))
+        for c in data.get("elements", []):
+            if (c.get("actor") or "") == _org(acc):
+                return _clean_message(c.get("message") or {})[0]
+        return None
     except Exception:  # noqa: BLE001
-        return False
+        return None
+
+
+def page_replied(acc: Account, comment_urn: str) -> bool:
+    return page_reply_text(acc, comment_urn) is not None
 
 
 def reply(acc: Account, comment_urn: str, text: str, parent: str = "") -> str:
@@ -335,6 +342,14 @@ def poll(include_old: bool = False) -> list[str]:
 
 
 _last_fail_alert = 0.0
+
+
+def next_poll_at() -> str:
+    """Hora (Lisboa) da próxima leitura automática."""
+    from zoneinfo import ZoneInfo
+    st = _budget_state()
+    nxt = max(time.time(), st.get("last_poll", 0) + interval_minutes() * 60)
+    return datetime.fromtimestamp(nxt, ZoneInfo("Europe/Lisbon")).strftime("%H:%M")
 
 
 def last_round() -> dict:

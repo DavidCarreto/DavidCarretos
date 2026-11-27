@@ -2087,7 +2087,7 @@ def test_comment_from_other_own_account_is_proposed_not_ignored(monkeypatch):
     from carretos_social import inbox, notify
     from carretos_social.db import connect
     monkeypatch.setattr(inbox, "is_own", lambda aid, a: a == "davidcarretos")
-    monkeypatch.setattr(inbox, "already_answered", lambda acc, row: False)
+    monkeypatch.setattr(inbox, "answered_elsewhere", lambda acc, row: None)
     sent = []
     monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append((t, buttons)))
     monkeypatch.setattr(inbox, "parse", lambda p: [{"account_id": "ig_carretosgroup", "network": "instagram",
@@ -2108,7 +2108,7 @@ def test_personal_dm_only_notice_language_and_deleted(client, monkeypatch):
     monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "x")
     sent = []
     monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append((t, buttons)))
-    monkeypatch.setattr(inbox, "already_answered", lambda acc, row: False)
+    monkeypatch.setattr(inbox, "answered_elsewhere", lambda acc, row: None)
     called = []
     monkeypatch.setattr(ai, "inbox_reply", lambda *a: called.append(a) or {"intent": "outro", "reply": "Ok", "alert": False})
     # 1) mensagem privada na conta pessoal: só aviso, sem proposta nem IA
@@ -2230,3 +2230,33 @@ def test_facebook_pages_polled_without_webhooks(tmp_path, monkeypatch):
         row = conn.execute("SELECT author, network FROM inbox WHERE external_id='c1'").fetchone()
     assert row["author"] == "David Carreto" and row["network"] == "facebook"
     assert inbox.poll_facebook_pages() == []                              # dentro do intervalo: não volta a ler
+
+
+def test_linkedin_suggestions_not_alerted_and_elsewhere_notice_and_counts(client, monkeypatch, tmp_path):
+    from carretos_social import linkedin_mail, inbox, notify, linkedin_inbox, linkedin_connect
+    from carretos_social.db import connect
+    for subj in ("Ana Costa está em alta na sua rede", "Uma pessoa da empresa Carreto's que você talvez conheça",
+                 "Novas vagas para si"):
+        assert linkedin_mail.parse_parts(subj, "messages-noreply@linkedin.com", "Enviar mensagem · linkedin.com") is None
+    for subj in ("Ana Costa enviou-lhe uma nova mensagem", "Nova mensagem de Ana Costa", "InMail: proposta",
+                 "Ana Costa sent you a new message"):
+        assert linkedin_mail.parse_parts(subj, "messages-noreply@linkedin.com", "texto") is not None
+    # já respondido fora do Studio: fica ignorado, mas avisa no Telegram com as duas mensagens (sem botões)
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append((t, buttons)))
+    monkeypatch.setattr(inbox, "answered_elsewhere", lambda acc, row: "Olá 👋 O preço depende da viatura")
+    monkeypatch.setattr(inbox, "parse", lambda p: [{"account_id": "fb_carretosgroup", "network": "facebook",
+        "kind": "comment", "external_id": "fb-x9", "author_id": "5", "author": "Cliente", "text": "Quanto custa?",
+        "context": "222_1", "own": "222"}])
+    inbox.receive({}, background=False)
+    with connect() as conn:
+        row = conn.execute("SELECT status, reply FROM inbox WHERE external_id='fb-x9'").fetchone()
+    assert row["status"] == "ignorado" and "preço depende" in row["reply"]
+    assert "Já respondido fora do Carretos Studio" in sent[-1][0] and "«Quanto custa?»" in sent[-1][0] and sent[-1][1] is None
+    assert any("já respondido fora do Studio" in a["linha"] and a["ok"] for a in inbox.avisos_log())
+    # contagem: o total nunca é menor do que a parte dos comentários
+    monkeypatch.setattr(linkedin_inbox, "calls_today", lambda: 51)
+    monkeypatch.setattr(linkedin_connect, "calls_today_total", lambda: 13)
+    from carretos_social.web.app import _li_calls
+    c = _li_calls()
+    assert c["total"] == 51 and c["publish"] == 100 - 51 - 9

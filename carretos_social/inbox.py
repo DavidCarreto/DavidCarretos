@@ -315,11 +315,12 @@ def process_pending() -> int:
     return len(ids)
 
 
-def already_answered(acc: Account, row) -> bool:
-    """A conta já respondeu (automação do Meta Business Suite ou uma pessoa)? Em caso de dúvida, False."""
+def answered_elsewhere(acc: Account, row) -> str | None:
+    """A conta já respondeu fora do Carretos Studio (ManyChat, Meta Business Suite, uma pessoa)?
+    Devolve o texto dessa resposta ("" se não o conseguir ler) ou None se não houver resposta (ou na dúvida)."""
     if acc.platform.startswith("linkedin"):
-        from .linkedin_inbox import page_replied
-        return page_replied(acc, row["external_id"])
+        from .linkedin_inbox import page_reply_text
+        return page_reply_text(acc, row["external_id"])
     from .http import request
     from .meta_connect import graph
     token = acc.secret("access_token_env")
@@ -328,24 +329,29 @@ def already_answered(acc: Account, row) -> bool:
     try:
         if row["kind"] == "comment":
             edge = "replies" if acc.platform == "instagram" else "comments"
+            fields = "from,username,text" if acc.platform == "instagram" else "from,message"
             data = request("GET", f"{graph()}/{row['external_id']}/{edge}", retries=1,
-                           params={"fields": "from,username", "limit": 25, "access_token": token}).json()
+                           params={"fields": fields, "limit": 25, "access_token": token}).json()
             for c in data.get("data", []):
                 frm = c.get("from") or {}
                 if str(frm.get("id", "")) in mine or (c.get("username") or frm.get("username") or "").lower() in handles:
-                    return True
-            return False
+                    return (c.get("message") or c.get("text") or "").strip()
+            return None
         platform = "instagram" if acc.platform == "instagram" else "messenger"
         data = request("GET", f"{graph()}/me/conversations", retries=1, params={
             "platform": platform, "user_id": row["author_id"], "access_token": token,
-            "fields": "messages.limit(5){from,created_time}"}).json()
+            "fields": "messages.limit(5){from,created_time,message}"}).json()
         for conv in data.get("data", []):
             msgs = (conv.get("messages") or {}).get("data", [])
             if msgs and str((msgs[0].get("from") or {}).get("id", "")) in mine:   # a mais recente é nossa
-                return True
+                return (msgs[0].get("message") or "").strip()
     except Exception:  # noqa: BLE001
-        return False
-    return False
+        return None
+    return None
+
+
+def already_answered(acc: Account, row) -> bool:
+    return answered_elsewhere(acc, row) is not None
 
 
 # ------------------------------------------------------------------ decidir e responder
@@ -460,10 +466,12 @@ def process(item_id: int, wait: int = 0, force_propose: bool = False) -> str:
                          ("mensagem privada na conta pessoal: só aviso, sem proposta", item_id))
         _notify_dm(acc, row, item_id)
         return "aviso"
-    if already_answered(acc, row):
+    other = answered_elsewhere(acc, row)
+    if other is not None:
         with connect() as conn:
-            conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
-                         ("já respondido por outra automação (ex.: Meta Business Suite) ou por uma pessoa", item_id))
+            conn.execute("UPDATE inbox SET status='ignorado', reply=?, note=? WHERE id=?",
+                         (other or None, "já respondido fora do Carretos Studio (outra automação ou uma pessoa)", item_id))
+        _notify_elsewhere(acc, row, item_id, other)
         return "ignorado"
     res = compose(acc, row["kind"], row["text"] or "", row["author"] or "")
     intent = res.get("intent")
@@ -635,6 +643,21 @@ def _notify(acc: Account, row, res: dict, status: str, note, contacts: bool, ite
     _log_aviso(item_id, acc.name, rede, cat, ok, err)
     if intent == "parceria":
         _email_parceria(acc, row, rede)
+
+
+def _notify_elsewhere(acc: Account, row, item_id: int, other: str) -> None:
+    """Houve resposta fora do Carretos Studio: avisa (sem botões) para o David saber."""
+    from . import notify
+    rede = NETWORK_NAME.get(row["network"] or "", row["network"] or "")
+    ok, err = True, ""
+    try:
+        notify.send(f"ℹ️ Já respondido fora do Carretos Studio · {acc.name} ({rede})\nQuem: {_who(row)}\n"
+                    f"Comentário: «{(row['text'] or '')[:400]}»\n"
+                    f"Resposta publicada por outra automação/pessoa: «{(other or '(não foi possível ler o texto)')[:400]}»\n"
+                    f"Publicação: {post_link(row)}")
+    except Exception as exc:  # noqa: BLE001
+        ok, err = False, str(exc)
+    _log_aviso(item_id, acc.name, rede, "já respondido fora do Studio", ok, err)
 
 
 def _notify_dm(acc: Account, row, item_id: int) -> None:

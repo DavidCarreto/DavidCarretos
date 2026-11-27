@@ -24,7 +24,10 @@ from email.utils import parseaddr
 
 from . import config as _cfg
 
-MSG_WORDS = re.compile(r"mensage|message|enviou-lhe|sent you|escreveu|inmail", re.I)
+# só o ASSUNTO decide (o corpo das sugestões do LinkedIn também tem botões "Enviar mensagem")
+MSG_SUBJECT = re.compile(r"enviou-lhe (uma )?(nova )?mensagem|nova mensagem|novas mensagens|mensagem de |"
+                         r"respondeu à sua mensagem|sent you (a )?(new )?message|new message|message from |inmail", re.I)
+MSG_WORDS = MSG_SUBJECT
 PARTNER_WORDS = re.compile(r"parceri|fornecedor|colabora|patroc|proposta comercial|partnership|sponsor", re.I)
 JOB_WORDS = re.compile(r"candidat|emprego|\bvaga|\bcv\b|curr[ií]culo|trabalhar convosco|recrutamento|job", re.I)
 
@@ -131,9 +134,9 @@ def _html_to_text(t: str) -> str:
 def parse_parts(subject: str, sender: str, body: str) -> dict | None:
     sender = (sender or "").lower()
     from_linkedin = "linkedin.com" in sender or ("linkedin.com" in body.lower() and re.match(r"^\s*(fw|fwd|enc|reenc)", subject, re.I))
-    if not from_linkedin or not MSG_WORDS.search(subject + " " + body[:600]):
-        return None
     clean_subj = re.sub(r"^\s*((fw|fwd|enc|reenc|re)\s*:\s*)+", "", subject, flags=re.I).strip()
+    if not from_linkedin or not MSG_SUBJECT.search(clean_subj):
+        return None                       # sugestões de rede, "talvez conheça", vagas, segurança…
     name = ""
     for pat in (r"^(.+?) enviou-lhe", r"^(.+?) sent you", r"mensagem de (.+?)(?:$| na | para |:)", r"message from (.+?)(?:$| on |:)",
                 r"^(.+?) escreveu"):
