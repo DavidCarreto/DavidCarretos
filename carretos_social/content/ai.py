@@ -367,13 +367,24 @@ INTENTS = ["pergunta", "preco", "marcacao", "elogio", "candidatura", "parceria",
 
 
 def inbox_reply(acc: Account, kind: str, text: str, author: str, whatsapp: str) -> dict:
-    """Resposta automática a um comentário ou mensagem, sempre a encaminhar para o assistente do WhatsApp."""
+    """Resposta proposta a um comentário ou mensagem (nada é enviado sem aprovação do David)."""
     schema = _obj({"intent": {"type": "string", "enum": INTENTS}, "reply": STR, "private_reply": STR,
-                   "alert": {"type": "boolean"}})
+                   "alert": {"type": "boolean"}, "lang": STR})
     where = "comentário público numa publicação" if kind == "comment" else "mensagem privada (DM)"
+    personal = (getattr(acc, "voice", "") == "pessoal")
+    personal_rules = ("""
+ATENÇÃO: esta é a conta PESSOAL do David Carreto (não é a da empresa). A resposta é curta e neutra (agradecer,
+reagir com simpatia). NUNCA assumas compromissos em nome do David (encontros, cafés, agenda, "já lhe digo",
+preços, prazos, favores) e NÃO incluas o WhatsApp da empresa, a não ser que seja claramente um assunto de oficina
+(preço, revisão, avaria, marcação do carro).""" if personal else "")
     prompt = f"""{_account_line(acc)}
 Recebemos este {where} de "{author or 'alguém'}":
 \"\"\"{text[:1500]}\"\"\"
+{personal_rules}
+LÍNGUA: responde SEMPRE na língua do texto recebido (português de Portugal se for português; inglês se for inglês,
+etc.). lang: o código da língua do texto recebido (pt, en, es, fr, …).
+FACTOS: se a pergunta tiver resposta nos FACTOS CONFIRMADOS (ex.: que peças usamos), responde com esse facto em
+poucas palavras e só depois, se ajudar, o WhatsApp. Nunca fales de "peças equivalentes".
 
 O WhatsApp {whatsapp} tem um assistente disponível 24 horas que dá o preço da revisão na hora, explica o
 orçamento e os serviços e faz a marcação. Escreve a resposta automática:

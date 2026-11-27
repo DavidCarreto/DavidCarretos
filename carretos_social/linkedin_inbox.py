@@ -67,8 +67,8 @@ def _budget_state() -> dict:
     except (OSError, ValueError):
         st = {}
     if st.get("day") != _today():
-        st = {"day": _today(), "calls": 0, "rot": st.get("rot", 0), "posts": st.get("posts", []),
-              "posts_at": st.get("posts_at", 0)}
+        st = {"day": _today(), "calls": 0, **{k: st[k] for k in ("rot", "posts", "posts_at", "threads", "activity",
+                                                                    "last", "last_poll") if k in st}}
     return st
 
 
@@ -154,10 +154,16 @@ def posts_this_round(posts: list[str]) -> list[str]:
     if allowance == 0:
         return []
     chosen = [posts[0]]
-    rest_posts = posts[1:]
-    if rest_posts and allowance > 1:
+    # a seguir, os posts com comentários mais recentes (atividade guardada das leituras anteriores)
+    act = st.get("activity", {})
+    active = sorted([p for p in posts[1:] if act.get(p)], key=lambda p: -act[p])
+    for p in active:
+        if len(chosen) < allowance and time.time() * 1000 - act[p] < 7 * 86400000:
+            chosen.append(p)
+    rest_posts = [p for p in posts[1:] if p not in chosen]
+    if rest_posts and allowance > len(chosen):
         start = st.get("rot", 0) % len(rest_posts)
-        rot = (rest_posts[start:] + rest_posts[:start])[:allowance - 1]
+        rot = (rest_posts[start:] + rest_posts[:start])[:allowance - len(chosen)]
         chosen += rot
         st["rot"] = start + len(rot)
         _budget_save(st)
@@ -169,10 +175,37 @@ def comments(acc: Account, post_urn: str) -> list[dict]:
                  params={"count": 100}).json()
     out = []
     for c in data.get("elements", []):
+        summ = c.get("commentsSummary") or {}
         out.append({"urn": c.get("commentUrn") or "", "actor": c.get("actor") or (c.get("created") or {}).get("actor", ""),
                     "text": ((c.get("message") or {}).get("text") or "").strip(),
-                    "time": int((c.get("created") or {}).get("time") or 0), "post": post_urn})
+                    "time": int((c.get("created") or {}).get("time") or 0), "post": post_urn, "parent": "",
+                    "replies": int(summ.get("aggregatedTotalComments") or summ.get("totalFirstLevelComments") or 0)})
     return out
+
+
+def thread_replies(acc: Account, parent: dict) -> list[dict]:
+    """Respostas dentro do fio de um comentário (exceto as da própria página são tratadas pelo chamador)."""
+    data = _call("GET", f"{REST}/socialActions/{quote(parent['urn'], safe='')}/comments", acc,
+                 params={"count": 100}).json()
+    return [{"urn": c.get("commentUrn") or "", "actor": c.get("actor") or (c.get("created") or {}).get("actor", ""),
+             "text": ((c.get("message") or {}).get("text") or "").strip(),
+             "time": int((c.get("created") or {}).get("time") or 0), "post": parent["post"], "parent": parent["urn"],
+             "replies": 0} for c in data.get("elements", [])]
+
+
+def comment_exists(acc: Account, comment_urn: str, context: str = "") -> bool | None:
+    """O comentário ainda existe? (404 = apagado). Conta no orçamento mas nunca é bloqueado."""
+    from .http import ApiError
+    m = re.match(r"urn:li:comment:\((.+),(\d+)\)$", comment_urn or "")
+    if not m:
+        return None
+    parent = context.split("|", 1)[1] if "|" in context else ""
+    container = parent or m.group(1)
+    try:
+        _call("GET", f"{REST}/socialActions/{quote(container, safe='')}/comments/{m.group(2)}", acc, force=True)
+        return True
+    except ApiError as exc:
+        return False if ("-> 404" in str(exc) or "-> 410" in str(exc)) else None
 
 
 def page_replied(acc: Account, comment_urn: str) -> bool:
@@ -185,11 +218,11 @@ def page_replied(acc: Account, comment_urn: str) -> bool:
         return False
 
 
-def reply(acc: Account, comment_urn: str, text: str) -> str:
-    """Resposta da página no fio do comentário."""
-    body = {"actor": _org(acc), "object": _thread(comment_urn), "parentComment": comment_urn,
-            "message": {"text": text}}
-    r = _call("POST", f"{REST}/socialActions/{quote(comment_urn, safe='')}/comments", acc, force=True, json=body)
+def reply(acc: Account, comment_urn: str, text: str, parent: str = "") -> str:
+    """Resposta da página no fio do comentário (numa resposta dentro de um fio, responde no mesmo fio)."""
+    top = parent or comment_urn
+    body = {"actor": _org(acc), "object": _thread(top), "parentComment": top, "message": {"text": text}}
+    r = _call("POST", f"{REST}/socialActions/{quote(top, safe='')}/comments", acc, force=True, json=body)
     return r.headers.get("x-restli-id", "")
 
 
@@ -215,25 +248,55 @@ def poll(include_old: bool = False) -> list[str]:
     except BudgetExceeded as exc:
         return [f"LinkedIn comentários: {exc}"]
     new_ids, seen = [], 0
+    st_b = _budget_state()
+    threads, activity = st_b.get("threads", {}), st_b.get("activity", {})
+    deleted = []
     with connect() as conn:
         for post in checking:
             try:
                 found = comments(acc, post)
             except BudgetExceeded:
                 break
+            # respostas dentro dos fios: só quando o n.º de respostas mudou desde a última leitura
+            for c in list(found):
+                if c["replies"] and (include_old or threads.get(c["urn"]) != c["replies"]):
+                    try:
+                        found += thread_replies(acc, c)
+                        threads[c["urn"]] = c["replies"]
+                    except BudgetExceeded:
+                        break
+                    except Exception:  # noqa: BLE001
+                        pass
+            if found:
+                activity[post] = max([activity.get(post, 0)] + [c["time"] for c in found])
+            # propostas pendentes deste post cujo comentário (de 1.º nível) desapareceu: apagado pelo autor
+            urns = {c["urn"] for c in found}
+            for r in conn.execute("SELECT * FROM inbox WHERE account_id=? AND status='proposta' AND context=?",
+                                  (acc.id, post)).fetchall():
+                if r["external_id"] not in urns:
+                    deleted.append(r)
             for c in found:
                 seen += 1
                 if not c["urn"] or c["actor"] == _org(acc) or (c["time"] < since_ms and not include_old):
                     continue                      # da própria página, ou anterior à ativação
                 if conn.execute("SELECT 1 FROM inbox WHERE external_id=?", (c["urn"],)).fetchone():
                     continue
+                ctx = f"{post}|{c['parent']}" if c["parent"] else post
                 new_ids.append(conn.execute(
                     "INSERT INTO inbox(account_id, network, kind, external_id, author_id, author, text, context, "
                     "status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (acc.id, "linkedin", "comment", c["urn"], c["actor"], "", c["text"][:3000], post, "novo",
+                    (acc.id, "linkedin", "comment", c["urn"], c["actor"], "", c["text"][:3000], ctx, "novo",
                      now())).lastrowid)
-    lines = [f"LinkedIn comentários: {len(checking)} de {len(posts)} posts (30 dias) vistos, {seen} comentários lidos, "
-             f"{len(new_ids)} novos · pedidos hoje {calls_today()}/{daily_budget()}"]
+    st_b = _budget_state()
+    st_b["threads"], st_b["activity"] = threads, activity
+    st_b["last"] = {"at": now(), "seen": len(checking), "total": len(posts), "new": len(new_ids),
+                    "left": max(0, len(posts) - len(checking)), "manual": include_old}
+    _budget_save(st_b)
+    for r in deleted:
+        inbox.mark_deleted(r["id"], acc, r)
+    lines = [f"LinkedIn comentários: {len(checking)} de {len(posts)} posts (30 dias) vistos "
+             f"({max(0, len(posts) - len(checking))} por ver nesta leitura), {seen} comentários lidos, "
+             f"{len(new_ids)} novos, {len(deleted)} apagados · pedidos hoje {calls_today()}/{daily_budget()}"]
     for iid in new_ids:
         lines.append(f"LinkedIn comentário #{iid}: {inbox.process(iid, force_propose=include_old)}")
     return lines
@@ -242,8 +305,23 @@ def poll(include_old: bool = False) -> list[str]:
 _last_fail_alert = 0.0
 
 
+def last_round() -> dict:
+    return _budget_state().get("last") or {}
+
+
+def poll_due() -> list[str]:
+    """Para o agendador (chamado a cada minuto): só lê quando passou o intervalo desde a ÚLTIMA leitura guardada
+    (um reinício do agendador não gasta pedidos)."""
+    st = _budget_state()
+    if time.time() - st.get("last_poll", 0) < interval_minutes() * 60:
+        return []
+    st["last_poll"] = time.time()
+    _budget_save(st)
+    return poll_safe()
+
+
 def poll_safe() -> list[str]:
-    """Para o agendador: nunca rebenta; se a leitura falhar, avisa no Telegram (no máximo de 6 em 6 horas)."""
+    """Nunca rebenta; se a leitura falhar, avisa no Telegram (no máximo de 6 em 6 horas)."""
     global _last_fail_alert
     try:
         return poll()

@@ -78,7 +78,14 @@ def parcerias_avisos() -> list[str]:
     return [e.strip() for e in raw.replace(";", ",").split(",") if "@" in e]
 
 
-def fixed_reply(intent: str) -> str:
+def fixed_reply(intent: str, lang: str = "pt") -> str:
+    if (lang or "pt").lower()[:2] not in ("pt", ""):
+        if intent == "candidatura":
+            return (f"Thank you for your interest in joining Carretos Group! Please send your CV to {candidatura_email()}, "
+                    "with the role and the workshop you are interested in. Good luck!")
+        if intent == "parceria":
+            return (f"Thank you for reaching out! For partnership proposals, please send us the details at "
+                    f"{parcerias_email()} and we will reply with all due attention.")
     if intent == "candidatura":
         return (f"Obrigado pelo interesse em juntar-se à Carretos Group! Envie o seu CV para {candidatura_email()}, "
                 "com a função e a oficina que lhe interessam. Boa sorte!")
@@ -102,7 +109,7 @@ NETWORK_NAME = {"instagram": "Instagram", "facebook": "Facebook", "linkedin": "L
 def post_link(row) -> str:
     """Link para a publicação comentada (LinkedIn: o URN da publicação; Meta: o dashboard)."""
     from .routine import dashboard_url
-    ctx = (row["context"] or "") if row is not None else ""
+    ctx = ((row["context"] or "") if row is not None else "").split("|", 1)[0]
     if ctx.startswith("urn:li:"):
         return f"https://www.linkedin.com/feed/update/{ctx}/"
     return dashboard_url("/mensagens")
@@ -359,8 +366,10 @@ def compose(acc: Account, kind: str, text: str, author: str = "") -> dict:
         res[k] = "" if "[PREENCHER" in txt else txt              # nunca enviar um marcador por preencher
     if res.get("intent") in ("candidatura", "parceria"):
         # respostas fixas: nunca pedem CV/dados no comentário, não confirmam vagas nem falam de condições
-        res["reply"], res["private_reply"] = fixed_reply(res["intent"]), ""
-    elif res.get("intent") != "spam" and res.get("reply") and wa not in res["reply"] and res["intent"] != "elogio":
+        res["reply"], res["private_reply"] = fixed_reply(res["intent"], res.get("lang") or "pt"), ""
+    elif res.get("intent") != "spam" and res.get("reply") and wa not in res["reply"] and res["intent"] != "elogio" \
+            and (getattr(acc, "voice", "") != "pessoal" or res.get("intent") in ("preco", "marcacao")):
+        # conta pessoal do David: o WhatsApp da empresa só em assuntos de oficina
         res["reply"] = f"{res['reply']} {wa}"
     if acc.platform.startswith("linkedin"):
         res["private_reply"] = ""                                 # no LinkedIn não há mensagem privada pela API
@@ -440,6 +449,13 @@ def process(item_id: int, wait: int = 0, force_propose: bool = False) -> str:
             conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
                          ("já respondeu a esta pessoa nas últimas 24 h (a conversa segue no WhatsApp)", item_id))
             return "ignorado"
+    if row["kind"] == "message" and getattr(acc, "voice", "") == "pessoal":
+        # conta pessoal do David: mensagens privadas só com aviso no Telegram, sem proposta de resposta
+        with connect() as conn:
+            conn.execute("UPDATE inbox SET status='aviso', note=? WHERE id=?",
+                         ("mensagem privada na conta pessoal: só aviso, sem proposta", item_id))
+        _notify_dm(acc, row, item_id)
+        return "aviso"
     if already_answered(acc, row):
         with connect() as conn:
             conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
@@ -487,6 +503,9 @@ def approve(item_id: int, text: str | None = None) -> str:
     bad = [w for _, w in found_terms(acc.id, reply)]
     if bad or "[PREENCHER" in reply:
         raise ValueError("A resposta tem palavras proibidas ou partes por preencher: " + "; ".join(bad or ["[PREENCHER]"]))
+    if row["kind"] == "comment" and comment_exists(acc, row) is False:
+        mark_deleted(item_id, acc, row)
+        raise ValueError("O comentário foi apagado pelo autor: não enviei nada.")
     if already_answered(acc, row):
         with connect() as conn:
             conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
@@ -499,6 +518,41 @@ def approve(item_id: int, text: str | None = None) -> str:
     return "respondido"
 
 
+def comment_exists(acc: Account, row) -> bool | None:
+    """O comentário ainda existe na rede? False = apagado; None = não foi possível confirmar."""
+    try:
+        if acc.platform.startswith("linkedin"):
+            from .linkedin_inbox import comment_exists as li_exists
+            return li_exists(acc, row["external_id"], row["context"] or "")
+        from .http import ApiError, request
+        from .meta_connect import graph
+        try:
+            request("GET", f"{graph()}/{row['external_id']}", retries=1,
+                    params={"fields": "id", "access_token": acc.secret("access_token_env")})
+            return True
+        except ApiError as exc:
+            msg = str(exc)
+            if "does not exist" in msg or '"code":100' in msg.replace(" ", "") or "-> 404" in msg:
+                return False
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def mark_deleted(item_id: int, acc: Account, row) -> None:
+    """Comentário apagado pelo autor: deixa de esperar pela aprovação e avisa no Telegram."""
+    with connect() as conn:
+        conn.execute("UPDATE inbox SET status='apagado', note=? WHERE id=?", ("apagado pelo autor", item_id))
+    try:
+        from . import notify
+        rede = NETWORK_NAME.get(row["network"] or "", row["network"] or "")
+        notify.send(f"🗑 Comentário #{item_id} apagado pelo autor · {acc.name} ({rede}): «{(row['text'] or '')[:200]}»\n"
+                    "Já não precisa de decidir nada.")
+    except Exception:  # noqa: BLE001
+        pass
+    _log_aviso(item_id, acc.name, NETWORK_NAME.get(row["network"] or "", ""), "apagado pelo autor", True)
+
+
 def ignore(item_id: int) -> None:
     with connect() as conn:
         conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=? AND status IN ('proposta','erro','novo')",
@@ -508,7 +562,8 @@ def ignore(item_id: int) -> None:
 def _send(acc: Account, row, res: dict) -> None:
     if acc.platform.startswith("linkedin"):
         from .linkedin_inbox import reply as li_reply
-        li_reply(acc, row["external_id"], res["reply"])
+        ctx = row["context"] or ""
+        li_reply(acc, row["external_id"], res["reply"], parent=ctx.split("|", 1)[1] if "|" in ctx else "")
         return
     from .http import request
     from .meta_connect import graph
@@ -578,6 +633,18 @@ def _notify(acc: Account, row, res: dict, status: str, note, contacts: bool, ite
         _email_parceria(acc, row, rede)
 
 
+def _notify_dm(acc: Account, row, item_id: int) -> None:
+    from . import notify
+    rede = NETWORK_NAME.get(row["network"] or "", row["network"] or "")
+    ok, err = True, ""
+    try:
+        notify.send(f"✉️ Mensagem privada · {acc.name} ({rede})\nQuem: {_who(row)}\n«{(row['text'] or '')[:500]}»\n"
+                    "(Conta pessoal: sem proposta de resposta; responda na app.)")
+    except Exception as exc:  # noqa: BLE001
+        ok, err = False, str(exc)
+    _log_aviso(item_id, acc.name, rede, "mensagem privada (só aviso)", ok, err)
+
+
 def _log_aviso(item_id: int, conta: str, rede: str, cat: str, ok: bool, err: str = "") -> None:
     """Uma linha por aviso (enviado ou falhado): no registo do processo e em data/avisos_comentarios.jsonl
     (⚙ Configurar → Registos)."""
@@ -637,6 +704,61 @@ def page_id_for(acc: Account) -> str | None:
     from .meta_connect import discovered
     ig = acc.secret("user_id_env")
     return next((p["id"] for p in discovered().get("pages", []) if (p.get("ig") or {}).get("id") == ig), None)
+
+
+def meta_diagnose() -> dict:
+    """Diagnóstico dos avisos da Meta (só leitura): campos subscritos na app (objeto page/instagram) e, por
+    Página, se a app está instalada (subscribed_apps) e com que campos, e as autorizações do token."""
+    from .http import request
+    from .meta_connect import graph
+    app_id, secret = os.environ.get("META_APP_ID", ""), os.environ.get("META_APP_SECRET", "")
+    out: dict = {"app": {}, "pages": [], "at": now()}
+    app_token = f"{app_id}|{secret}" if app_id and secret else ""
+    if app_token:
+        try:
+            subs = request("GET", f"{graph()}/{app_id}/subscriptions", retries=1,
+                           params={"access_token": app_token}).json().get("data", [])
+            out["app"] = {s.get("object"): {"active": s.get("active"), "fields": [f.get("name") for f in s.get("fields", [])],
+                                            "callback": s.get("callback_url", "")} for s in subs}
+        except Exception as exc:  # noqa: BLE001
+            out["app_error"] = str(exc)[:300]
+    for acc in eligible_accounts():
+        if acc.platform not in ("facebook_page", "instagram"):
+            continue
+        row = {"account": acc.name, "platform": acc.platform}
+        pid, token = page_id_for(acc), acc.secret("access_token_env")
+        row["page_id"] = pid or ""
+        try:
+            apps = request("GET", f"{graph()}/{pid}/subscribed_apps", retries=1,
+                           params={"access_token": token}).json().get("data", []) if pid else []
+            mine = next((a for a in apps if str(a.get("id")) == str(app_id)), None)
+            row["installed"] = bool(mine)
+            row["fields"] = (mine or {}).get("subscribed_fields", [])
+        except Exception as exc:  # noqa: BLE001
+            row["error"] = str(exc)[:300]
+        if app_token and token:
+            try:
+                d = request("GET", f"{graph()}/debug_token", retries=1,
+                            params={"input_token": token, "access_token": app_token}).json().get("data", {})
+                scopes = set(d.get("scopes", []))
+                need = {"pages_manage_metadata", "pages_read_user_content", "pages_manage_engagement",
+                        "pages_read_engagement", "pages_show_list"} | (
+                    {"pages_messaging"} if acc.platform == "facebook_page" else {"instagram_manage_comments"})
+                row["missing"] = sorted(need - scopes)
+                row["token_type"] = d.get("type", "")
+            except Exception as exc:  # noqa: BLE001
+                row["token_error"] = str(exc)[:200]
+        out["pages"].append(row)
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (_cfg.DATA_DIR / "meta_diagnostico.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def last_meta_diagnose() -> dict:
+    try:
+        return json.loads((_cfg.DATA_DIR / "meta_diagnostico.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 def subscribe(acc: Account) -> str:

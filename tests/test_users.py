@@ -687,7 +687,7 @@ def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
     from carretos_social.scheduler import all_problems
     _setup_admin(client)
     _login(client, "david", "segredo123")
-    assert len(verified_facts("geral")) == 17 and len(verified_facts("auron")) == 14
+    assert len(verified_facts("geral")) == 18 and len(verified_facts("auron")) == 14
     link = "auron.carretos.pt/schedule"
     assert found_terms("ig_carretosgroup", f"Saiba o preço na hora: {link}") == []          # o link pode ficar
     assert found_terms("ig_carretosgroup", f"Com o AURON sabe o preço: {link}")[0][1] == \
@@ -1961,7 +1961,8 @@ def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
     from carretos_social.web import mailer
     monkeypatch.setattr(mailer, "configured", lambda: True)
     monkeypatch.setattr(mailer, "send", lambda to, s, b: mails.append(to))
-    assert linkedin_mail.poll() == ["LinkedIn mensagens (email): 2 aviso(s)"]
+    lines = linkedin_mail.poll()
+    assert "ok" in lines[0] and "2 aviso(s)" in lines[0] and "messages-noreply@linkedin.com ×1" in lines[0]
     assert "de Ana Costa" in sent[0] and "página Carretos Group" in sent[0] and "parceria" in sent[0]
     assert "https://www.linkedin.com/messaging/thread/123/" in sent[0] and "?x=1" not in sent[0]
     assert "de Rui Lopes" in sent[1] and "candidatura" in sent[1]
@@ -1999,7 +2000,7 @@ def test_linkedin_message_emails_via_microsoft_graph(tmp_path, monkeypatch):
     monkeypatch.setattr(http_mod, "request", fake_request)
     sent = []
     monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append(t))
-    assert linkedin_mail.poll() == ["LinkedIn mensagens (email): 1 aviso(s)"]
+    assert linkedin_mail.poll() == ["LinkedIn mensagens (email): ok, 1 aviso(s)"]
     assert "de Ana Costa" in sent[0] and "página Carretos Group" in sent[0]
     assert ("DELETE", "https://graph.microsoft.com/v1.0/users/studio@carretos.pt/messages/m1") in calls
     assert not any("m2" in u for m, u in calls if m == "DELETE")
@@ -2094,3 +2095,82 @@ def test_comment_from_other_own_account_is_proposed_not_ignored(monkeypatch):
     with connect() as conn:
         row = conn.execute("SELECT status FROM inbox WHERE external_id='own-x1'").fetchone()
     assert row["status"] == "proposta" and "Quem: @davidcarretos" in sent[0][0] and sent[0][1]
+
+
+
+def test_personal_dm_only_notice_language_and_deleted(client, monkeypatch):
+    from carretos_social import inbox, notify, linkedin_inbox
+    from carretos_social.content import ai
+    from carretos_social.db import connect
+    from carretos_social.config import accounts
+    monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "x")
+    sent = []
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: sent.append((t, buttons)))
+    monkeypatch.setattr(inbox, "already_answered", lambda acc, row: False)
+    called = []
+    monkeypatch.setattr(ai, "inbox_reply", lambda *a: called.append(a) or {"intent": "outro", "reply": "Ok", "alert": False})
+    # 1) mensagem privada na conta pessoal: só aviso, sem proposta nem IA
+    monkeypatch.setattr(inbox, "parse", lambda p: [{"account_id": "ig_davidcarreto", "network": "instagram",
+        "kind": "message", "external_id": "dm-1", "author_id": "7", "author": "amigo", "text": "Olá David, café amanhã?",
+        "context": "", "own": "1"}])
+    inbox.receive({}, background=False)
+    with connect() as conn:
+        assert conn.execute("SELECT status FROM inbox WHERE external_id='dm-1'").fetchone()[0] == "aviso"
+    assert not called and "✉️ Mensagem privada" in sent[-1][0] and sent[-1][1] is None
+    # 2) conta pessoal: sem WhatsApp da empresa fora de assuntos de oficina
+    acc = accounts()["ig_davidcarreto"]
+    monkeypatch.setattr(ai, "inbox_reply", lambda *a: {"intent": "pergunta", "reply": "Obrigado!", "alert": False, "lang": "pt"})
+    assert "wa.me" not in inbox.compose(acc, "comment", "Onde foi a foto?", "x")["reply"]
+    monkeypatch.setattr(ai, "inbox_reply", lambda *a: {"intent": "preco", "reply": "Fale connosco.", "alert": False, "lang": "pt"})
+    assert "wa.me" in inbox.compose(acc, "comment", "Quanto custa a revisão?", "x")["reply"]
+    # 3) língua: resposta fixa em inglês
+    monkeypatch.setattr(ai, "inbox_reply", lambda *a: {"intent": "candidatura", "reply": "x", "alert": False, "lang": "en"})
+    assert inbox.compose(accounts()["li_carretosgroup"], "comment", "Are you hiring?", "")["reply"].startswith("Thank you for your interest")
+    # 4) aprovar um comentário apagado: não envia, marca e avisa
+    with connect() as conn:
+        iid = conn.execute("INSERT INTO inbox(account_id, network, kind, external_id, author_id, author, text, context, "
+                           "status, reply, created_at) VALUES ('li_carretosgroup','linkedin','comment',"
+                           "'urn:li:comment:(urn:li:activity:1,99)','urn:li:person:Z','','olá','urn:li:share:1','proposta','Obrigado!','2026-11-27')").lastrowid
+    monkeypatch.setattr(inbox, "comment_exists", lambda acc, row: False)
+    with pytest.raises(ValueError):
+        inbox.approve(iid)
+    with connect() as conn:
+        assert conn.execute("SELECT status FROM inbox WHERE id=?", (iid,)).fetchone()[0] == "apagado"
+    assert "apagado pelo autor" in sent[-1][0]
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    assert "Apagado pelo autor" in client.get(f"/mensagens/item/{iid}").text
+
+
+def test_linkedin_thread_replies_and_poll_due(tmp_path, monkeypatch):
+    import time
+    from carretos_social import linkedin_inbox, inbox
+    from carretos_social.config import accounts
+    from carretos_social.db import connect
+    acc = accounts()["li_carretosgroup"]
+    monkeypatch.setattr(type(acc), "has_credentials", property(lambda self: True))
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok" if "token" in k else "urn:li:organization:77657554")
+    monkeypatch.setattr(linkedin_inbox, "_budget_path", lambda: tmp_path / "orc.json")
+    inbox.save_account_settings(acc.id, enabled=True, enabled_at="2020-01-01T00:00:00")
+    now_ms = int(time.time() * 1000)
+    top = {"urn": "urn:li:comment:(urn:li:activity:1,11)", "actor": "urn:li:organization:77657554", "text": "Obrigado!",
+           "time": now_ms, "post": "urn:li:share:1", "parent": "", "replies": 2}
+    monkeypatch.setattr(linkedin_inbox, "recent_posts", lambda a: ["urn:li:share:1"])
+    monkeypatch.setattr(linkedin_inbox, "comments", lambda a, p: [dict(top)])
+    monkeypatch.setattr(linkedin_inbox, "thread_replies", lambda a, parent: [
+        {"urn": "urn:li:comment:(urn:li:activity:1,12)", "actor": "urn:li:person:D", "text": "E fazem AMG?",
+         "time": now_ms, "post": "urn:li:share:1", "parent": parent["urn"], "replies": 0},
+        {"urn": "urn:li:comment:(urn:li:activity:1,13)", "actor": "urn:li:organization:77657554", "text": "Sim!",
+         "time": now_ms, "post": "urn:li:share:1", "parent": parent["urn"], "replies": 0}])
+    monkeypatch.setattr(inbox, "process", lambda iid, force_propose=False: "proposta")
+    lines = linkedin_inbox.poll()
+    assert "1 novos" in lines[0]                       # a resposta no fio (a da página não conta)
+    with connect() as conn:
+        row = conn.execute("SELECT context FROM inbox WHERE external_id LIKE '%,12)'").fetchone()
+    assert row["context"] == "urn:li:share:1|urn:li:comment:(urn:li:activity:1,11)"
+    assert linkedin_inbox.last_round()["total"] == 1
+    calls = []
+    monkeypatch.setattr(linkedin_inbox, "poll_safe", lambda: calls.append(1) or ["x"])
+    linkedin_inbox.poll_due()
+    linkedin_inbox.poll_due()                           # logo a seguir (ex.: reinício): não lê outra vez
+    assert calls == [1]

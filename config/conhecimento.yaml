@@ -56,6 +56,8 @@ fichas:
   # auto: true = entra sozinha no dashboard (uma vez) na próxima atualização; depois edita-se lá
   - {chave: g-candidaturas, marca: geral, secao: contactos, funcao: info, auto: true,
      texto: "Candidaturas de emprego: enviar o CV para rh@carretos.pt."}
+  - {chave: g-pecas-originais, marca: geral, secao: servicos, auto: true,
+     texto: "As oficinas usam peças originais Mercedes-Benz."}
   - {chave: g-parcerias, marca: geral, secao: contactos, funcao: info, auto: true,
      texto: "Propostas de parceria: davidcarreto@carretos.pt."}
   - {chave: g-contas, marca: geral, secao: contactos, funcao: info,

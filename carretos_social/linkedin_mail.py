@@ -18,6 +18,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 
@@ -57,6 +58,14 @@ def handle_message(msg) -> bool:
     _remember(h)
     print(f"correio: aviso de mensagem do LinkedIn ({'página' if info['page'] else 'perfil'})", flush=True)
     return True
+
+
+def interval_minutes() -> int:
+    """A caixa de email não gasta pedidos do LinkedIn: pode ler-se de 10 em 10 minutos."""
+    try:
+        return max(5, int(os.environ.get("LINKEDIN_EMAILS_MINUTES", "10")))
+    except ValueError:
+        return 10
 
 
 def enabled() -> bool:
@@ -202,7 +211,7 @@ def _poll_graph() -> list[str]:
             _remember(hsh)
             n += 1
         request("DELETE", f"{base}/messages/{quote(m['id'])}", headers=h, retries=1)   # vai para "Itens eliminados"
-    return [f"LinkedIn mensagens (email): {n} aviso(s)"] if n else []
+    return [f"LinkedIn mensagens (email): ok, {n} aviso(s)"]
 
 
 def poll() -> list[str]:
@@ -224,11 +233,15 @@ def poll() -> list[str]:
         box.select("INBOX")
         typ, data = box.search(None, '(OR FROM "linkedin.com" TEXT "linkedin.com")')
         ids = (data[0] or b"").split()[-50:]
+        senders: dict[str, int] = {}
         for num in ids:
             typ, raw = box.fetch(num, "(RFC822)")
             if typ != "OK" or not raw or not raw[0]:
                 continue
             msg = email.message_from_bytes(raw[0][1])
+            frm = parseaddr(msg.get("From", ""))[1].lower()
+            if "linkedin.com" in frm:
+                senders[frm] = senders.get(frm, 0) + 1
             h = hashlib.sha256((msg.get("Message-ID") or "").encode() + (msg.get("Date") or "").encode()).hexdigest()[:24]
             info = parse(msg)
             if not info:
@@ -244,7 +257,9 @@ def poll() -> list[str]:
             box.logout()
         except Exception:  # noqa: BLE001
             pass
-    return [f"LinkedIn mensagens (email): {n_avisos} aviso(s)"] if n_avisos else []
+    seen_txt = ", ".join(f"{k} ×{v}" for k, v in sorted(senders.items())) or "nenhum"
+    return [f"LinkedIn mensagens (email): ok, {len(ids)} email(s) do LinkedIn na caixa, {n_avisos} aviso(s) · "
+            f"remetentes LinkedIn vistos: {seen_txt}"]
 
 
 def _alert(info: dict) -> None:
@@ -287,4 +302,4 @@ def poll_safe() -> list[str]:
                 notify.send(f"⚠️ Não consegui ler os avisos de mensagens do LinkedIn (caixa de email do Carretos Studio): {msg}")
             except Exception:  # noqa: BLE001
                 pass
-        return [f"LinkedIn mensagens (email): falhou — {msg}"]
+        return [f"LinkedIn mensagens (email): erro — {msg}"]

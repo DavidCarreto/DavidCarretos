@@ -1355,7 +1355,9 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "li_mail": __import__("carretos_social.linkedin_mail", fromlist=["x"]).enabled(),
         "li_mail_addr": _li_mail_addr() if me.is_admin else "",
         "correio": _service_state("carretos-correio") if me.is_admin else "",
-        "imap_user": os.environ.get("IMAP_USER", "") if me.is_admin else ""})
+        "imap_user": os.environ.get("IMAP_USER", "") if me.is_admin else "",
+        "li_last": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).last_round(),
+        "meta_diag": inbox.last_meta_diagnose() if me.is_admin else {}})
 
 
 @app.post("/mensagens/conta/{acc_id}")
@@ -1460,6 +1462,21 @@ def inbox_linkedin_mail_check(request: Request):
         from ..redact import redact
         return RedirectResponse("/mensagens?erro=" + quote("Caixa de email: " + redact(str(exc))[:400]), 303)
     return RedirectResponse("/mensagens?ok=" + quote("Caixa de email verificada: " + (lines[0] if lines else "nenhuma mensagem nova do LinkedIn") + "."), 303)
+
+
+@app.post("/mensagens/meta/diagnostico")
+def inbox_meta_diag(request: Request):
+    """Só leitura: o que a Meta está configurada para enviar (app e cada Página)."""
+    from urllib.parse import quote
+    from .. import inbox
+    if not request.state.user.is_admin:
+        return _forbidden()
+    try:
+        inbox.meta_diagnose()
+    except Exception as exc:  # noqa: BLE001
+        from ..redact import redact
+        return RedirectResponse("/mensagens?erro=" + quote("Diagnóstico da Meta: " + redact(str(exc))[:400]), 303)
+    return RedirectResponse("/mensagens?ok=" + quote("Diagnóstico da Meta atualizado (em baixo).") + "#meta-diag", 303)
 
 
 @app.post("/mensagens/testar", response_class=HTMLResponse)
@@ -1788,6 +1805,7 @@ CONFIG_FIELDS = [  # (variável, rótulo, secreta)
     ("CANDIDATURAS_EMAIL", "Respostas · email para candidaturas de emprego (público; rh@carretos.pt por omissão)", False),
     ("PARCERIAS_EMAIL_PUBLICO", "Respostas · email para parcerias (público; davidcarreto@carretos.pt por omissão)", False),
     ("PARCERIAS_AVISOS_EMAILS", "Respostas · avisos de parcerias por email (separados por vírgula; davidcarreto@carretos.pt e marcia.palmeirao@carretos.pt por omissão)", False),
+    ("LINKEDIN_EMAILS_MINUTES", "LinkedIn · ler a caixa dos avisos de mensagens de quantos em quantos minutos (10 por omissão; não gasta pedidos do LinkedIn)", False),
     ("LINKEDIN_EMAILS_ATIVO", "LinkedIn · avisar no Telegram as mensagens privadas (pelos emails do LinkedIn reencaminhados)? (sim/não)", False),
     ("LINKEDIN_EMAILS_CAIXA", "Microsoft 365 · caixa que recebe os emails do LinkedIn (ex.: studio@carretos.pt)", False),
     ("MS_TENANT_ID", "Microsoft 365 · ID do diretório (inquilino) da app \"Carretos Studio\"", False),
@@ -1831,6 +1849,7 @@ KEY_FORMATS = {
     "PARCERIAS_EMAIL_PUBLICO": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}$", _re.I), "um email"),
     "PARCERIAS_AVISOS_EMAILS": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}(\s*,\s*[^@\s,]+@[^@\s,]+\.[a-z]{2,})*$", _re.I),
                                 "um ou mais emails separados por vírgula"),
+    "LINKEDIN_EMAILS_MINUTES": (_re.compile(r"^\d{1,3}$"), "um número de minutos (5 ou mais)"),
     "LINKEDIN_EMAILS_ATIVO": (_re.compile(r"^(sim|não|nao)$", _re.I), "escreva sim ou não"),
     "LINKEDIN_EMAILS_CAIXA": (_re.compile(r"^[^@\s,]+@[^@\s,]+\.[a-z]{2,}$", _re.I), "um email (ex.: studio@carretos.pt)"),
     "MS_TENANT_ID": (_re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", _re.I), "um ID com o formato 00000000-0000-0000-0000-000000000000"),

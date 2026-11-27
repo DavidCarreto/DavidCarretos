@@ -224,12 +224,12 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
-        from .linkedin_inbox import interval_minutes, poll_safe
-        if time.time() - last_li_poll >= interval_minutes() * 60:   # comentários da página LinkedIn
+        from .linkedin_inbox import poll_due            # comentários da página LinkedIn (intervalo guardado)
+        for line in poll_due():
+            print(datetime.now().strftime("%H:%M"), line)
+        from .linkedin_mail import interval_minutes as mail_minutes, poll_safe as mail_poll
+        if time.time() - last_li_poll >= mail_minutes() * 60:     # avisos de mensagens privadas (emails)
             last_li_poll = time.time()
-            for line in poll_safe():
-                print(datetime.now().strftime("%H:%M"), line)
-            from .linkedin_mail import poll_safe as mail_poll   # avisos de mensagens privadas (emails do LinkedIn)
             for line in mail_poll():
                 print(datetime.now().strftime("%H:%M"), line)
         if JUST_PUBLISHED and time.time() - last_sync <= sync_every_hours * 3600:
