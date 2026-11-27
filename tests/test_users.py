@@ -2260,3 +2260,31 @@ def test_linkedin_suggestions_not_alerted_and_elsewhere_notice_and_counts(client
     from carretos_social.web.app import _li_calls
     c = _li_calls()
     assert c["total"] == 51 and c["publish"] == 100 - 51 - 9
+
+
+def test_approval_records_user_and_origin_token_hidden_404(client, monkeypatch):
+    from carretos_social import inbox
+    from carretos_social.db import connect
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setattr(inbox, "_send", lambda acc, row, res: None)
+    monkeypatch.setattr(inbox, "comment_exists", lambda acc, row: True)
+    monkeypatch.setattr(inbox, "already_answered", lambda acc, row: False)
+    with connect() as conn:
+        iid = conn.execute("INSERT INTO inbox(account_id, network, kind, external_id, author_id, author, text, context, "
+                           "status, reply, created_at) VALUES ('fb_carretosgroup','facebook','comment','c-ap1','5','Cliente',"
+                           "'Olá','222_1','proposta','Obrigado!','2026-11-27')").lastrowid
+    page = client.get(f"/mensagens/item/{iid}?acao=aprovar").text
+    assert 'name="origem" value="telegram"' in page and "autofocus" not in page.split("Aprovar e enviar")[0][-300:]
+    assert "confirm('Enviar esta resposta agora?" in page
+    client.post(f"/mensagens/item/{iid}", data={"acao": "aprovar", "texto": "", "origem": "telegram"})
+    with connect() as conn:
+        r = conn.execute("SELECT status, approved_by, approved_via, note FROM inbox WHERE id=?", (iid,)).fetchone()
+    assert r["status"] == "respondido" and r["approved_by"] and r["approved_via"] == "telegram" and "botão do Telegram" in r["note"]
+    assert "aprovado por" in client.get(f"/mensagens/item/{iid}").text
+    assert any("resposta aprovada por" in a["linha"] for a in inbox.avisos_log())
+    page = client.get("/mensagens").text
+    token = inbox.verify_token()
+    assert token not in page and token[:4] + "…" in page
+    assert client.post("/mensagens/token-webhook").text == token
+    assert client.get("/mensagens/item/99999").status_code == 404

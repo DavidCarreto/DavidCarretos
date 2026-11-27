@@ -204,12 +204,14 @@ MIGRATIONS = [  # colunas acrescentadas depois (ALTER TABLE é ignorado se já e
     "ALTER TABLE user_accounts ADD COLUMN level TEXT",
     "ALTER TABLE users ADD COLUMN email TEXT",
     "ALTER TABLE post_history ADD COLUMN note TEXT",
+    "ALTER TABLE inbox ADD COLUMN approved_by INTEGER",   # quem aprovou a resposta (utilizador do dashboard)
+    "ALTER TABLE inbox ADD COLUMN approved_via TEXT",     # por onde: dashboard | telegram
 ]
 
 
 def _migrate(conn) -> None:
     """Só ACRESCENTA colunas (nunca apaga nem altera media/estados). Antes de mudar, faz uma cópia da base."""
-    tables = ("posts", "jobs", "chat", "users", "user_accounts", "post_history")
+    tables = ("posts", "jobs", "chat", "users", "user_accounts", "post_history", "inbox")
     cols = {t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")} for t in tables}
     pending = [sql for sql in MIGRATIONS if sql.split()[5] not in cols[sql.split()[2]]]
     if pending:

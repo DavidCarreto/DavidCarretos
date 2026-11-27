@@ -1317,6 +1317,15 @@ async def meta_webhook(request: Request):
     return PlainTextResponse("ok")
 
 
+def _approver_names(rows: list[dict]) -> dict:
+    out = {}
+    for r in rows:
+        if r.get("approved_by") and r["approved_by"] not in out:
+            u = users.load(r["approved_by"])
+            out[r["approved_by"]] = (u.name or u.username) if u else f"utilizador {r['approved_by']}"
+    return out
+
+
 def _li_calls() -> dict:
     from .. import linkedin_connect as lc, linkedin_inbox as li
     used, budget = li.calls_today(), li.daily_budget()
@@ -1358,7 +1367,7 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
     return _render(request, "mensagens.html", {
         "accs": [(a, inbox.account_settings(a.id)) for a in accs], "rows": rows, "names": names, "ok": ok,
         "erro": erro, "page": "mensagens", "callback": _base_url(request) + "/webhooks/meta",
-        "verify": inbox.verify_token() if me.is_admin else "", "test": None,
+        "verify": (inbox.verify_token()[:4] + "…") if me.is_admin else "", "test": None,
         "events": inbox.recent_events()[:30] if me.is_admin else [],
         "li_minutes": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).interval_minutes(),
         "li_calls": _li_calls(),
@@ -1367,6 +1376,8 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "correio": _service_state("carretos-correio") if me.is_admin else "",
         "imap_user": os.environ.get("IMAP_USER", "") if me.is_admin else "",
         "li_last": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).last_round(),
+        "mail_minutes": __import__("carretos_social.linkedin_mail", fromlist=["x"]).interval_minutes(),
+        "approvers": _approver_names(rows),
         "meta_diag": inbox.last_meta_diagnose() if me.is_admin else {}})
 
 
@@ -1426,17 +1437,24 @@ def inbox_item(request: Request, iid: int, acao: str = ""):
     me = request.state.user
     with connect() as conn:
         row = conn.execute("SELECT * FROM inbox WHERE id=?", (iid,)).fetchone()
-    if not row or not me.can_see(row["account_id"] or ""):
+    if not row:
+        return HTMLResponse("<p>Este comentário não existe.</p><p><a href='/mensagens'>‹ Mensagens</a></p>", status_code=404)
+    if not me.can_see(row["account_id"] or ""):
         return _forbidden()
     from .. import inbox
-    return _render(request, "mensagem_item.html", {"r": dict(row), "acao": acao, "page": "mensagens",
+    approver = ""
+    if row["approved_by"]:
+        u = users.load(row["approved_by"])
+        approver = (u.name or u.username) if u else f"utilizador {row['approved_by']}"
+    return _render(request, "mensagem_item.html", {"r": dict(row), "acao": acao, "page": "mensagens", "approver": approver,
                                                    "acc": accounts().get(row["account_id"]),
                                                    "link": inbox.post_link(row),
                                                    "can_approve": me.can_approve(row["account_id"] or "")})
 
 
 @app.post("/mensagens/item/{iid}")
-def inbox_item_action(request: Request, iid: int, acao: str = Form(...), texto: str = Form("")):
+def inbox_item_action(request: Request, iid: int, acao: str = Form(...), texto: str = Form(""),
+                      origem: str = Form("dashboard")):
     from urllib.parse import quote
     from .. import inbox
     me = request.state.user
@@ -1449,7 +1467,7 @@ def inbox_item_action(request: Request, iid: int, acao: str = Form(...), texto: 
             inbox.ignore(iid)
             msg = f"Comentário #{iid}: ignorado (não responde)."
         else:
-            inbox.approve(iid, texto if texto.strip() else None)
+            inbox.approve(iid, texto if texto.strip() else None, user_id=me.id, via=origem)
             msg = f"Comentário #{iid}: resposta enviada."
     except Exception as exc:  # noqa: BLE001
         from ..redact import redact
@@ -1487,6 +1505,15 @@ def inbox_meta_diag(request: Request):
         from ..redact import redact
         return RedirectResponse("/mensagens?erro=" + quote("Diagnóstico da Meta: " + redact(str(exc))[:400]), 303)
     return RedirectResponse("/mensagens?ok=" + quote("Diagnóstico da Meta atualizado (em baixo).") + "#meta-diag", 303)
+
+
+@app.post("/mensagens/token-webhook")
+def inbox_verify_token_copy(request: Request):
+    """Token de verificação do webhook da Meta (só administrador, a pedido, para copiar; não fica na página)."""
+    from .. import inbox
+    if not request.state.user.is_admin:
+        return _forbidden()
+    return PlainTextResponse(inbox.verify_token(), headers={"Cache-Control": "no-store"})
 
 
 @app.post("/mensagens/testar", response_class=HTMLResponse)

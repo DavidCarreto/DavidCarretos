@@ -501,7 +501,7 @@ def process(item_id: int, wait: int = 0, force_propose: bool = False) -> str:
     return status
 
 
-def approve(item_id: int, text: str | None = None) -> str:
+def approve(item_id: int, text: str | None = None, user_id: int | None = None, via: str = "dashboard") -> str:
     """Envia uma resposta proposta (com o texto editado, se houver)."""
     with connect() as conn:
         row = conn.execute("SELECT * FROM inbox WHERE id=?", (item_id,)).fetchone()
@@ -524,9 +524,17 @@ def approve(item_id: int, text: str | None = None) -> str:
                          ("já respondido por outra pessoa ou automação", item_id))
         raise ValueError("Já tinha sido respondido por outra pessoa: não enviei.")
     _send(acc, row, {"reply": reply, "private_reply": row["private_reply"] or ""})
+    via = via if via in ("dashboard", "telegram") else "dashboard"
+    who = ""
     with connect() as conn:
-        conn.execute("UPDATE inbox SET reply=?, status='respondido', note=?, replied_at=? WHERE id=?",
-                     (reply, "aprovado no dashboard", now(), item_id))
+        if user_id:
+            u = conn.execute("SELECT name, username FROM users WHERE id=?", (user_id,)).fetchone()
+            who = (u["name"] or u["username"]) if u else f"utilizador {user_id}"
+        conn.execute("UPDATE inbox SET reply=?, status='respondido', note=?, replied_at=?, approved_by=?, approved_via=? "
+                     "WHERE id=?", (reply, f"aprovado por {who or '?'} ({'botão do Telegram' if via == 'telegram' else 'dashboard'})",
+                                    now(), user_id, via, item_id))
+    _log_aviso(item_id, acc.name, NETWORK_NAME.get(row["network"] or "", ""),
+               f"resposta aprovada por {who or '?'} via {via} e enviada", True)
     return "respondido"
 
 

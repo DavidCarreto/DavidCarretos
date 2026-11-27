@@ -34,7 +34,7 @@ As <b>mensagens privadas</b> do LinkedIn também não se leem pela API (só parc
 que o Hotmail redireciona para o servidor ({{ 'ligado' if li_mail else 'desligado: ⚙ Configurar → "LinkedIn · avisar no Telegram as mensagens privadas" = sim' }}).</p>
 {% if me.is_admin and imap_user %}<div class="kb-form" style="font-size:13px;margin-top:6px">
  <b>Caixa que recebe os avisos (regra do Hotmail → redirecionar para):</b> <code>{{ imap_user }}</code><br>
- O Carretos Studio lê-a de {{ li_minutes }} em {{ li_minutes }} minutos, só os emails do LinkedIn sobre mensagens (os outros não são tocados).
+ O Carretos Studio lê-a de {{ mail_minutes }} em {{ mail_minutes }} minutos, só os emails do LinkedIn sobre mensagens (os outros não são tocados).
  {% if li_mail %}<form method="post" action="/mensagens/linkedin/emails" style="margin:6px 0 0"><button class="btn" style="padding:3px 10px;font-size:12px">Verificar a caixa de email agora</button></form>{% endif %}
 </div>
 {% elif me.is_admin %}<div class="kb-form" style="font-size:13px;margin-top:6px">
@@ -63,7 +63,8 @@ que o Hotmail redireciona para o servidor ({{ 'ligado' if li_mail else 'desligad
  <span class="pill" style="font-size:11px;color:{{ {'respondido':'#3fb950','erro':'#f85149','novo':'#d29922','proposta':'#e3b341'}.get(r.status, '#7d8590') }};border-color:currentColor">{{ 'por responder' if r.status in ('proposta','novo') else ('apagado pelo autor' if r.status == 'apagado' else ('aviso (sem proposta)' if r.status == 'aviso' else r.status)) }}</span>{% if r.intent %} <span class="muted" style="font-size:12px">{{ r.intent }}</span>{% endif %}
  {% if r.status in ('proposta','erro') %}<a class="btn" style="padding:2px 10px;font-size:12px" href="/mensagens/item/{{ r.id }}">Aprovar / Editar / Ignorar</a>{% endif %}<br>
  «{{ r.text }}»{% if r.reply %}<br>↳ {{ 'proposta: ' if r.status == 'proposta' else ('resposta no fio do comentário: ' if r.kind == 'comment') }}{{ r.reply }}{% endif %}{% if r.private_reply and r.status == 'respondido' %}<br>↳ (privada) {{ r.private_reply }}{% endif %}
- {% if r.note %}<br><span class="muted" style="font-size:12px;word-break:break-word">{{ r.note }}</span>{% endif %}</div>
+ {% if r.note %}<br><span class="muted" style="font-size:12px;word-break:break-word">{{ r.note }}</span>{% endif %}
+ {% if r.approved_by %}<br><span style="font-size:12px;color:#8ddb8c">✓ Aprovado por {{ approvers.get(r.approved_by, '?') }} ({{ 'botão do Telegram' if r.approved_via == 'telegram' else 'dashboard' }}){% if r.replied_at %} às {{ r.replied_at[:16].replace('T',' ') }}{% endif %}</span>{% endif %}</div>
 {% else %}<p class="muted" style="font-size:13px">Ainda não chegou nada. Depois de ativar na Meta, os comentários e as mensagens aparecem aqui.</p>{% endfor %}
 </div>
 
@@ -87,6 +88,7 @@ que o Hotmail redireciona para o servidor ({{ 'ligado' if li_mail else 'desligad
 <div class="card" style="margin-top:12px;font-size:13px"><b>Configuração do webhook na app da Meta</b>
  <p class="muted" style="margin:4px 0">developers.facebook.com → app "Carretos Studio" → Webhooks:</p>
  <p style="margin:2px 0">URL de retorno: <code>{{ callback }}</code></p>
- <p style="margin:2px 0">Token de verificação: <code>{{ verify }}</code></p>
+ <p style="margin:2px 0">Token de verificação: <code>{{ verify }}</code> <span class="muted">(escondido)</span>
+  <button type="button" class="btn" style="padding:2px 8px;font-size:12px" onclick="fetch('/mensagens/token-webhook',{method:'POST'}).then(r=>r.text()).then(t=>navigator.clipboard.writeText(t)).then(()=>{this.textContent='✓ Copiado'})">📋 Copiar o token</button></p>
  <p class="muted" style="margin:4px 0">Objetos e campos: <b>Page</b> → feed, messages · <b>Instagram</b> → comments, messages.</p></div>{% endif %}
 {% endblock %}
