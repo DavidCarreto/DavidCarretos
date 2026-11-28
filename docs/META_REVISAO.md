@@ -8,6 +8,10 @@ Fontes (documentação oficial da Meta, lida a 27/11/2026): "Business Verificati
 "App Review Submission Guide", "Permissions Reference", "Webhooks for Pages".
 
 ## Estado (28/11/2026)
+- ✓ Definições básicas na app: política de privacidade, termos, URL de instruções de eliminação de dados, ícone
+  1024×1024, categoria, email de contacto e encarregado da proteção de dados (feito pelo Claude no Chrome, autorizado).
+- ✓ Callback de eliminação de dados: **não é obrigatório** (a Meta exige que a política de privacidade explique como
+  pedir a eliminação — feito; o callback é opcional: "apps can implement").
 - ✓ **Verificação da Empresa feita**: "ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA", verificada a 17/08/2026,
   portefólio "Carreto's" (id 959299140915335). Falta só a **Revisão da App (Advanced Access)**.
 - Diagnóstico (dashboard → Mensagens → "Diagnóstico da Meta"): webhooks Page (feed, messages) e Instagram
@@ -62,65 +66,81 @@ Passos (documentação "Business Verification"):
 4. Verificar que a app tem: ícone 1024×1024 **sem marcas da Meta**, URL da Política de Privacidade
    (https://carretosstudio.duckdns.org/privacidade), categoria certa e email de contacto acessível.
 
-## 2. Autorizações a pedir (Advanced Access) e justificações (inglês, prontas a colar)
+## 2. Autorizações (pedidas hoje no "Ligar com o Facebook": carretos_social/meta_connect.py → SCOPES)
 
-Para respostas a comentários e mensagens:
+| Autorização | Para que serve no Carretos Studio | Onde se vê | Obrigatória? |
+|---|---|---|---|
+| pages_show_list | listar as Páginas que gerimos ao ligar (/me/accounts) | Contas → "Ligar com o Facebook" | Sim (dependência de todas) |
+| business_management | Páginas dos portefólios (Carreto's e RibaMotor/AURON) que não vêm em /me/accounts | Contas | Sim (AURON está noutro portefólio) |
+| pages_read_engagement | token da Página e leitura das nossas publicações (para saber a que post é cada comentário) | Mensagens (link "Publicação") | Sim |
+| pages_manage_metadata | instalar a app na Página e subscrever os webhooks feed/messages | Mensagens → "Ativar na Meta" e diagnóstico | Sim |
+| pages_read_user_content | ler os comentários dos clientes nas Páginas (webhook e leitura de 5 em 5 min) e confirmar se ainda existem | Mensagens | Sim |
+| pages_manage_engagement | publicar a resposta aprovada como Página no fio do comentário | Mensagens → "Aprovar e enviar" | Sim |
+| pages_messaging | responder às mensagens do Messenger (depois de aprovadas) e ver se já houve resposta | Mensagens | Sim (para mensagens) |
+| instagram_basic | identificar as nossas contas Instagram (id, @) | Contas | Sim |
+| instagram_manage_comments | ler os comentários no Instagram e publicar a resposta aprovada no fio | Mensagens | Sim |
+| instagram_manage_messages | ler e responder às mensagens Direct (depois de aprovadas) | Mensagens | Sim (para mensagens) |
+| pages_manage_posts | publicar nas Páginas (fotos, vídeos, texto) depois de aprovado | Calendário / publicação | Sim, para a publicação continuar a funcionar em Live |
+| instagram_content_publish | publicar no Instagram depois de aprovado | Calendário / publicação | Sim, idem |
+| instagram_manage_insights | estatísticas das nossas publicações no Instagram | Painel / métricas | Sim, idem (pode sair se o David abdicar das métricas do Instagram) |
 
-**pages_show_list**
-> Carretos Studio is the internal social media tool of Carretos Group (Mercedes-Benz repair workshops in Portugal). We use pages_show_list only to list the Facebook Pages our own team manages (Carretos Group, Carreto Clips and AURON) so the administrator can choose which Page to connect after Facebook Login. It is a dependency of pages_manage_metadata, pages_read_user_content, pages_manage_engagement and pages_messaging.
+Não usadas (não pedir): read_insights, pages_manage_ads, ads_management, leads_retrieval, instagram_shopping_*,
+publish_video, user_* e quaisquer outras.
 
-**pages_read_engagement**
-> We read the posts published by our own Pages so the team can see, inside Carretos Studio, which post each customer comment belongs to (post text and link shown next to the comment) and confirm that a post was published correctly.
+## 2b. Textos para o formulário ("How will your app use this permission?") — inglês, um por autorização
+(Descrição geral, para o campo da app:)
+> Carretos Studio is the internal social media tool of Carretos Group, a network of five Mercedes-Benz repair workshops in Portugal. It is used only by our own team to manage our own Facebook Pages and Instagram professional accounts (Carretos Group, Carreto Clips and AURON). It publishes our posts after internal approval and helps the team answer customer comments and messages: for each new comment or message the AI suggests a reply, and the reply is only sent after a team member explicitly approves it in the dashboard (or opens it from a Telegram notification and approves it there in the dashboard). Nothing is ever published or sent without human approval.
 
-**pages_manage_metadata**
-> We use pages_manage_metadata only to subscribe our own Pages to the "feed" and "messages" webhooks (the "Activate on Meta" button). Without it we would not be notified when a customer comments or sends a message, and customers would wait longer for an answer.
+**pages_show_list** — After Facebook Login (Accounts → "Connect with Facebook") we list the Pages the administrator manages so they can choose which of our own Pages to connect. Reviewer: open Accounts, click "Connect with Facebook", grant access and see the Pages listed. Required as a dependency of the Page permissions below.
 
-**pages_read_user_content**
-> When a customer comments on one of our Page posts, Carretos Studio reads the comment (text, author name and time) and shows it to our team with a suggested reply. A human reviews every comment: nothing is answered automatically. We also use it to check that a comment still exists before sending an approved reply.
+**business_management** — Some of our Pages belong to our business portfolios (e.g. AURON in a second portfolio) and are not returned by /me/accounts. We read the Pages owned by or shared with our portfolios to connect them. Reviewer: after connecting, the Accounts page shows the Pages from both portfolios.
 
-**pages_manage_engagement**
-> After a team member approves (or edits and approves) the suggested reply, Carretos Studio publishes that reply as a comment from our Page in the customer's comment thread. Replies are never published without explicit human approval in the dashboard.
+**pages_read_engagement** — We read the posts published by our own Pages so that each customer comment shown in Carretos Studio is linked to the post it belongs to (post link next to the comment). Reviewer: open Messages; each comment has a "Publication" link to the Page post.
 
-**pages_messaging**
-> Customers send our Pages questions about service prices, quotes and appointments through Messenger. Carretos Studio shows each message to our team with a suggested answer; after a team member approves it, the answer is sent to the customer (customer-initiated conversations only, within the standard messaging window). We never send unsolicited messages.
+**pages_manage_metadata** — Used only to install our app on our Pages and subscribe them to the "feed" and "messages" webhooks ("Activate on Meta" button), so new comments and messages reach the team immediately. Reviewer: Messages → "Activate on Meta" on a Page shows the success message; the diagnostic shows feed and messages subscribed.
 
-**instagram_basic**
-> We read the username and ID of our own Instagram professional accounts (@carretos_group, @carretoclips, @_auron_2026, linked to our Pages) to identify which account each comment or message belongs to, and to avoid answering our own accounts.
+**pages_read_user_content** — We read comments left by people on our Page posts (text, name, time) and show them to the team in Messages with a suggested reply; before sending an approved reply we check that the comment still exists. Reviewer: comment on a Page post with a test account; within minutes it appears in Messages as "awaiting approval".
 
-**instagram_manage_comments**
-> Carretos Studio reads new comments on posts of our own Instagram professional accounts and shows them to our team with a suggested reply. After a team member approves it, the reply is published in the comment thread from our account. Nothing is published without human approval.
+**pages_manage_engagement** — After a team member reviews (and optionally edits) the suggested reply and clicks "Approve and send", we publish it as a comment from our Page in the customer's thread. Reviewer: open the comment in Messages, click "Approve and send", confirm, and see the Page reply under the comment on Facebook.
 
-**instagram_manage_messages**
-> Customers send Instagram Direct messages to our business accounts asking about prices, quotes and appointments. Carretos Studio shows each message with a suggested answer and sends it only after a team member approves it, so the team can manage the Instagram inbox in one place.
+**pages_messaging** — Customers ask our Pages about prices, quotes and appointments through Messenger. Carretos Studio shows each message with a suggested answer and sends it only after a team member approves it (customer-initiated conversations only, within the standard messaging window). Reviewer: send a Messenger message to the Page from a test account, approve the suggested answer in Messages and see it arrive in Messenger.
 
-Também necessárias para a publicação continuar a funcionar em Live (já usadas hoje):
-**pages_manage_posts**, **instagram_content_publish**, **instagram_manage_insights**, **business_management**
-(as nossas Páginas estão em dois portefólios: Carreto's e RibaMotor). Cada uma precisa da sua descrição e gravação.
+**instagram_basic** — We read the ID and username of our own Instagram professional accounts (linked to our Pages) to know which account each comment or message belongs to and to avoid replying to our own accounts. Reviewer: Accounts shows the connected Instagram accounts with their @username.
 
-## 3. Guião das gravações de ecrã
-Regras da Meta: interface em inglês se possível (ou legendas a explicar), 1080p ou mais, sem áudio (não é ouvido),
-mostrar o login a dar a autorização e o uso de cada autorização. Uma gravação por autorização (pode ser a mesma
-sequência cortada). A Meta vai seguir as gravações para testar: é preciso dar-lhe acesso ao dashboard.
+**instagram_manage_comments** — We receive new comments on posts of our Instagram professional accounts, show them in Messages with a suggested reply, and publish the reply in the comment thread from our account only after a team member approves it. Reviewer: comment on one of our Instagram posts from a test account, approve the suggestion in Messages and see the reply on Instagram.
 
-Sequência (com legendas em inglês):
-1. **Login e autorizações**: Carretos Studio → Accounts → "Connect with Facebook" → janela da Meta → escolher as
-   Páginas/Instagrams → "Continue" mostrando a lista de autorizações. (todas)
-2. **Ativar webhooks**: Messages → "Activate on Meta" numa Página → mensagem de sucesso. (pages_manage_metadata)
-3. **Comentário de cliente no Facebook**: noutro separador, uma conta de teste comenta num post da Página →
-   no Carretos Studio aparece o comentário com o texto, o autor, o post e a resposta proposta, estado
-   "awaiting approval". Legenda: "Nothing is published without approval". (pages_read_user_content, pages_read_engagement)
-4. **Aprovar e publicar**: abrir o comentário → editar o texto → "Approve and send" → no Facebook aparece a
-   resposta da Página no fio. (pages_manage_engagement)
-5. **Mensagem no Messenger**: a conta de teste envia mensagem à Página → aparece no Carretos Studio com proposta
-   → aprovar → mostrar o Messenger da conta de teste a receber a resposta. (pages_messaging; a Meta pede que se veja
-   a mensagem a ser enviada pela app e recebida no cliente Messenger)
-6. **Instagram**: o mesmo para um comentário (aprovar → resposta no fio no Instagram) e para uma mensagem Direct
-   (aprovar → mensagem recebida na app Instagram). (instagram_manage_comments, instagram_manage_messages, instagram_basic)
-7. **Ignorar**: mostrar "Ignore" num comentário (nada é publicado) e o aviso no Telegram com os botões.
-8. (publicação) criar e aprovar um post → publicado na Página/Instagram; ver métricas.
+**instagram_manage_messages** — Customers send Instagram Direct messages to our business accounts. Carretos Studio shows each message with a suggested answer and sends it only after approval, so the team manages the Instagram inbox in one place. Reviewer: send a Direct message to our account, approve the answer in Messages and see it arrive in the Instagram inbox.
 
-Antes de gravar: mudar o dashboard para inglês ou pôr legendas; criar no Carretos Studio um utilizador só para a
-revisão (ex.: "meta-review", com acesso a uma Página de teste), para indicar no campo "how we can access your app".
+**pages_manage_posts** — The team prepares posts in Carretos Studio; after a person approves a post and its date, Carretos Studio publishes it to our Facebook Page (photo, video/Reel or text). Reviewer: open an approved post in the calendar and see it published on the Page at the scheduled time.
+
+**instagram_content_publish** — Same as above for our Instagram professional accounts: approved posts (image, carousel or Reel) are published at the scheduled time. Reviewer: an approved post appears on the Instagram account.
+
+**instagram_manage_insights** — We read the statistics of our own Instagram posts (reach, views, likes, comments, saves) to plan content and choose the best times to post. Reviewer: the dashboard metrics show the statistics of our recent Instagram posts.
+
+## 2c. Instruções de teste para o revisor (campo "How to access your app")
+> URL: https://carretosstudio.duckdns.org — log in with the reviewer user provided in the credentials field. The reviewer user has access only to the test account(s) listed there. Messages (top menu) shows comments and messages awaiting approval; open one, edit if needed, click "Approve and send" and confirm. Accounts shows the connected Pages and Instagram accounts and the "Connect with Facebook" button. Nothing is ever sent without clicking "Approve and send". Privacy policy and data deletion: https://carretosstudio.duckdns.org/privacidade (English section and #data-deletion).
+(O que é preciso criar: um utilizador "meta-review" no Carretos Studio, com acesso só à conta escolhida pelo David; a palavra-passe vai só no campo de credenciais do formulário.)
+
+## 3. Guião das gravações (uma por autorização; pode ser a mesma sequência cortada)
+Preparação: legendas em inglês (o dashboard está em português); Mensagens filtrado para a conta de teste e o dia
+da gravação (Mensagens → "Mostrar: <conta> desde <data>") para não aparecerem comentários de clientes reais;
+1080p; sem áudio; cursor grande.
+1. **Ligação** (pages_show_list, business_management, instagram_basic): Contas → "Ligar com o Facebook" → janela da
+   Meta → escolher as Páginas e Instagrams → ver a lista de autorizações → voltar ao Carretos Studio com as contas ligadas.
+2. **Webhooks** (pages_manage_metadata): Mensagens → "Ativar na Meta" numa Página → mensagem de sucesso → diagnóstico com feed e messages.
+3. **Comentário no Facebook** (pages_read_user_content, pages_read_engagement): a conta de teste comenta num post →
+   aparece em Mensagens "por responder" com o texto, o autor, o link da publicação e a proposta. Legenda: "Nothing is published without approval".
+4. **Aprovar e publicar** (pages_manage_engagement): abrir o comentário → editar → "Aprovar e enviar" → confirmar →
+   no Facebook aparece a resposta da Página no fio.
+5. **Messenger** (pages_messaging): a conta de teste envia mensagem à Página → aparece com proposta → aprovar → mostrar o Messenger da conta de teste a receber.
+6. **Instagram** (instagram_manage_comments, instagram_manage_messages): o mesmo para um comentário e para uma mensagem Direct.
+7. **Ignorar e Telegram**: "Ignorar" num comentário (nada é publicado) e o aviso no Telegram com os botões (que abrem o dashboard).
+8. **Publicação** (pages_manage_posts, instagram_content_publish): um post aprovado sai na Página e no Instagram.
+9. **Métricas** (instagram_manage_insights): painel com as estatísticas das publicações do Instagram.
+10. **Eliminação de dados**: abrir /privacidade#data-deletion.
+
+O que o David faz pessoalmente: gravar o ecrã; comentar e enviar mensagens a partir de uma conta de teste (com função
+na app, ex.: uma conta pessoal secundária) e aprovar as respostas; escolher a conta usada nos vídeos e para o revisor.
 
 ## 4. Prazos e motivos habituais de recusa
 - Decisão da revisão: **até cerca de uma semana** (Submission Guide). A página da Verificação da Empresa **não

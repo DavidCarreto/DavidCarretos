@@ -57,6 +57,13 @@ que o Hotmail redireciona para o servidor ({{ 'ligado' if li_mail else 'desligad
 </form>
 
 <div class="card"><b>Últimos comentários e mensagens</b>
+{% set fc, fd = request.query_params.get('conta',''), request.query_params.get('desde','') %}
+<form method="get" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;margin:6px 0">
+ <span class="muted">Mostrar:</span>
+ <select name="conta" style="width:auto;font-size:12px"><option value="">todas as contas</option>{% for a, s in accs %}<option value="{{ a.id }}" {{ 'selected' if fc == a.id }}>{{ a.name }}</option>{% endfor %}</select>
+ <span class="muted">desde</span><input type="date" name="desde" value="{{ fd }}" style="width:auto;font-size:12px">
+ <button class="btn" style="padding:2px 10px;font-size:12px">Filtrar</button>{% if fc or fd %} <a class="gold" href="/mensagens">limpar</a>{% endif %}
+</form>
 {% set props = rows|selectattr('status', 'equalto', 'proposta')|list %}
 {% if props %}<p class="fmt-line ajustar" style="margin:6px 0">✍️ {{ props|length }} resposta(s) à espera de aprovação.</p>{% endif %}
 {% for r in rows %}<div class="hist"><span class="muted">{{ r.created_at[:16].replace('T',' ') }} · {{ names.get(r.account_id, r.account_id or '?') }} · {{ 'comentário' if r.kind == 'comment' else 'mensagem' }}{% if r.author %} de {{ ('@' ~ r.author) if r.network == 'instagram' else r.author }}{% elif r.network == 'linkedin' %} de um membro do LinkedIn{% endif %}</span>

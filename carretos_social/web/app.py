@@ -1224,6 +1224,9 @@ _LEGAL = {
         "LinkedIn), recebemos o texto, o nome público ou nome de utilizador, o identificador da conta e a data. Usamos "
         "estes dados só para mostrar o comentário ou a mensagem à nossa equipa e responder (cada resposta é aprovada por "
         "uma pessoa). Não os vendemos, não os partilhamos com terceiros e não os usamos para publicidade.",
+        "Das nossas próprias contas lemos também a lista de Páginas e contas profissionais que gerimos (incluindo as dos "
+        "portefólios empresariais), as nossas publicações e as estatísticas agregadas dessas publicações (alcance, "
+        "visualizações, gostos, comentários, partilhas), para planear e avaliar os conteúdos.",
         "As autorizações das redes sociais (chaves de acesso) ficam guardadas só no nosso servidor e não são partilhadas. "
         "O acesso pode ser retirado a qualquer momento no Carretos Studio (Contas → Desligar) ou nas definições de "
         "aplicações de cada rede social; ao desligar, as chaves dessa conta são apagadas do servidor.",
@@ -1242,6 +1245,9 @@ _LEGAL = {
         "receive the text, the public name or username, the account ID and the date. We use this data only to show the "
         "comment or message to our team and to reply (every reply is approved by a person). We do not sell or share it "
         "with third parties and do not use it for advertising.",
+        "From our own accounts we also read the list of Pages and professional accounts we manage (including those in our "
+        "business portfolios), our own posts and their aggregated statistics (reach, views, likes, comments, shares), to "
+        "plan and evaluate our content.",
         "Social network access tokens are stored only on our server and are never shared. Access can be removed at any "
         "time in Carretos Studio (Accounts → Disconnect) or in each social network's app settings; tokens are then "
         "deleted from our server.",
@@ -1392,9 +1398,13 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
     accs = [a for a in inbox.eligible_accounts() if me.can_see(a.id)]
     with connect() as conn:
         ids = [a.id for a in accounts().values() if me.can_see(a.id)]
+        # filtro (ex.: para gravar o vídeo da Meta sem mostrar outros clientes): ?conta=<id>&desde=AAAA-MM-DD
+        conta, desde = request.query_params.get("conta", ""), request.query_params.get("desde", "")
+        if conta:
+            ids = [i for i in ids if i == conta]
         rows = [dict(r) for r in conn.execute(
-            f"SELECT * FROM inbox WHERE account_id IN ({','.join('?' * len(ids)) or 'NULL'}) "
-            "ORDER BY id DESC LIMIT 100", ids)] if ids else []
+            f"SELECT * FROM inbox WHERE account_id IN ({','.join('?' * len(ids)) or 'NULL'}) AND created_at >= ? "
+            "ORDER BY id DESC LIMIT 100", [*ids, desde or "0"])] if ids else []
     names = {a.id: a.name for a in accounts().values()}
     return _render(request, "mensagens.html", {
         "accs": [(a, inbox.account_settings(a.id)) for a in accs], "rows": rows, "names": names, "ok": ok,

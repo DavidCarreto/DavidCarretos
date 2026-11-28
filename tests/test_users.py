@@ -2334,3 +2334,21 @@ def test_privacy_policy_and_12_month_purge(client):
     assert inbox.purge_old() == 1
     with connect() as conn:
         assert {r[0] for r in conn.execute("SELECT external_id FROM inbox WHERE external_id IN ('old-1','new-1')")} == {"new-1"}
+
+
+def test_legal_pages_open_for_meta_crawler_and_inbox_filter(client):
+    from carretos_social.db import connect
+    for path in ("/privacidade", "/termos"):
+        r = client.get(path, headers={"User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"},
+                       follow_redirects=False)
+        assert r.status_code == 200 and "Carretos Studio" in r.text
+    assert "estatísticas agregadas" in client.get("/privacidade").text
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    with connect() as conn:
+        for ext, acc, day in (("f1", "fb_carretosgroup", "2026-11-28T10:00:00"), ("f2", "ig_carretosgroup", "2026-11-28T10:00:00"),
+                              ("f3", "fb_carretosgroup", "2026-11-01T10:00:00")):
+            conn.execute("INSERT INTO inbox(account_id, network, kind, external_id, text, status, created_at) VALUES "
+                         "(?,?,?,?,?,?,?)", (acc, "facebook", "comment", ext, f"texto {ext}", "ignorado", day))
+    page = client.get("/mensagens?conta=fb_carretosgroup&desde=2026-11-28").text
+    assert "texto f1" in page and "texto f2" not in page and "texto f3" not in page
