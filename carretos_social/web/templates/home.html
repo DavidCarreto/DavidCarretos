@@ -23,7 +23,7 @@
 <div class="card"><div class="row" style="justify-content:space-between"><b>{{ a.name }}</b><span class="muted">{{ ICON.get(a.platform,'') }}</span></div>
 {% if not a.connected %}<p class="muted" style="margin:6px 0 0">Por ligar (sem métricas nem publicação).</p>
 {% elif r.posts %}<div class="kpi" style="margin-top:8px"><div><b>{{ r.posts }}</b><small>posts</small></div><div><b>{{ '{:,.0f}'.format(r.avg_views) }}</b><small>views méd.</small></div><div><b class="gold">{{ r.avg_engagement_pct }}%</b><small>envolvimento</small></div></div>
-<p class="muted" style="margin:8px 0 0">Melhores horas: {{ r.best_times|join(', ') or '—' }}</p>
+<p class="muted" style="margin:8px 0 0">Melhores horas: {{ r.best_times|join(', ') or '—' }}</p>{% if r.period %}<p class="muted" style="margin:2px 0 0;font-size:12px">Sem publicações nos últimos 30 dias: números do {{ r.period }}.</p>{% endif %}
 {% else %}<p class="muted">Sem métricas ainda.</p>{% endif %}</div>
 {% endfor %}</div>{% endfor %}
 {% endblock %}

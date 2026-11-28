@@ -1938,7 +1938,7 @@ def test_linkedin_message_emails_alert_and_delete(tmp_path, monkeypatch):
         return m.as_bytes()
     msgs = {b"1": mk("LinkedIn <messages-noreply@linkedin.com>", "Ana Costa enviou-lhe uma mensagem",
                      "Somos fornecedores e queremos uma parceria com a Carretos Group. https://www.linkedin.com/messaging/thread/123/?x=1", "<a>"),
-            b"2": mk("David <carretodavid22@hotmail.com>", "FW: Rui Lopes enviou-lhe uma mensagem",
+            b"2": mk("Dono <dono@exemplo.pt>", "FW: Rui Lopes enviou-lhe uma mensagem",
                      "From: messages-noreply@linkedin.com\nOlá, têm vagas para mecânico? Envio o meu CV.", "<b>"),
             b"3": mk("Banco <info@banco.pt>", "Extrato", "nada a ver", "<c>"),
             b"4": mk("LinkedIn <jobs-noreply@linkedin.com>", "Novas vagas para si", "sugestões de emprego linkedin.com", "<d>")}
@@ -2352,3 +2352,46 @@ def test_legal_pages_open_for_meta_crawler_and_inbox_filter(client):
                          "(?,?,?,?,?,?,?)", (acc, "facebook", "comment", ext, f"texto {ext}", "ignorado", day))
     page = client.get("/mensagens?conta=fb_carretosgroup&desde=2026-11-28").text
     assert "texto f1" in page and "texto f2" not in page and "texto f3" not in page
+
+
+def test_instagram_comments_polled_greeting_language_and_no_private_on_approve(client, tmp_path, monkeypatch):
+    from carretos_social import inbox
+    from carretos_social.config import accounts
+    from carretos_social.db import connect
+    from carretos_social.content import ai
+    import carretos_social.http as http_mod
+    acc = accounts()["ig_carretoclips"]
+    monkeypatch.setattr(type(acc), "has_credentials", property(lambda self: True))
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok" if "token" in k else "900")
+    monkeypatch.setattr(inbox, "eligible_accounts", lambda: [acc])
+    done = []
+    monkeypatch.setattr(inbox, "process", lambda iid, wait=0, force_propose=False: done.append(iid) or "proposta")
+    inbox.save_account_settings(acc.id, enabled=True, enabled_at="2026-01-01T00:00:00")
+
+    class R:
+        def json(self):
+            return {"data": [{"id": "m1", "timestamp": "2026-11-28T07:00:00+0000", "comments": {"data": [
+                {"id": "ic1", "text": "Great work!", "timestamp": "2026-11-28T07:43:00+0000", "username": "cliente_teste",
+                 "replies": {"data": [{"id": "ic2", "text": "Thanks!", "timestamp": "2026-11-28T07:45:00+0000",
+                                       "username": "conta_propria", "from": {"id": "900"}}]}}]}}]}
+    monkeypatch.setattr(http_mod, "request", lambda *a, **k: R())
+    st = tmp_path / "fb.json"
+    monkeypatch.setattr(inbox, "_fb_state_path", lambda: st)
+    st.write_text('{"since": {"ig_carretoclips": "2026-01-01T00:00:00"}}')
+    lines = inbox.poll_facebook_pages(force=True)
+    assert "Instagram comentários" in lines[0] and "1 comentário(s) novo(s)" in lines[0] and len(done) == 1
+    monkeypatch.setenv("SOCIAL_ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(ai, "inbox_reply", lambda *a: {"intent": "pergunta", "reply": "Olá! We do service the AMG GT.",
+                                                        "private_reply": "x", "alert": False, "lang": "en"})
+    res = inbox.compose(accounts()["fb_carretoclips"], "comment", "Do you service AMG GT models?", "Joana Silva")
+    assert res["reply"].startswith("Hi Joana!") and "Olá" not in res["reply"]
+    sent = []
+    monkeypatch.setattr(inbox, "_send", lambda acc, row, r: sent.append(r))
+    monkeypatch.setattr(inbox, "comment_exists", lambda acc, row: True)
+    monkeypatch.setattr(inbox, "answered_elsewhere", lambda acc, row: None)
+    with connect() as conn:
+        iid = conn.execute("INSERT INTO inbox(account_id, network, kind, external_id, author, text, context, status, reply, "
+                           "private_reply, created_at) VALUES ('fb_carretoclips','facebook','comment','pv1','Joana','Q','p',"
+                           "'proposta','Hi Joana!','Olá Joana! texto não revisto','2026-11-28')").lastrowid
+    inbox.approve(iid, "Hi Joana! Yes, we do.")
+    assert sent == [{"reply": "Hi Joana! Yes, we do.", "private_reply": ""}]

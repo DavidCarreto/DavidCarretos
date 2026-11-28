@@ -391,7 +391,15 @@ def compose(acc: Account, kind: str, text: str, author: str = "") -> dict:
 # ------------------------------------------------------------------ identificar quem comentou
 import re as _re
 
-_GREETING = _re.compile(r"^\s*(ol[áa]|oi|bom dia|boa tarde|boa noite)\b[^!.,\n]{0,30}[!.,]?\s*", _re.I)
+_GREETING = _re.compile(r"^\s*(ol[áa]|oi|bom dia|boa tarde|boa noite|hi|hello|hey|dear|good (morning|afternoon|evening)"
+                        r"|hola|buenos d[ií]as|bonjour)\b[^!.,\n]{0,30}[!.,]?\s*", _re.I)
+
+
+def _hello(lang: str, name: str = "") -> str:
+    """Saudação na língua do comentário."""
+    l = (lang or "pt").lower()[:2]
+    word = {"pt": "Olá", "en": "Hi", "es": "Hola", "fr": "Bonjour", "it": "Ciao", "de": "Hallo"}.get(l, "Hi" if l else "Olá")
+    return f"{word} {name}!" if name else f"{word}!"
 
 
 def first_name(name: str) -> str:
@@ -411,20 +419,20 @@ def personalize(acc: Account, kind: str, author: str, res: dict) -> dict:
         body = _re.sub(rf"^\s*@{_re.escape(author)}\b[\s,:]*", "", res["reply"], flags=_re.I)
         body = _GREETING.sub("", body, count=1)
         res["reply"] = f"@{author} {body[:1].upper() + body[1:]}".strip()
-        hello = f"Olá @{author}!"
+        hello = _hello(res.get("lang"), f"@{author}")
     elif acc.platform.startswith("linkedin"):
         # a API não dá o nome de quem comentou (só o URN): a resposta fica no fio do comentário, sem nome
         res["reply"] = _GREETING.sub("", res["reply"], count=1)
         res["reply"] = res["reply"][:1].upper() + res["reply"][1:]
-        hello = "Olá!"
+        hello = _hello(res.get("lang"))
     elif acc.platform == "facebook_page":
         name = first_name(author)
-        hello = f"Olá {name}!" if name else "Olá!"
+        hello = _hello(res.get("lang"), name)
         if kind == "comment":
             body = _GREETING.sub("", res["reply"], count=1)
             res["reply"] = f"{hello} {body[:1].upper() + body[1:]}".strip()
     else:
-        hello = "Olá!"
+        hello = _hello(res.get("lang"))
     if res.get("private_reply"):
         body = _GREETING.sub("", res["private_reply"], count=1)
         res["private_reply"] = f"{hello} {body[:1].upper() + body[1:]}".strip()
@@ -523,7 +531,8 @@ def approve(item_id: int, text: str | None = None, user_id: int | None = None, v
             conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=?",
                          ("já respondido por outra pessoa ou automação", item_id))
         raise ValueError("Já tinha sido respondido por outra pessoa: não enviei.")
-    _send(acc, row, {"reply": reply, "private_reply": row["private_reply"] or ""})
+    # só sai o texto aprovado: nunca uma mensagem privada extra (com texto não revisto)
+    _send(acc, row, {"reply": reply, "private_reply": ""})
     via = via if via in ("dashboard", "telegram") else "dashboard"
     who = ""
     with connect() as conn:
@@ -765,7 +774,8 @@ def _fb_state_path():
 
 
 def poll_facebook_pages(force: bool = False) -> list[str]:
-    """Além dos avisos (webhooks) da Meta, vai buscar os comentários recentes das Páginas de Facebook ligadas
+    """Além dos avisos (webhooks) da Meta, vai buscar os comentários recentes das Páginas de Facebook e das contas
+    Instagram ligadas
     (posts dos últimos 30 dias) e trata os novos como se tivessem chegado pelo webhook (mesmo id: não duplica).
     Só comentários depois de a conta estar ligada; os da própria Página não contam."""
     from .http import request
@@ -781,14 +791,18 @@ def poll_facebook_pages(force: bool = False) -> list[str]:
     lines = []
     since_30d = int(_t.time() - 30 * 86400)
     for acc in eligible_accounts():
-        if acc.platform != "facebook_page":
+        if acc.platform not in ("facebook_page", "instagram"):
             continue
         cfg = account_settings(acc.id)
         if not cfg.get("enabled"):
             continue
         first = st.setdefault("since", {}).setdefault(acc.id, now())      # 1.ª leitura: só daqui para a frente
         since = max(first, cfg.get("enabled_at") or first)
-        pid, token = page_id_for(acc), acc.secret("access_token_env")
+        token = acc.secret("access_token_env")
+        if acc.platform == "instagram":
+            lines.append(_poll_instagram(acc, token, since, since_30d))
+            continue
+        pid = page_id_for(acc)
         if not pid or not token:
             continue
         try:
@@ -817,6 +831,43 @@ def poll_facebook_pages(force: bool = False) -> list[str]:
     _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     _fb_state_path().write_text(json.dumps(st), encoding="utf-8")
     return lines
+
+
+def _poll_instagram(acc: Account, token: str, since: str, since_30d: int) -> str:
+    """Comentários (e respostas) recentes das publicações de uma conta Instagram ligada; os da própria conta não
+    contam; o mesmo id do webhook, por isso nunca duplica."""
+    from .http import request
+    from .meta_connect import graph
+    ig = acc.secret("user_id_env")
+    if not ig or not token:
+        return f"Instagram comentários {acc.name}: sem conta ligada"
+    try:
+        fields = ("id,timestamp,comments.limit(50){id,text,timestamp,username,from,"
+                  "replies.limit(25){id,text,timestamp,username,from}}")
+        data = request("GET", f"{graph()}/{ig}/media", retries=1, params={
+            "fields": fields, "limit": 15, "access_token": token}).json().get("data", [])
+    except Exception as exc:  # noqa: BLE001
+        from .redact import redact
+        return f"Instagram comentários {acc.name}: erro — {redact(str(exc))[:300]}"
+    own_user = (acc.handle or "").lower().lstrip("@")
+    items = []
+    for media in data:
+        ts = (media.get("timestamp") or "")[:19]
+        if ts and datetime.fromisoformat(ts).timestamp() < since_30d:
+            continue
+        for c in ((media.get("comments") or {}).get("data") or []):
+            for cc in [c] + (((c.get("replies") or {}).get("data")) or []):
+                frm = cc.get("from") or {}
+                user = (cc.get("username") or frm.get("username") or "").lower()
+                when = (cc.get("timestamp") or "")[:19]
+                if not cc.get("id") or str(frm.get("id", "")) == str(ig) or (own_user and user == own_user) \
+                        or (when and when < since[:19]):
+                    continue
+                items.append({"account_id": acc.id, "network": "instagram", "kind": "comment",
+                              "external_id": cc["id"], "author_id": str(frm.get("id", "")), "author": user,
+                              "text": cc.get("text", ""), "context": media.get("id", ""), "own": str(ig)})
+    new = receive_items(items, background=False)
+    return f"Instagram comentários {acc.name}: {len(data)} publicações lidas, {len(new)} comentário(s) novo(s)"
 
 
 def meta_diagnose() -> dict:

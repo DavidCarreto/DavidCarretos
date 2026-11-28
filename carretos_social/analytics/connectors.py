@@ -20,7 +20,12 @@ from pathlib import Path
 from ..config import Account
 from ..http import ApiError, request
 
-GRAPH = "https://graph.facebook.com/" + os.environ.get("META_GRAPH_VERSION", "v21.0")
+def _graph() -> str:
+    from ..meta_connect import graph           # a mesma versão da Graph API do resto do Studio (nunca abaixo da v24)
+    return graph()
+
+
+GRAPH = _graph()
 TIKTOK = "https://open.tiktokapis.com/v2"
 LINKEDIN = "https://api.linkedin.com/rest"
 

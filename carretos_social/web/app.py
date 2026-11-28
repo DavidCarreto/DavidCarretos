@@ -301,7 +301,12 @@ def home(request: Request):
     me = request.state.user
     where, params = _visible_clause(me)
     with connect() as conn:
-        report = [summary(conn, a, 30) for a in me.visible_accounts]
+        report = []
+        for a in me.visible_accounts:
+            r = summary(conn, a, 30)
+            if not r.get("posts"):                 # sem publicações nos últimos 30 dias: mostra o último ano
+                r = {**summary(conn, a, 365), "period": "último ano"}
+            report.append(r)
         report_groups = [(g, [r for r in report if accounts()[r["account_id"]].group == g["id"]]) for g in groups()]
         report_groups = [(g, rs) for g, rs in report_groups if rs]
         drafts = conn.execute(f"SELECT account_id FROM posts WHERE status='draft' AND {where}", params).fetchall()
