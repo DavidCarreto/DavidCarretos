@@ -24,7 +24,7 @@ verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div
  <form method="post" action="/mensagens/conta/{{ a.id }}" class="acc-actions">
   <label style="font-size:13px"><input type="checkbox" name="enabled" value="1" {{ 'checked' if s.enabled }} style="width:auto"> Ligado (avisa no Telegram)</label>
   <select name="modo" style="width:auto;font-size:13px"><option value="propor" {{ 'selected' if s.mode == 'propor' }}>Propor e eu aprovo</option><option value="auto" {{ 'selected' if s.mode == 'auto' }}>Responder sozinho</option></select>
-  {% if a.platform != 'linkedin_org' %}<label style="font-size:13px"><input type="checkbox" name="private" value="1" {{ 'checked' if s.private }} style="width:auto"> + mensagem privada nos comentários</label>{% endif %}
+  {% if a.platform != 'linkedin_org' %}<label style="font-size:13px" title="Só se usa em «Responder sozinho». Ao aprovar uma resposta, sai apenas o texto aprovado."><input type="checkbox" name="private" value="1" {{ 'checked' if s.private }} style="width:auto"> + mensagem privada nos comentários <span class="muted">(só em «Responder sozinho»)</span></label>{% endif %}
   <button class="btn">Guardar</button>
   {% if a.platform == 'linkedin_org' %}<button class="btn" formaction="/mensagens/linkedin/existentes" onclick="return confirm('Trazer os comentários já existentes (últimos 30 dias) para aprovar? Nada é enviado sem a sua aprovação.')">Trazer os comentários já existentes para aprovar</button>
   {% elif me.is_admin %}<button class="btn" formaction="/mensagens/subscrever/{{ a.id }}">Ativar na Meta</button>{% endif %}
