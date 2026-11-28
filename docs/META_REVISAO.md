@@ -7,6 +7,12 @@ tem função na app.
 Fontes (documentação oficial da Meta, lida a 27/11/2026): "Business Verification", "App Review",
 "App Review Submission Guide", "Permissions Reference", "Webhooks for Pages".
 
+> **Ponto de situação (28/11/2026):** ao carregar em "Adicionar à revisão da app", a Meta exige que a empresa passe a
+> **Fornecedor de Tecnologia** (decisão irreversível). O David decidiu NÃO o fazer: a revisão (Advanced Access) fica
+> parada. Alternativa a testar: pôr a app em Live com Standard Access (reversível) e testar com uma conta sem função
+> na app (ver o prompt "Teste Live" na conversa de 28/11). Os vídeos e textos ficam guardados para o caso de se
+> retomar a revisão.
+
 ## Estado (28/11/2026)
 - ✓ Definições básicas na app: política de privacidade, termos, URL de instruções de eliminação de dados, ícone
   1024×1024, categoria, email de contacto e encarregado da proteção de dados (feito pelo Claude no Chrome, autorizado).
