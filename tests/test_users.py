@@ -2370,7 +2370,7 @@ def test_instagram_comments_polled_greeting_language_and_no_private_on_approve(c
 
     class R:
         def json(self):
-            return {"data": [{"id": "m1", "timestamp": "2026-11-28T07:00:00+0000", "comments": {"data": [
+            return {"data": [{"id": "m1", "timestamp": "2025-06-01T07:00:00+0000", "comments": {"data": [   # reel antigo
                 {"id": "ic1", "text": "Great work!", "timestamp": "2026-11-28T07:43:00+0000", "username": "cliente_teste",
                  "replies": {"data": [{"id": "ic2", "text": "Thanks!", "timestamp": "2026-11-28T07:45:00+0000",
                                        "username": "conta_propria", "from": {"id": "900"}}]}}]}}]}

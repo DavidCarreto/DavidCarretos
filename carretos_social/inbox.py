@@ -808,8 +808,9 @@ def poll_facebook_pages(force: bool = False) -> list[str]:
         try:
             fields = ("id,created_time,comments.limit(50).order(reverse_chronological){id,message,created_time,from,"
                       "comments.limit(25){id,message,created_time,from}}")
+            # as 15 publicações mais recentes, mesmo que antigas (um comentário novo num post antigo também conta)
             data = request("GET", f"{graph()}/{pid}/posts", retries=1, params={
-                "fields": fields, "limit": 15, "since": since_30d, "access_token": token}).json().get("data", [])
+                "fields": fields, "limit": 15, "access_token": token}).json().get("data", [])
         except Exception as exc:  # noqa: BLE001
             from .redact import redact
             lines.append(f"Facebook comentários {acc.name}: erro — {redact(str(exc))[:300]}")
@@ -834,8 +835,8 @@ def poll_facebook_pages(force: bool = False) -> list[str]:
 
 
 def _poll_instagram(acc: Account, token: str, since: str, since_30d: int) -> str:
-    """Comentários (e respostas) recentes das publicações de uma conta Instagram ligada; os da própria conta não
-    contam; o mesmo id do webhook, por isso nunca duplica."""
+    """Comentários (e respostas) novos nas 15 publicações mais recentes de uma conta Instagram ligada (mesmo que a
+    publicação seja antiga); os da própria conta não contam; o mesmo id do webhook, por isso nunca duplica."""
     from .http import request
     from .meta_connect import graph
     ig = acc.secret("user_id_env")
@@ -852,9 +853,7 @@ def _poll_instagram(acc: Account, token: str, since: str, since_30d: int) -> str
     own_user = (acc.handle or "").lower().lstrip("@")
     items = []
     for media in data:
-        ts = (media.get("timestamp") or "")[:19]
-        if ts and datetime.fromisoformat(ts).timestamp() < since_30d:
-            continue
+        # todas as publicações recentes (15), mesmo antigas: o que conta é a data do COMENTÁRIO
         for c in ((media.get("comments") or {}).get("data") or []):
             for cc in [c] + (((c.get("replies") or {}).get("data")) or []):
                 frm = cc.get("from") or {}
