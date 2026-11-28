@@ -30,6 +30,10 @@ Não alterar, não apagar, não reutilizar e não mudar definições de:
   vídeos enviados para os rascunhos do TikTok, alertas de ligações às redes com problemas e avisos de pedidos de
   parceria recebidos em comentários (para a lista de ⚙ Configurar), com assunto
   "Carretos Studio · …", a partir de uma conta de email PRÓPRIA (SMTP no ⚙), nunca a "carretos-avaliacoes".
+  ⚠ Temporário (decisão do David a 28/11/2026): o Studio usa o Gmail carretoshoprepair@gmail.com, que é a mesma
+  conta do sistema de avaliações, mas com palavras-passe de aplicação PRÓPRIAS do Studio (envio e leitura dos avisos
+  do LinkedIn). Nunca usar nem mexer na "carretos-avaliacoes". Passar para uma conta própria quando o David decidir
+  (ver docs/DECISOES.md).
 
 ## Separação entre os dois sistemas (convenções deste projeto)
 

@@ -69,6 +69,31 @@ accounts:
     default_times: ["09:00"]
     best_times: auto
 
+  # Carretos Group (decidido pelo David a 28/11/2026): Instagram 4, Facebook 3, TikTok 3 por semana
+  ig_carretosgroup:
+    posts_per_week: 4
+    formats: {reel: 2, carousel: 1, image: 1}
+    pillar_mix: {carretos_group: 35, mercedes_tecnico: 35, pessoas: 15, conquistas: 15}
+    days: [mon, wed, fri, sat]
+    default_times: ["12:30", "19:00"]
+    best_times: auto
+
+  fb_carretosgroup:
+    posts_per_week: 3
+    formats: {image: 2, video: 1}
+    pillar_mix: {carretos_group: 40, mercedes_tecnico: 30, pessoas: 15, conquistas: 15}
+    days: [tue, thu, sat]
+    default_times: ["12:30"]
+    best_times: auto
+
+  tt_carretosgroup:           # vai para os rascunhos da app TikTok (o David publica lá)
+    posts_per_week: 3
+    formats: {video: 3}
+    pillar_mix: {mercedes_tecnico: 50, carretos_group: 30, pessoas: 20}
+    days: [tue, thu, sun]
+    default_times: ["19:00"]
+    best_times: auto
+
   # AURON: ponto de partida (o David ajusta); os horários afinam-se sozinhos com as métricas
   ig_auron:
     posts_per_week: 4
