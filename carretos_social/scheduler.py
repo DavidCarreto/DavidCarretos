@@ -83,6 +83,9 @@ def publish_post(conn, post_id: int, dry_run: bool = False) -> str:
                          cover=cover, title=row["title"] or "")
     if dry_run:
         return f"#{post_id} [simulação] {acc.name}: {row['format']} com {len(media)} ficheiro(s)"
+    if not dry_run:
+        # "A publicar…" no dashboard enquanto se espera pela rede (o Instagram pode levar 1–3 minutos a processar)
+        conn.execute("UPDATE posts SET status='publishing' WHERE id=?", (post_id,))
     conn.commit()                         # nada fica por gravar enquanto se espera pela rede
     try:
         if card and acc.mode == "auto":
@@ -166,13 +169,16 @@ def auto_approve(conn) -> None:
             update_post(conn, r["id"], status="approved")
 
 
-def tick(dry_run: bool = False) -> list[str]:
+def tick(dry_run: bool = False, echo: bool = False) -> list[str]:
     with connect() as conn:
         auto_approve(conn)
         conn.commit()
         out = []
         for r in due_posts(conn):
-            out.append(publish_post(conn, r["id"], dry_run))
+            line = publish_post(conn, r["id"], dry_run)
+            out.append(line)
+            if echo:                      # no registo à hora em que cada publicação termina
+                print(datetime.now().strftime("%H:%M"), line, flush=True)
             conn.commit()                 # cada publicação gravada logo (não bloqueia o dashboard)
             if not dry_run and get_post(conn, r["id"])["status"] == "published":
                 JUST_PUBLISHED.add(r["account_id"])
@@ -204,6 +210,17 @@ def _write_status(rev: str) -> None:
         pass
 
 
+def recover_interrupted(conn) -> int:
+    """Publicações que ficaram "A publicar…" porque o agendador foi interrompido a meio (ex.: atualização):
+    passam a "Falhou" com a explicação, para o David confirmar na rede antes de tentar outra vez (nunca se
+    publica duas vezes sozinho)."""
+    rows = conn.execute("SELECT id FROM posts WHERE status='publishing'").fetchall()
+    for r in rows:
+        update_post(conn, r["id"], status="failed",
+                    error="interrompido durante a publicação (ex.: reinício): confirme na rede se saiu antes de usar «Tentar outra vez»")
+    return len(rows)
+
+
 def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     from .analytics.analyzer import sync
 
@@ -217,14 +234,17 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     from .config import ROOT
     rev = _code_rev()
     _write_status(rev)
+    with connect() as conn:
+        n = recover_interrupted(conn)
+        if n:
+            print(f"{n} publicação(ões) interrompida(s) a meio passaram a «Falhou» (confirmar na rede).", flush=True)
     env_file = ROOT / ".env"
     env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
     last_sync = 0.0
     last_li_poll = 0.0
     last_purge = ""
     while True:
-        for line in tick():
-            print(datetime.now().strftime("%H:%M"), line)
+        tick(echo=True)
         today = datetime.now().date().isoformat()
         if today != last_purge:                         # 1 vez por dia: apagar comentários/mensagens com mais de 12 meses
             last_purge = today

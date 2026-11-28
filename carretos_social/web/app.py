@@ -56,7 +56,7 @@ app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 tpl = Jinja2Templates(directory=HERE / "templates")
 
 STATUS = {"idea": ("Ideia", "#7d8590"), "draft": ("Para aprovar", "#d29922"), "approved": ("Aprovado", "#3fb950"),
-          "published": ("Publicado", "#D4AF37"), "failed": ("Falhou", "#f85149"),
+          "published": ("Publicado", "#D4AF37"), "failed": ("Falhou", "#f85149"), "publishing": ("A publicar…", "#58a6ff"),
           "assist_sent": ("Enviado p/ telemóvel", "#a371f7"),
           "tiktok_draft": ("No TikTok: falta publicar na app", "#25F4EE"), "rejected": ("Rejeitado", "#484f58")}
 ICON = {"instagram": "IG", "tiktok": "TT", "facebook_profile": "FB", "facebook_page": "FB", "linkedin_member": "in",

@@ -2395,3 +2395,17 @@ def test_instagram_comments_polled_greeting_language_and_no_private_on_approve(c
                            "'proposta','Hi Joana!','Olá Joana! texto não revisto','2026-11-28')").lastrowid
     inbox.approve(iid, "Hi Joana! Yes, we do.")
     assert sent == [{"reply": "Hi Joana! Yes, we do.", "private_reply": ""}]
+
+
+def test_carreto_clips_signed_david_and_publishing_status_recovery():
+    from carretos_social.config import account, brand
+    from carretos_social import scheduler
+    from carretos_social.db import add_post, connect, get_post
+    for a in ("ig_carretoclips", "fb_carretoclips", "tt_carretoclips"):
+        account(a)
+        assert not brand()["visual"].get("logo") and brand()["visual"]["quote_author"] == "David Carreto"
+    with connect() as conn:
+        pid = add_post(conn, account_id="fb_carretoclips", format="image", caption="x", status="publishing")
+        assert scheduler.recover_interrupted(conn) == 1
+        row = get_post(conn, pid)
+    assert row["status"] == "failed" and "interrompido" in row["error"]

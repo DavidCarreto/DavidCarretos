@@ -46,6 +46,7 @@ accounts:
     name: "Carreto Clips (Instagram)"
     handle: "carretoclips"
     voice: marca
+    theme: pessoal          # imagens assinadas "DAVID CARRETO" (nunca o logótipo da Carretos), decisão do David 28/11/2026
     narrator: generica           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false
@@ -60,6 +61,7 @@ accounts:
     handle: "Carreto Clips"
     status: por_ligar         # liga-se em Contas → "Ligar com o Facebook" (Página «Carreto Clips»)
     voice: marca
+    theme: pessoal          # imagens assinadas "DAVID CARRETO" (nunca o logótipo da Carretos), decisão do David 28/11/2026
     narrator: generica
     publish_mode: auto
     auto_approve: false
@@ -100,6 +102,7 @@ accounts:
     name: "Carreto Clips (TikTok)"
     handle: "clips.do.carreto"
     voice: marca
+    theme: pessoal          # imagens assinadas "DAVID CARRETO" (nunca o logótipo da Carretos), decisão do David 28/11/2026
     narrator: generica           # voz da narração: david | generica
     publish_mode: auto
     auto_approve: false

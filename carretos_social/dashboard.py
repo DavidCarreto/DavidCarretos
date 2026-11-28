@@ -11,7 +11,7 @@ from .content.planner import calendar
 from .db import connect
 
 STATUS = {"idea": ("Ideia", "#8a8f98"), "draft": ("Rascunho", "#d29922"), "approved": ("Aprovado", "#2f81f7"),
-          "published": ("Publicado", "#3fb950"), "failed": ("Falhou", "#f85149"),
+          "published": ("Publicado", "#3fb950"), "failed": ("Falhou", "#f85149"), "publishing": ("A publicar…", "#58a6ff"),
           "assist_sent": ("Enviado p/ telemóvel", "#a371f7"), "rejected": ("Rejeitado", "#6e7681")}
 PLATFORM_ICON = {"instagram": "IG", "tiktok": "TT", "facebook_profile": "FB", "linkedin_member": "in",
                  "linkedin_org": "in"}
