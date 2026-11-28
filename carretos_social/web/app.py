@@ -1217,16 +1217,41 @@ def tiktok_callback(request: Request, code: str = "", state: str = "", error: st
 
 _LEGAL = {
     "privacidade": ("Política de privacidade", [
-        "O Carretos Studio é a ferramenta interna da Carretos Group para criar, agendar e publicar conteúdos nas suas "
-        "próprias contas de redes sociais (Facebook, Instagram, LinkedIn e TikTok).",
-        "Quando uma conta é ligada, o Carretos Studio recebe da rede social as autorizações necessárias para publicar "
-        "nessa conta e ler as estatísticas das publicações. Essas chaves ficam guardadas apenas no servidor da Carretos "
-        "Group, não são mostradas a ninguém e não são partilhadas com terceiros.",
-        "Não são recolhidos dados de outras pessoas nem de seguidores, para além das estatísticas agregadas das "
-        "publicações das próprias contas.",
-        "O acesso pode ser retirado a qualquer momento: no Carretos Studio (Contas → Desligar) ou nas definições de "
-        "aplicações de cada rede social. Ao desligar, as chaves dessa conta são apagadas do servidor.",
-        "Contacto: WhatsApp 211 45 46 46."]),
+        "O Carretos Studio é a ferramenta interna da Carretos Group (ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA) para "
+        "criar, agendar e publicar conteúdos nas suas próprias contas de redes sociais e para gerir os comentários e as "
+        "mensagens que essas contas recebem.",
+        "Que dados tratamos: quando alguém comenta ou envia uma mensagem a uma conta nossa (Facebook, Instagram, "
+        "LinkedIn), recebemos o texto, o nome público ou nome de utilizador, o identificador da conta e a data. Usamos "
+        "estes dados só para mostrar o comentário ou a mensagem à nossa equipa e responder (cada resposta é aprovada por "
+        "uma pessoa). Não os vendemos, não os partilhamos com terceiros e não os usamos para publicidade.",
+        "As autorizações das redes sociais (chaves de acesso) ficam guardadas só no nosso servidor e não são partilhadas. "
+        "O acesso pode ser retirado a qualquer momento no Carretos Studio (Contas → Desligar) ou nas definições de "
+        "aplicações de cada rede social; ao desligar, as chaves dessa conta são apagadas do servidor.",
+        "Guardamos os comentários e as mensagens enquanto forem úteis para o atendimento e no máximo 12 meses; depois são "
+        "apagados automaticamente.",
+        "#Eliminação de dados",
+        "Pode pedir a eliminação dos seus dados (comentários e mensagens) enviando um email para davidcarreto@carretos.pt "
+        "com o assunto \"Eliminar dados\" e a conta ou rede em causa. Apagamos no prazo de 30 dias e confirmamos por "
+        "email. Também pode apagar o seu comentário na própria rede social.",
+        "Contacto: davidcarreto@carretos.pt · WhatsApp 211 45 46 46.",
+        "#Privacy policy (English)",
+        "Carretos Studio is the internal tool of Carretos Group (ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA) to create, "
+        "schedule and publish content on its own social media accounts and to manage the comments and messages those "
+        "accounts receive.",
+        "Data we process: when someone comments on or messages one of our accounts (Facebook, Instagram, LinkedIn), we "
+        "receive the text, the public name or username, the account ID and the date. We use this data only to show the "
+        "comment or message to our team and to reply (every reply is approved by a person). We do not sell or share it "
+        "with third parties and do not use it for advertising.",
+        "Social network access tokens are stored only on our server and are never shared. Access can be removed at any "
+        "time in Carretos Studio (Accounts → Disconnect) or in each social network's app settings; tokens are then "
+        "deleted from our server.",
+        "We keep comments and messages while useful for customer support, for a maximum of 12 months; after that they are "
+        "deleted automatically.",
+        "#Data deletion",
+        "You can request deletion of your data by emailing davidcarreto@carretos.pt with the subject \"Delete my data\" "
+        "and the account or network concerned. We delete it within 30 days and confirm by email. You can also delete your "
+        "comment on the social network itself.",
+        "Contact: davidcarreto@carretos.pt · WhatsApp +351 211 45 46 46."]),
     "termos": ("Termos de utilização", [
         "O Carretos Studio é uma ferramenta de uso interno da Carretos Group e só é usada pela sua equipa, com contas "
         "pessoais protegidas por palavra-passe.",
@@ -1241,7 +1266,14 @@ _LEGAL = {
 @app.get("/termos", response_class=HTMLResponse)
 def legal_page(request: Request):
     title, paras = _LEGAL[request.url.path.strip("/")]
-    body = "".join(f"<p>{_esc(p)}</p>" for p in paras)
+    def _block(p: str) -> str:
+        if p.startswith("#"):                       # subtítulo (com âncora: #eliminacao, #data-deletion…)
+            t = p[1:]
+            anchor = {"Eliminação de dados": "eliminacao", "Data deletion": "data-deletion",
+                      "Privacy policy (English)": "english"}.get(t, "")
+            return f"<h2 id='{anchor}' style='color:#D4AF37;font-size:20px;margin-top:28px'>{_esc(t)}</h2>"
+        return f"<p>{_esc(p)}</p>"
+    body = "".join(_block(p) for p in paras)
     return HTMLResponse(f"<!doctype html><html lang=pt-PT><meta charset=utf-8><meta name=viewport content='width=device-width'>"
                         f"<title>{title} · Carretos Studio</title><body style='background:#000;color:#eee;font:16px/1.6 "
                         f"system-ui;max-width:760px;margin:0 auto;padding:24px'><h1 style='color:#D4AF37'>{title}</h1>"

@@ -2319,3 +2319,18 @@ def test_meta_diagnose_lists_all_installed_apps(tmp_path, monkeypatch):
     apps = d["pages"][0]["apps"]
     assert [a["name"] for a in apps] == ["Carretos Studio", "ManyChat"] and apps[0]["ours"] and not apps[1]["ours"]
     assert d["pages"][0]["installed"] and not d["pages"][0]["missing"]
+
+
+def test_privacy_policy_and_12_month_purge(client):
+    from carretos_social import inbox
+    from carretos_social.db import connect
+    page = client.get("/privacidade").text
+    assert "12 meses" in page and "id='eliminacao'" in page and "id='data-deletion'" in page and "Delete my data" in page
+    with connect() as conn:
+        conn.execute("INSERT INTO inbox(account_id, network, kind, external_id, text, status, created_at) VALUES "
+                     "('fb_carretosgroup','facebook','comment','old-1','x','ignorado','2024-01-01T00:00:00')")
+        conn.execute("INSERT INTO inbox(account_id, network, kind, external_id, text, status, created_at) VALUES "
+                     "('fb_carretosgroup','facebook','comment','new-1','x','ignorado','2026-11-27T00:00:00')")
+    assert inbox.purge_old() == 1
+    with connect() as conn:
+        assert {r[0] for r in conn.execute("SELECT external_id FROM inbox WHERE external_id IN ('old-1','new-1')")} == {"new-1"}

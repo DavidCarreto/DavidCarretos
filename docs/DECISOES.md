@@ -11,3 +11,4 @@
 | LinkedIn Standard | Preparar o pedido; submeter só quando o David disser (docs/LINKEDIN_STANDARD.md). |
 | Conta de email do Studio | É a mesma do sistema de avaliações (carretoshoprepair@gmail.com). Manter por agora, com palavras-passe de aplicação PRÓPRIAS do Studio (nunca a "carretos-avaliacoes"); mudar para conta própria mais tarde. |
 | Integrações AURON / Carreto Clips / @carretos_group | Ver e só relatar (sem remover nada). |
+| Política de privacidade | Aprovada (PT + EN), com eliminação a pedido por email e guarda máxima de 12 meses (limpeza automática diária). |

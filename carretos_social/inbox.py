@@ -573,6 +573,17 @@ def mark_deleted(item_id: int, acc: Account, row) -> None:
     _log_aviso(item_id, acc.name, NETWORK_NAME.get(row["network"] or "", ""), "apagado pelo autor", True)
 
 
+RETENTION_DAYS = 365      # política de privacidade: comentários e mensagens guardados no máximo 12 meses
+
+
+def purge_old(days: int = RETENTION_DAYS) -> int:
+    """Apaga os comentários e mensagens com mais de 12 meses (política de privacidade). Devolve quantos apagou."""
+    limit = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
+    with connect() as conn:
+        n = conn.execute("DELETE FROM inbox WHERE created_at < ?", (limit,)).rowcount
+    return n
+
+
 def ignore(item_id: int) -> None:
     with connect() as conn:
         conn.execute("UPDATE inbox SET status='ignorado', note=? WHERE id=? AND status IN ('proposta','erro','novo')",

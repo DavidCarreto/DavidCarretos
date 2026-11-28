@@ -221,9 +221,20 @@ def run_forever(interval: int = 60, sync_every_hours: int = 6) -> None:
     env_mtime = env_file.stat().st_mtime if env_file.exists() else 0
     last_sync = 0.0
     last_li_poll = 0.0
+    last_purge = ""
     while True:
         for line in tick():
             print(datetime.now().strftime("%H:%M"), line)
+        today = datetime.now().date().isoformat()
+        if today != last_purge:                         # 1 vez por dia: apagar comentários/mensagens com mais de 12 meses
+            last_purge = today
+            try:
+                from .inbox import purge_old
+                n = purge_old()
+                if n:
+                    print(datetime.now().strftime("%H:%M"), f"privacidade: {n} comentário(s)/mensagem(ns) com mais de 12 meses apagados")
+            except Exception as exc:  # noqa: BLE001
+                print("privacidade (limpeza):", exc)
         try:                                            # comentários das Páginas de Facebook (além dos webhooks)
             from .inbox import poll_facebook_pages
             for line in poll_facebook_pages():

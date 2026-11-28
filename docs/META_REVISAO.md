@@ -14,11 +14,10 @@ Fontes (documentação oficial da Meta, lida a 27/11/2026): "Business Verificati
   (comments, messages) subscritos; app instalada em todas as Páginas.
 
 ## O que ainda falta preparar (por ordem)
-1. **Política de privacidade atualizada** (a atual diz que não se recolhem dados de outras pessoas, o que já não é
-   verdade: lêem-se comentários e mensagens). Proposta em PT e EN na secção 5 — **precisa do "sim" do David** antes
-   de ir para https://carretosstudio.duckdns.org/privacidade.
+1. ✓ **Política de privacidade atualizada** (aprovada pelo David a 28/11/2026, PT + EN, guarda máx. 12 meses com
+   limpeza automática diária): https://carretosstudio.duckdns.org/privacidade
 2. **Instruções de eliminação de dados** (App Dashboard → Settings → Basic → "Data deletion instructions URL"):
-   usar a mesma página (secção "Eliminação de dados" da proposta).
+   https://carretosstudio.duckdns.org/privacidade#data-deletion
 3. **Ícone da app 1024×1024** sem marcas da Meta (Settings → Basic → App icon) — confirmar se já existe.
 4. **1 chamada com sucesso por autorização nos últimos 30 dias** (senão "Request advanced access" fica cinzento;
    o registo aparece até 2 dias depois). Já houve leituras e subscrições; FALTAM envios reais:
@@ -136,7 +135,7 @@ revisão (ex.: "meta-review", com acesso a uma Página de teste), para indicar n
   - mudar definições da app depois de submeter (pode obrigar a nova revisão).
 
 
-## 5. Proposta de política de privacidade (precisa do "sim" do David)
+## 5. Política de privacidade (APROVADA pelo David a 28/11/2026 e publicada em /privacidade)
 
 **PT**
 1. O Carretos Studio é a ferramenta interna da Carretos Group (ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA) para criar,
@@ -168,8 +167,7 @@ revisão (ex.: "meta-review", com acesso a uma Página de teste), para indicar n
    delete your comment on the social network itself.
 6. Contact: davidcarreto@carretos.pt · WhatsApp +351 211 45 46 46.
 
-(Ponto 4 — "12 meses" — é uma proposta: o David confirma o prazo. Hoje o Carretos Studio não apaga sozinho os
-comentários antigos; se o David aprovar o prazo, acrescenta-se a limpeza automática.)
+(Prazo de 12 meses aprovado; o agendador apaga uma vez por dia os comentários e mensagens com mais de 12 meses.)
 
 ## 6. Respostas sugeridas às perguntas de tratamento de dados (confirmar no formulário)
 - Data processors / service providers with access to Platform Data: none besides our own server host (Hetzner, EU).
