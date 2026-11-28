@@ -1,0 +1,11 @@
+1
+00:00:00,000 --> 00:00:05,000
+Privacy policy (Portuguese and English)
+
+2
+00:00:06,000 --> 00:00:11,000
+Data deletion instructions: email request, deleted within 30 days
+
+3
+00:00:12,000 --> 00:00:17,000
+Comments and messages are kept for a maximum of 12 months

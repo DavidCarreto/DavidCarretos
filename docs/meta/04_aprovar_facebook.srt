@@ -1,0 +1,15 @@
+1
+00:00:00,000 --> 00:00:05,000
+A team member opens the comment and edits the suggested reply
+
+2
+00:00:06,000 --> 00:00:11,000
+"Approve and send" → confirmation dialog
+
+3
+00:00:12,000 --> 00:00:17,000
+The reply is published as our Page in the comment thread (pages_manage_engagement)
+
+4
+00:00:18,000 --> 00:00:23,000
+The dashboard records who approved it and when

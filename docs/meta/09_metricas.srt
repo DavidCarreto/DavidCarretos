@@ -1,0 +1,7 @@
+1
+00:00:00,000 --> 00:00:05,000
+Dashboard metrics: statistics of our own Instagram posts (instagram_manage_insights)
+
+2
+00:00:06,000 --> 00:00:11,000
+Reach, views, likes, comments and saves, used to plan content

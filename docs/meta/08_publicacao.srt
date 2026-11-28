@@ -1,0 +1,11 @@
+1
+00:00:00,000 --> 00:00:05,000
+An approved post is published at the scheduled time
+
+2
+00:00:06,000 --> 00:00:11,000
+On our Facebook Page (pages_manage_posts)
+
+3
+00:00:12,000 --> 00:00:17,000
+And on our Instagram account (instagram_content_publish)
