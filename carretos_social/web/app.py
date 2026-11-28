@@ -1425,7 +1425,23 @@ def inbox_page(request: Request, ok: str = "", erro: str = ""):
         "li_last": __import__("carretos_social.linkedin_inbox", fromlist=["x"]).last_round(),
         "mail_minutes": __import__("carretos_social.linkedin_mail", fromlist=["x"]).interval_minutes(),
         "approvers": _approver_names(rows),
-        "meta_diag": inbox.last_meta_diagnose() if me.is_admin else {}})
+        "meta_diag": inbox.last_meta_diagnose() if me.is_admin else {},
+        "meta_sw": inbox.meta_switch()})
+
+
+@app.post("/mensagens/meta/interruptor")
+def inbox_meta_switch(request: Request, ligar: str = Form("")):
+    from urllib.parse import quote
+    from .. import inbox
+    me = request.state.user
+    if not me.is_admin:
+        return _forbidden("Ligar e desligar o Facebook/Instagram é só para administradores.")
+    inbox.set_meta_on(ligar == "1", by=me.name)
+    msg = ("Facebook/Instagram LIGADO: os comentários e mensagens novos voltam a entrar (os de quando esteve desligado "
+           "não entram)." if ligar == "1" else
+           "Facebook/Instagram DESLIGADO: o Studio não lê, não avisa e não responde a comentários nem mensagens da Meta. "
+           "As publicações agendadas continuam.")
+    return RedirectResponse(f"/mensagens?ok={quote(msg)}", 303)
 
 
 @app.post("/mensagens/conta/{acc_id}")

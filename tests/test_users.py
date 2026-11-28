@@ -2409,3 +2409,32 @@ def test_carreto_clips_signed_david_and_publishing_status_recovery():
         assert scheduler.recover_interrupted(conn) == 1
         row = get_post(conn, pid)
     assert row["status"] == "failed" and "interrompido" in row["error"]
+
+
+def test_meta_switch_stops_reading_and_sending(client, monkeypatch, tmp_path):
+    from carretos_social import inbox, notify
+    import carretos_social.config as cfg
+    from carretos_social.db import connect
+    monkeypatch.setattr(cfg, "DATA_DIR", tmp_path)
+    _setup_admin(client)
+    _login(client, "david", "segredo123")
+    monkeypatch.setenv("FB_CARRETOSGROUP_PAGE_TOKEN", "PAGE2"); monkeypatch.setenv("FB_CARRETOSGROUP_PAGE_ID", "222")
+    monkeypatch.delenv("SOCIAL_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(notify, "send", lambda t, buttons=None: None)
+    assert inbox.meta_on() and "Facebook e Instagram: " in client.get("/mensagens").text
+    fb = lambda cid: {"object": "page", "entry": [{"id": "222", "changes": [{"field": "feed", "value": {  # noqa: E731
+        "item": "comment", "verb": "add", "comment_id": cid, "post_id": "222_1", "message": "Olá?",
+        "from": {"id": "u9", "name": "Cliente"}}}]}]}
+    inbox.receive(fb("222_1_s1"), background=False)                     # ligado: entra
+    with connect() as conn:
+        iid = conn.execute("SELECT id FROM inbox WHERE external_id='222_1_s1'").fetchone()[0]
+    r = client.post("/mensagens/meta/interruptor", data={"ligar": "0"}, follow_redirects=False)
+    assert r.status_code == 303 and not inbox.meta_on() and inbox.meta_switch()["by"]
+    assert "DESLIGADO" in client.get("/mensagens").text
+    assert inbox.receive(fb("222_1_s2"), background=False) == []        # desligado: não entra
+    assert inbox.poll_facebook_pages(force=True) == []                  # nem é lido
+    with pytest.raises(ValueError, match="desligado"):
+        inbox.approve(iid, "Olá!")                                       # nem é enviado
+    client.post("/mensagens/meta/interruptor", data={"ligar": "1"})
+    assert inbox.meta_on() and inbox.meta_switch().get("on_since")
+    assert inbox.receive(fb("222_1_s3"), background=False)              # ligado outra vez: entra

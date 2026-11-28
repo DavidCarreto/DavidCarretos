@@ -46,6 +46,36 @@ def settings() -> dict:
         return {}
 
 
+META_NETWORKS = ("facebook", "instagram")
+
+
+def _meta_switch_path():
+    return _cfg.DATA_DIR / "meta_publico.json"
+
+
+def meta_switch() -> dict:
+    """Interruptor geral do Facebook/Instagram no Carretos Studio: {on, changed_at, by}. Ligado por omissão."""
+    try:
+        data = json.loads(_meta_switch_path().read_text(encoding="utf-8")) if _meta_switch_path().exists() else {}
+    except (OSError, ValueError):
+        data = {}
+    return {"on": True, "changed_at": "", "by": "", **data}
+
+
+def meta_on() -> bool:
+    return bool(meta_switch()["on"])
+
+
+def set_meta_on(on: bool, by: str = "") -> None:
+    """Desligado: o Studio deixa de ler, guardar, avisar e responder comentários e mensagens do Facebook/Instagram
+    (as publicações agendadas continuam). Ao voltar a ligar, só conta o que chegar a partir desse momento."""
+    _cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data = {"on": bool(on), "changed_at": now(), "by": by}
+    if on:
+        data["on_since"] = now()
+    _meta_switch_path().write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
 def account_settings(acc_id: str) -> dict:
     """enabled: responder (ou propor) nesta conta; mode: "propor" (eu aprovo) ou "auto" (responde sozinho)."""
     # regra do David: todos os comentários vão ao Telegram e nada é publicado sem aprovação
@@ -270,6 +300,8 @@ def receive(payload: dict, background: bool = True) -> list[int]:
 
 
 def receive_items(items: list[dict], background: bool = True) -> list[int]:
+    if not meta_on():                                    # interruptor geral desligado: o Facebook/Instagram não entra
+        items = [e for e in items if e.get("network") not in META_NETWORKS]
     ids = []
     with connect() as conn:
         for e in items:
@@ -515,6 +547,9 @@ def approve(item_id: int, text: str | None = None, user_id: int | None = None, v
         row = conn.execute("SELECT * FROM inbox WHERE id=?", (item_id,)).fetchone()
     if not row or row["status"] not in ("proposta", "erro"):
         raise ValueError("Esta resposta já não está à espera de aprovação.")
+    if row["network"] in META_NETWORKS and not meta_on():
+        raise ValueError("O Facebook/Instagram está desligado no Carretos Studio (Mensagens → interruptor da Meta): "
+                         "não enviei nada.")
     acc = accounts().get(row["account_id"])
     reply = (text if text is not None else row["reply"] or "").strip()
     if not reply:
@@ -785,6 +820,8 @@ def poll_facebook_pages(force: bool = False) -> list[str]:
     except (OSError, ValueError):
         st = {}
     import time as _t
+    if not meta_on():
+        return []
     if not force and _t.time() - st.get("last_poll", 0) < fb_interval_minutes() * 60:
         return []
     st["last_poll"] = _t.time()
@@ -797,7 +834,7 @@ def poll_facebook_pages(force: bool = False) -> list[str]:
         if not cfg.get("enabled"):
             continue
         first = st.setdefault("since", {}).setdefault(acc.id, now())      # 1.ª leitura: só daqui para a frente
-        since = max(first, cfg.get("enabled_at") or first)
+        since = max(first, cfg.get("enabled_at") or first, meta_switch().get("on_since") or first)
         token = acc.secret("access_token_env")
         if acc.platform == "instagram":
             lines.append(_poll_instagram(acc, token, since, since_30d))

@@ -5,9 +5,20 @@ marca, e encaminha sempre para o <b>assistente do WhatsApp</b> (preço, orçamen
 spam não é respondido; reclamações e urgências chegam também ao Telegram.</p>
 {% if ok %}<div class="card" style="border-color:#2f6f3a;color:#8ddb8c;margin-bottom:12px">✓ {{ ok }}</div>{% endif %}
 {% if erro %}<div class="card alert" style="word-break:break-word">✕ {{ erro }}</div>{% endif %}
-<div class="card" style="border-color:var(--gold);margin-bottom:12px;font-size:13px">ℹ <b>Enquanto a app da Meta estiver em modo de desenvolvimento</b>, a Meta só envia comentários e mensagens de quem tem
-função na app (ex.: o David), o que serve para testar. Para responder ao público é preciso a revisão da app ("Advanced Access") e a
-verificação da empresa na Meta (ver <code>docs/GUIA_RESPOSTAS.md</code>).</div>
+<div class="card" style="margin-bottom:12px;border-color:{{ '#2f6f3a' if meta_sw.on else '#8a2f2f' }}">
+ <div class="acc-row" style="align-items:center">
+  <div style="flex:1;min-width:240px">
+   <b>Facebook e Instagram: {% if meta_sw.on %}<span style="color:#8ddb8c">LIGADO</span>{% else %}<span style="color:#ff8a80">DESLIGADO</span>{% endif %}</b><br>
+   <span class="muted" style="font-size:13px">{% if meta_sw.on %}O Studio lê os comentários e as mensagens, avisa no Telegram e envia as respostas que aprovar.{% else %}O Studio não lê, não guarda, não avisa e não responde a comentários nem mensagens do Facebook/Instagram. As publicações agendadas continuam.{% endif %}
+   {% if meta_sw.changed_at %}· alterado {{ meta_sw.changed_at[:16].replace('T',' ') }}{% if meta_sw.by %} por {{ meta_sw.by }}{% endif %}{% endif %}</span>
+  </div>
+  {% if me.is_admin %}<form method="post" action="/mensagens/meta/interruptor" onsubmit="return confirm('{{ 'Desligar' if meta_sw.on else 'Ligar' }} os comentários e mensagens do Facebook/Instagram no Studio?')">
+   <input type="hidden" name="ligar" value="{{ '0' if meta_sw.on else '1' }}">
+   <button class="btn">{{ '⏸ Desligar' if meta_sw.on else '▶ Ligar' }}</button></form>{% endif %}
+ </div>
+ <p class="muted" style="font-size:12px;margin:8px 0 0">Só muda isto: nada é apagado e as definições de cada conta ficam iguais. Ao voltar a ligar, só entram os comentários e mensagens novos.
+ A app da Meta em si (Live/Desenvolvimento) muda-se em developers.facebook.com: a Meta não deixa mudar isso por aqui.</p>
+</div>
 
 <div class="card" style="margin-bottom:12px"><b>Contas</b>
 {% for a, s in accs %}<div class="acc-row" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
