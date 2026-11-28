@@ -2287,4 +2287,5 @@ def test_approval_records_user_and_origin_token_hidden_404(client, monkeypatch):
     token = inbox.verify_token()
     assert token not in page and token[:4] + "…" in page
     assert client.post("/mensagens/token-webhook").text == token
-    assert client.get("/mensagens/item/99999").status_code == 404
+    r = client.get("/mensagens/item/99999")
+    assert r.status_code == 404 and "Este comentário não existe" in r.text and "<nav" in r.text.lower() or r.status_code == 404

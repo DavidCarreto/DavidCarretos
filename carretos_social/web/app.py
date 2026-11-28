@@ -1438,7 +1438,9 @@ def inbox_item(request: Request, iid: int, acao: str = ""):
     with connect() as conn:
         row = conn.execute("SELECT * FROM inbox WHERE id=?", (iid,)).fetchone()
     if not row:
-        return HTMLResponse("<p>Este comentário não existe.</p><p><a href='/mensagens'>‹ Mensagens</a></p>", status_code=404)
+        resp = _render(request, "nao_existe.html", {"page": "mensagens"})
+        resp.status_code = 404
+        return resp
     if not me.can_see(row["account_id"] or ""):
         return _forbidden()
     from .. import inbox
