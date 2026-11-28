@@ -1,19 +1,15 @@
 1
-00:00:00,000 --> 00:00:05,000
+00:00:00,000 --> 00:00:07,200
 A person comments on our Instagram post (instagram_manage_comments)
 
 2
-00:00:06,000 --> 00:00:11,000
-The comment arrives in Carretos Studio with a suggested reply
+00:00:07,200 --> 00:00:16,600
+The comment arrives in Carretos Studio with a suggested reply – a team member approves it
 
 3
-00:00:12,000 --> 00:00:17,000
-After approval, the reply is published in the comment thread
+00:00:16,600 --> 00:00:21,900
+The reply is published by our account in the comment thread
 
 4
-00:00:18,000 --> 00:00:23,000
-A person sends an Instagram Direct message (instagram_manage_messages)
-
-5
-00:00:24,000 --> 00:00:29,000
-After approval, the answer is received in the Instagram inbox
+00:00:21,900 --> 00:00:30,700
+Instagram Direct (instagram_manage_messages): the approved answer from our account is received in the inbox

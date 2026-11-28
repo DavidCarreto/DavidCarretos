@@ -1,15 +1,11 @@
 1
-00:00:00,000 --> 00:00:05,000
+00:00:00,000 --> 00:00:05,700
 A person sends a Messenger message to our Page
 
 2
-00:00:06,000 --> 00:00:11,000
-It arrives in Carretos Studio with a suggested answer
+00:00:05,700 --> 00:00:10,300
+It arrives in Carretos Studio with a suggested answer – a team member approves it (pages_messaging)
 
 3
-00:00:12,000 --> 00:00:17,000
-A team member approves it (pages_messaging)
-
-4
-00:00:18,000 --> 00:00:23,000
+00:00:10,300 --> 00:00:14,900
 The answer is received in the person's Messenger

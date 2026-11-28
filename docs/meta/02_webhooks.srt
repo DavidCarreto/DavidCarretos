@@ -1,11 +1,11 @@
 1
-00:00:00,000 --> 00:00:05,000
-Messages → "Activate on Meta" (pages_manage_metadata)
+00:00:00,000 --> 00:00:04,500
+Messages → "Activate on Meta" for our Page (pages_manage_metadata)
 
 2
-00:00:06,000 --> 00:00:11,000
+00:00:04,500 --> 00:00:09,205
 Our app is installed on the Page and subscribed to feed and messages
 
 3
-00:00:12,000 --> 00:00:17,000
-Diagnostic: feed and messages subscribed for each Page
+00:00:09,205 --> 00:00:22,705
+Diagnostic: feed and messages subscribed for each of our Pages and Instagram accounts

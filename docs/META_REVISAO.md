@@ -121,7 +121,12 @@ publish_video, user_* e quaisquer outras.
 > URL: https://carretosstudio.duckdns.org — log in with the reviewer user provided in the credentials field. The reviewer user has access only to the test account(s) listed there. Messages (top menu) shows comments and messages awaiting approval; open one, edit if needed, click "Approve and send" and confirm. Accounts shows the connected Pages and Instagram accounts and the "Connect with Facebook" button. Nothing is ever sent without clicking "Approve and send". Privacy policy and data deletion: https://carretosstudio.duckdns.org/privacidade (English section and #data-deletion).
 (O que é preciso criar: um utilizador "meta-review" no Carretos Studio, com acesso só à conta escolhida pelo David; a palavra-passe vai só no campo de credenciais do formulário.)
 
-## 3. Guião das gravações (uma por autorização; pode ser a mesma sequência cortada)
+## 3. Vídeos prontos (28/11/2026)
+Os 10 vídeos `01_ligacao.mp4` … `10_privacidade.mp4` (MP4 1080p, legendas em inglês gravadas no vídeo, a partir
+dos GIFs gravados pelo Claude no Chrome) estão na pasta "meta-review" do Google Drive. As legendas usadas estão em
+`docs/meta/*.srt` (com os tempos finais).
+
+## 3a. Guião das gravações (uma por autorização; pode ser a mesma sequência cortada)
 Preparação: legendas em inglês (o dashboard está em português); Mensagens filtrado para a conta de teste e o dia
 da gravação (Mensagens → "Mostrar: <conta> desde <data>") para não aparecerem comentários de clientes reais;
 1080p; sem áudio; cursor grande.
@@ -134,7 +139,8 @@ da gravação (Mensagens → "Mostrar: <conta> desde <data>") para não aparecer
    no Facebook aparece a resposta da Página no fio.
 5. **Messenger** (pages_messaging): a conta de teste envia mensagem à Página → aparece com proposta → aprovar → mostrar o Messenger da conta de teste a receber.
 6. **Instagram** (instagram_manage_comments, instagram_manage_messages): o mesmo para um comentário e para uma mensagem Direct.
-7. **Ignorar e Telegram**: "Ignorar" num comentário (nada é publicado) e o aviso no Telegram com os botões (que abrem o dashboard).
+7. **Ignorar**: "Ignorar" num comentário (nada é publicado; o comentário fica sem resposta). O aviso do Telegram não
+   entrou no vídeo (não é uma autorização da Meta).
 8. **Publicação** (pages_manage_posts, instagram_content_publish): um post aprovado sai na Página e no Instagram.
 9. **Métricas** (instagram_manage_insights): painel com as estatísticas das publicações do Instagram.
 10. **Eliminação de dados**: abrir /privacidade#data-deletion.

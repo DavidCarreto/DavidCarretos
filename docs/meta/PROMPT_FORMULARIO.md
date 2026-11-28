@@ -76,7 +76,8 @@ legendados). Cada permissão tem o seu próprio texto (não repetir).
 
 **instagram_manage_insights** — We read the statistics of our own Instagram posts (reach, views, likes, comments, saves) to plan content and choose the best times to post. Reviewer: the dashboard metrics show the statistics of our recent Instagram posts.
 
-Vídeos (nomes dos ficheiros a usar; confirmar com o David):
+Vídeos: MP4 1080p já legendados em inglês, na pasta "meta-review" do Google Drive (descarregados pelo David para o PC;
+se o Chrome não conseguir escolher o ficheiro, pede ao David para o carregar):
 - 01_ligacao → pages_show_list, business_management, instagram_basic
 - 02_webhooks → pages_manage_metadata
 - 03_comentario_facebook → pages_read_user_content, pages_read_engagement
@@ -85,6 +86,7 @@ Vídeos (nomes dos ficheiros a usar; confirmar com o David):
 - 06_instagram → instagram_manage_comments, instagram_manage_messages
 - 08_publicacao → pages_manage_posts, instagram_content_publish
 - 09_metricas → instagram_manage_insights
+- 07_ignorar e 10_privacidade → extra (só se o formulário pedir um vídeo geral ou houver espaço)
 
 PASSO 6 · Parar antes de submeter
 Quando tudo estiver preenchido, NÃO submetas. Escreve ao David: "Formulário preenchido. Reveja e carregue em

@@ -1,19 +1,11 @@
 1
-00:00:00,000 --> 00:00:05,000
+00:00:00,000 --> 00:00:12,187
 A person comments on a post of our Facebook Page (Carreto Clips)
 
 2
-00:00:06,000 --> 00:00:11,000
-The comment arrives in Carretos Studio → Messages (pages_read_user_content)
+00:00:12,187 --> 00:00:16,875
+The comment arrives in Carretos Studio → Messages (pages_read_user_content, pages_read_engagement)
 
 3
-00:00:12,000 --> 00:00:17,000
-It shows the author, the text and a link to the post (pages_read_engagement)
-
-4
-00:00:18,000 --> 00:00:23,000
-The AI suggests a reply – status: awaiting approval
-
-5
-00:00:24,000 --> 00:00:29,000
-Nothing is published without human approval
+00:00:16,875 --> 00:00:21,375
+The AI suggests a reply – it waits for human approval. Nothing is published without approval

@@ -1,0 +1,15 @@
+1
+00:00:00,000 --> 00:00:06,875
+A test comment on our Facebook Page
+
+2
+00:00:06,875 --> 00:00:12,375
+It arrives in Carretos Studio – the team member chooses "Ignore"
+
+3
+00:00:12,375 --> 00:00:16,875
+Ignored: nothing is published
+
+4
+00:00:16,875 --> 00:00:23,250
+The comment stays without a reply on Facebook

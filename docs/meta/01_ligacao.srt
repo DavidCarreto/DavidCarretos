@@ -1,19 +1,19 @@
 1
-00:00:00,000 --> 00:00:05,000
-Carretos Studio – internal social media tool of Carretos Group
+00:00:00,000 --> 00:00:04,500
+Carretos Studio (internal tool of Carretos Group) → Accounts → "Connect with Facebook"
 
 2
-00:00:06,000 --> 00:00:11,000
-Accounts → "Connect with Facebook"
+00:00:04,500 --> 00:00:17,182
+Facebook Login: we choose our own Pages (Carreto's and RibaMotor business portfolios)
 
 3
-00:00:12,000 --> 00:00:17,000
-Facebook Login: choosing our own Pages and Instagram accounts
+00:00:17,182 --> 00:00:22,091
+…and our own Instagram professional accounts
 
 4
-00:00:18,000 --> 00:00:23,000
-Permissions requested: pages_show_list, business_management, instagram_basic…
+00:00:22,091 --> 00:00:32,045
+Permissions requested: pages_show_list, business_management, instagram_basic, pages_manage_metadata, pages_messaging…
 
 5
-00:00:24,000 --> 00:00:29,000
+00:00:32,045 --> 00:00:42,136
 Back in Carretos Studio: our Pages and Instagram accounts are connected

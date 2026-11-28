@@ -1,11 +1,11 @@
 1
-00:00:00,000 --> 00:00:05,000
-Privacy policy (Portuguese and English)
+00:00:00,000 --> 00:00:08,000
+Privacy policy of Carretos Studio (Portuguese and English)
 
 2
-00:00:06,000 --> 00:00:11,000
-Data deletion instructions: email request, deleted within 30 days
+00:00:08,000 --> 00:00:18,000
+What data we process and why – we do not sell or share it and do not use it for advertising
 
 3
-00:00:12,000 --> 00:00:17,000
-Comments and messages are kept for a maximum of 12 months
+00:00:18,000 --> 00:00:26,400
+Data deletion: request by email, deleted within 30 days – comments and messages are kept for a maximum of 12 months

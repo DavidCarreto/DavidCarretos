@@ -1,11 +1,19 @@
 1
-00:00:00,000 --> 00:00:05,000
-An approved post is published at the scheduled time
+00:00:00,000 --> 00:00:06,698
+A post is approved in Carretos Studio – Facebook Page version
 
 2
-00:00:06,000 --> 00:00:11,000
-On our Facebook Page (pages_manage_posts)
+00:00:06,698 --> 00:00:11,826
+…and the Instagram version
 
 3
-00:00:12,000 --> 00:00:17,000
-And on our Instagram account (instagram_content_publish)
+00:00:11,826 --> 00:00:18,000
+Calendar: approved posts are published at the scheduled time
+
+4
+00:00:18,000 --> 00:00:22,500
+Published on our Facebook Page (pages_manage_posts)
+
+5
+00:00:22,500 --> 00:00:29,198
+Published on our Instagram account (instagram_content_publish)

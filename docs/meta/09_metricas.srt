@@ -1,7 +1,11 @@
 1
-00:00:00,000 --> 00:00:05,000
-Dashboard metrics: statistics of our own Instagram posts (instagram_manage_insights)
+00:00:00,000 --> 00:00:10,000
+Dashboard → performance of our own accounts' posts
 
 2
-00:00:06,000 --> 00:00:11,000
-Reach, views, likes, comments and saves, used to plan content
+00:00:10,000 --> 00:00:20,000
+Instagram: posts, average views and engagement (instagram_manage_insights)
+
+3
+00:00:20,000 --> 00:00:31,400
+Used only to plan our content (for example, the best hours to post)
