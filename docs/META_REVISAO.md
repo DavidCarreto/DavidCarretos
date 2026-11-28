@@ -7,6 +7,33 @@ tem função na app.
 Fontes (documentação oficial da Meta, lida a 27/11/2026): "Business Verification", "App Review",
 "App Review Submission Guide", "Permissions Reference", "Webhooks for Pages".
 
+## Estado (28/11/2026)
+- ✓ **Verificação da Empresa feita**: "ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA", verificada a 17/08/2026,
+  portefólio "Carreto's" (id 959299140915335). Falta só a **Revisão da App (Advanced Access)**.
+- Diagnóstico (dashboard → Mensagens → "Diagnóstico da Meta"): webhooks Page (feed, messages) e Instagram
+  (comments, messages) subscritos; app instalada em todas as Páginas.
+
+## O que ainda falta preparar (por ordem)
+1. **Política de privacidade atualizada** (a atual diz que não se recolhem dados de outras pessoas, o que já não é
+   verdade: lêem-se comentários e mensagens). Proposta em PT e EN na secção 5 — **precisa do "sim" do David** antes
+   de ir para https://carretosstudio.duckdns.org/privacidade.
+2. **Instruções de eliminação de dados** (App Dashboard → Settings → Basic → "Data deletion instructions URL"):
+   usar a mesma página (secção "Eliminação de dados" da proposta).
+3. **Ícone da app 1024×1024** sem marcas da Meta (Settings → Basic → App icon) — confirmar se já existe.
+4. **1 chamada com sucesso por autorização nos últimos 30 dias** (senão "Request advanced access" fica cinzento;
+   o registo aparece até 2 dias depois). Já houve leituras e subscrições; FALTAM envios reais:
+   - `pages_manage_engagement`: aprovar 1 resposta a um comentário de teste numa Página de Facebook;
+   - `instagram_manage_comments`: aprovar 1 resposta a um comentário de teste no Instagram;
+   - `pages_messaging` e `instagram_manage_messages`: aprovar 1 resposta a uma mensagem privada de teste (Messenger
+     e Instagram Direct), vinda de uma conta com função na app.
+   (Feito pelo David, no dashboard, com conteúdo de teste; aproveita-se para gravar os vídeos.)
+5. **Acesso para os revisores**: criar no Carretos Studio um utilizador "meta-review" (Equipa → convidar) com acesso
+   só a uma Página/Instagram de teste, e escrever no formulário como entrar (URL + utilizador; a palavra-passe vai no
+   campo próprio do formulário, nunca em emails ou nesta documentação).
+6. **Vídeos**: interface em português → pôr legendas em inglês (ou mudar os textos para inglês durante a gravação).
+7. **Perguntas de tratamento de dados** (aparecem no formulário depois da verificação): respostas sugeridas na secção 6.
+8. Só depois de aprovado: passar a app para **Live** (antes disso, a publicação e as respostas deixariam de funcionar).
+
 ## 0. O que a Meta diz (resumo)
 - **Advanced Access exige Verificação da Empresa** (desde 1/2/2023). Sem ela, utilizadores de outras empresas não
   conseguem dar as autorizações e as funcionalidades ficam inativas.
@@ -107,3 +134,45 @@ revisão (ex.: "meta-review", com acesso a uma Página de teste), para indicar n
   - ícone com marcas da Meta ou Política de Privacidade em falta;
   - pedir autorizações que a app não usa;
   - mudar definições da app depois de submeter (pode obrigar a nova revisão).
+
+
+## 5. Proposta de política de privacidade (precisa do "sim" do David)
+
+**PT**
+1. O Carretos Studio é a ferramenta interna da Carretos Group (ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA) para criar,
+   agendar e publicar conteúdos nas suas próprias contas de redes sociais e para gerir os comentários e as mensagens
+   que essas contas recebem.
+2. Que dados tratamos: quando alguém comenta ou envia uma mensagem a uma conta nossa (Facebook, Instagram, LinkedIn),
+   recebemos o texto, o nome público ou nome de utilizador, o identificador da conta e a data. Usamos estes dados só
+   para mostrar o comentário/mensagem à nossa equipa e responder (cada resposta é aprovada por uma pessoa). Não os
+   vendemos, não os partilhamos com terceiros e não os usamos para publicidade.
+3. As autorizações das redes sociais (chaves de acesso) ficam guardadas só no nosso servidor e não são partilhadas.
+4. Guardamos os comentários e mensagens enquanto forem úteis para o atendimento e no máximo 12 meses.
+5. Eliminação de dados: pode pedir a eliminação dos seus dados (comentários/mensagens) enviando um email para
+   davidcarreto@carretos.pt com o assunto "Eliminar dados" e a conta/rede em causa; apagamos no prazo de 30 dias e
+   confirmamos por email. Também pode apagar o seu comentário na própria rede social.
+6. Contacto: davidcarreto@carretos.pt · WhatsApp 211 45 46 46.
+
+**EN** (for the reviewers)
+1. Carretos Studio is the internal tool of Carretos Group (ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA) to create,
+   schedule and publish content on its own social media accounts and to manage the comments and messages those
+   accounts receive.
+2. Data we process: when someone comments on or messages one of our accounts (Facebook, Instagram, LinkedIn), we
+   receive the text, the public name or username, the account ID and the date. We use this data only to show the
+   comment/message to our team and to reply (every reply is approved by a person). We do not sell or share it with
+   third parties and do not use it for advertising.
+3. Social network access tokens are stored only on our server and are never shared.
+4. We keep comments and messages while useful for customer support, for a maximum of 12 months.
+5. Data deletion: you can request deletion of your data by emailing davidcarreto@carretos.pt with the subject
+   "Delete my data" and the account/network concerned; we delete it within 30 days and confirm by email. You can also
+   delete your comment on the social network itself.
+6. Contact: davidcarreto@carretos.pt · WhatsApp +351 211 45 46 46.
+
+(Ponto 4 — "12 meses" — é uma proposta: o David confirma o prazo. Hoje o Carretos Studio não apaga sozinho os
+comentários antigos; se o David aprovar o prazo, acrescenta-se a limpeza automática.)
+
+## 6. Respostas sugeridas às perguntas de tratamento de dados (confirmar no formulário)
+- Data processors / service providers with access to Platform Data: none besides our own server host (Hetzner, EU).
+- Responsible entity: ANTÓNIO DAVID GROU CARRETO, UNIPESSOAL, LDA (Portugal).
+- Requests from public authorities in the last 12 months: none.
+- Policies for handling such requests: we only disclose data when legally required, after review by the company owner.

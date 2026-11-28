@@ -836,6 +836,10 @@ def meta_diagnose() -> dict:
             mine = next((a for a in apps if str(a.get("id")) == str(app_id)), None)
             row["installed"] = bool(mine)
             row["fields"] = (mine or {}).get("subscribed_fields", [])
+            # TODAS as apps instaladas na Página (ex.: ManyChat): nome, id e campos (só leitura)
+            row["apps"] = [{"name": a.get("name", "?"), "id": str(a.get("id", "")),
+                            "fields": a.get("subscribed_fields", []), "ours": str(a.get("id")) == str(app_id)}
+                           for a in apps]
         except Exception as exc:  # noqa: BLE001
             row["error"] = str(exc)[:300]
         if app_token and token:

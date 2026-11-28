@@ -82,7 +82,9 @@ que o Hotmail redireciona para o servidor ({{ 'ligado' if li_mail else 'desligad
  {% if meta_diag.app_error %}<br><span style="color:#ff9b93">Erro: {{ meta_diag.app_error }}</span>{% endif %}</p>
  {% for p in meta_diag.pages %}<p style="margin:2px 0">{{ p.account }} ({{ 'Página' if p.platform == 'facebook_page' else 'Instagram' }}):
   {% if p.error %}<span style="color:#ff9b93">✕ {{ p.error }}</span>{% elif p.installed %}<span style="color:#3fb950">✓ app instalada</span> ({{ p.fields|join(', ') or 'sem campos' }}){% if p.platform == 'facebook_page' and 'feed' not in p.fields %} <span style="color:#ff9b93">✕ falta «feed»: carregue em «Ativar na Meta»</span>{% endif %}{% else %}<span style="color:#ff9b93">✕ app não instalada na Página: carregue em «Ativar na Meta»</span>{% endif %}
-  {% if p.missing %}<br><span style="color:#ff9b93">Faltam autorizações no token: {{ p.missing|join(', ') }} (volte a «Ligar com o Facebook»)</span>{% endif %}</p>{% endfor %}
+  {% if p.missing %}<br><span style="color:#ff9b93">Faltam autorizações no token: {{ p.missing|join(', ') }} (volte a «Ligar com o Facebook»)</span>{% endif %}
+  {% if p.apps is defined %}<br><span class="muted">Apps instaladas na Página ({{ p.page_id }}):</span>
+   {% for a in p.apps %}<br>&nbsp;• <b>{{ a.name }}</b> (id {{ a.id }}) → {{ a.fields|join(', ') or 'sem campos' }}{% if a.ours %} <span style="color:#3fb950">(Carretos Studio)</span>{% else %} <span style="color:#f2cc60">⚠ outra app</span>{% endif %}{% else %}<br>&nbsp;• nenhuma{% endfor %}{% endif %}</p>{% endfor %}
  {% else %}<p class="muted" style="margin:4px 0">Ainda não verificado.</p>{% endif %}
 </div>
 <div class="card" style="margin-top:12px;font-size:13px"><b>Configuração do webhook na app da Meta</b>

@@ -2289,3 +2289,33 @@ def test_approval_records_user_and_origin_token_hidden_404(client, monkeypatch):
     assert client.post("/mensagens/token-webhook").text == token
     r = client.get("/mensagens/item/99999")
     assert r.status_code == 404 and "Este comentário não existe" in r.text and "<nav" in r.text.lower() or r.status_code == 404
+
+
+def test_meta_diagnose_lists_all_installed_apps(tmp_path, monkeypatch):
+    from carretos_social import inbox
+    from carretos_social.config import accounts
+    import carretos_social.http as http_mod
+    monkeypatch.setenv("META_APP_ID", "111")
+    monkeypatch.setenv("META_APP_SECRET", "s")
+    acc = accounts()["fb_carretosgroup"]
+    monkeypatch.setattr(inbox, "eligible_accounts", lambda: [acc])
+    monkeypatch.setattr(inbox, "page_id_for", lambda a: "222")
+    monkeypatch.setattr(type(acc), "secret", lambda self, k: "tok")
+
+    class R:
+        def __init__(self, d): self._d = d
+        def json(self): return self._d
+
+    def fake(method, url, **kw):
+        if url.endswith("/subscriptions"):
+            return R({"data": [{"object": "page", "fields": [{"name": "feed"}], "active": True}]})
+        if url.endswith("/subscribed_apps"):
+            return R({"data": [{"name": "Carretos Studio", "id": "111", "subscribed_fields": ["feed", "messages"]},
+                               {"name": "ManyChat", "id": "999", "subscribed_fields": ["messages"]}]})
+        return R({"data": {"scopes": ["pages_manage_metadata", "pages_read_user_content", "pages_manage_engagement",
+                                      "pages_read_engagement", "pages_show_list", "pages_messaging"]}})
+    monkeypatch.setattr(http_mod, "request", fake)
+    d = inbox.meta_diagnose()
+    apps = d["pages"][0]["apps"]
+    assert [a["name"] for a in apps] == ["Carretos Studio", "ManyChat"] and apps[0]["ours"] and not apps[1]["ours"]
+    assert d["pages"][0]["installed"] and not d["pages"][0]["missing"]
