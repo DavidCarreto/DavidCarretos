@@ -56,6 +56,11 @@ fichas:
   # auto: true = entra sozinha no dashboard (uma vez) na próxima atualização; depois edita-se lá
   - {chave: g-candidaturas, marca: geral, secao: contactos, funcao: info, auto: true,
      texto: "Candidaturas de emprego: enviar o CV para rh@carretos.pt."}
+  # confirmados pelo David a 28/11/2026 (frase publicada na Carreto Clips)
+  - {chave: g-david-mecanico, marca: geral, secao: empresa, auto: true,
+     texto: "O David Carreto começou como mecânico."}
+  - {chave: g-david-2014, marca: geral, secao: empresa, auto: true,
+     texto: "Em 2014 o David Carreto abriu o seu próprio negócio."}
   - {chave: g-pecas-originais, marca: geral, secao: servicos, auto: true,
      texto: "As oficinas usam peças originais Mercedes-Benz."}
   - {chave: g-parcerias, marca: geral, secao: contactos, funcao: info, auto: true,

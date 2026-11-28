@@ -687,7 +687,7 @@ def test_forbidden_terms_block_carretos_but_not_auron(client, tmp_path):
     from carretos_social.scheduler import all_problems
     _setup_admin(client)
     _login(client, "david", "segredo123")
-    assert len(verified_facts("geral")) == 18 and len(verified_facts("auron")) == 14
+    assert len(verified_facts("geral")) == 20 and len(verified_facts("auron")) == 14
     link = "auron.carretos.pt/schedule"
     assert found_terms("ig_carretosgroup", f"Saiba o preço na hora: {link}") == []          # o link pode ficar
     assert found_terms("ig_carretosgroup", f"Com o AURON sabe o preço: {link}")[0][1] == \
